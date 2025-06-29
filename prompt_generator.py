@@ -4,6 +4,9 @@
 Генератор промптов для лендингов
 """
 
+from utils import get_current_year
+
+
 def create_landing_prompt(country, city, language, domain, theme):
     """
     Создает промпт для генерации лендинга
@@ -19,6 +22,8 @@ def create_landing_prompt(country, city, language, domain, theme):
         str: Готовый промпт для Cursor AI
     """
     
+    current_year = get_current_year()
+    
     return f"""[0] Мне нужен продающий лендинг пейдж, тематика: {theme} ({country}).
 Язык лендинга: {language}
 Домен: {domain}
@@ -26,7 +31,7 @@ def create_landing_prompt(country, city, language, domain, theme):
 за этим нужно следить
 Страна - {country}
 Город - {city}
-Везде ставь 2025 как дату
+Везде ставь {current_year} как дату
 
 [1] Это должен быть 1 страничный лендинг, адаптивный, обязательно нужно рабочее мобильное меню. В папке media есть картинки, используй их все!
 блоки и картинки должны выглядеть красиво на ВСЕХ устройствах, если что-то не вмещается, то удлиняй страницу, делай контент столбиком display flex, flex-direction column. Блоки, где три картинки на компьютере должны быть на одной строчке.
@@ -77,7 +82,7 @@ def create_landing_prompt(country, city, language, domain, theme):
 [21] НЕ ИСПОЛЬЗУЙ OVERFLOW-X: HIDDEN И OVERFLOW-X: AUTO"""
 
 
-def get_theme_specific_instructions(theme):
+# def get_theme_specific_instructions(theme):
     """
     Возвращает специфичные для тематики инструкции на основе ключевых слов
     

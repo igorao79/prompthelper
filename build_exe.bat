@@ -1,57 +1,65 @@
 @echo off
-chcp 65001 >nul
-echo =================================
-echo  Генератор Лендингов - Сборка EXE
-echo =================================
-echo.
-
-echo Проверка Python...
-python --version
-if %errorlevel% neq 0 (
-    echo ❌ Ошибка: Python не найден!
-    echo Установите Python с python.org
-    pause
-    exit /b 1
-)
+chcp 65001 > nul
+echo ====================================
+echo 🔥 Компактная сборка без DLL ошибок
+echo ====================================
 
 echo.
-echo 📦 Установка зависимостей...
-pip install -r requirements.txt
+echo 🧹 Полная очистка перед сборкой...
+taskkill /f /im "Генератор_Лендингов.exe" 2>nul
+taskkill /f /im "python.exe" 2>nul
+timeout /t 2 /nobreak >nul
+
+if exist "dist" rmdir /s /q "dist" 2>nul
+if exist "build" rmdir /s /q "build" 2>nul
+if exist "__pycache__" rmdir /s /q "__pycache__" 2>nul
+if exist "*.spec" del "*.spec" 2>nul
 
 echo.
-echo 🔨 Очистка предыдущих сборок...
-if exist "dist" rmdir /s /q "dist"
-if exist "build" rmdir /s /q "build"
-if exist "*.spec" del "*.spec"
+echo 📦 Установка чистого PyInstaller...
+python -m pip uninstall pyinstaller -y 2>nul
+python -m pip install pyinstaller==6.11.1
 
 echo.
-echo 🚀 Компиляция в .exe файл...
-pyinstaller --onefile --windowed --name="Генератор_Лендингов" --icon=favicon.ico main.py 2>nul
-if not exist favicon.ico (
-    pyinstaller --onefile --windowed --name="Генератор_Лендингов" main.py
-)
+echo 🚀 Создание компактного EXE...
+
+python -m PyInstaller ^
+    --onefile ^
+    --noconsole ^
+    --name="Генератор_Лендингов" ^
+    --exclude-module=PIL ^
+    --exclude-module=matplotlib ^
+    --exclude-module=numpy ^
+    --exclude-module=pandas ^
+    --exclude-module=tkinter.test ^
+    --exclude-module=test ^
+    --exclude-module=unittest ^
+    --hidden-import=pyautogui ^
+    --hidden-import=requests ^
+    --distpath="dist" ^
+    --workpath="build" ^
+    --clean ^
+    --noconfirm ^
+    main.py
 
 echo.
 if exist "dist\Генератор_Лендингов.exe" (
-    echo ✅ Успешно! EXE файл создан: dist\Генератор_Лендингов.exe
+    echo ✅ EXE файл создан успешно!
+    
     echo.
-    echo 📊 Размер файла:
-    dir "dist\Генератор_Лендингов.exe" | find "Генератор_Лендингов.exe"
+    echo 🗂️ Размер файла:
+    dir "dist\Генератор_Лендингов.exe" | find ".exe"
+    
     echo.
     echo 🧹 Очистка временных файлов...
-    if exist "build" rmdir /s /q "build"
-    if exist "*.spec" del "*.spec"
+    if exist "build" rmdir /s /q "build" 2>nul
+    if exist "*.spec" del "*.spec" 2>nul
+    
     echo.
-    echo ✨ Готово! Можете использовать файл: dist\Генератор_Лендингов.exe
-    echo.
-    echo 🚀 Хотите запустить программу? (Y/N)
-    set /p choice=
-    if /i "%choice%"=="Y" start "" "dist\Генератор_Лендингов.exe"
+    echo 🎉 Готово! Запускаю программу...
+    start "" "dist\Генератор_Лендингов.exe"
 ) else (
     echo ❌ Ошибка создания EXE файла!
-    echo Проверьте логи выше для деталей
 )
 
-echo.
-echo Нажмите любую клавишу для выхода...
-pause >nul 
+pause 

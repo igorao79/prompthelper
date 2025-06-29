@@ -45,6 +45,26 @@ class CursorManager:
             r"D:\Cursor\Cursor.exe",
             fr"C:\Users\{username}\Downloads\Cursor.exe"
         ]
+
+    @staticmethod
+    def get_desktop_path():
+        """Возвращает путь к рабочему столу пользователя"""
+        return str(Path.home() / "Desktop")
+
+    @staticmethod
+    def check_directory_exists(base_path, dir_name):
+        """
+        Проверяет существование директории
+        
+        Args:
+            base_path (str): Базовый путь
+            dir_name (str): Имя директории
+            
+        Returns:
+            tuple: (exists, full_path) - существует ли и полный путь
+        """
+        full_path = Path(base_path) / dir_name
+        return full_path.exists(), str(full_path)
     
     def find_cursor_in_directories(self):
         """
@@ -350,15 +370,26 @@ class CursorManager:
         
         Args:
             domain (str): Название домена
-            desktop_path (Path): Путь к рабочему столу (опционально)
+            desktop_path (Path): Путь к директории для создания проекта (опционально)
             
         Returns:
             tuple: (project_path, media_path)
         """
         if desktop_path is None:
-            desktop_path = Path.home() / "Desktop"
+            desktop_path = self.get_desktop_path()
         
-        project_path = desktop_path / domain
+        # Проверяем существует ли папка
+        exists, full_path = self.check_directory_exists(desktop_path, domain)
+        if exists:
+            result = messagebox.askyesno(
+                "Папка существует",
+                f"Папка '{domain}' уже существует в:\n{desktop_path}\n\n"
+                f"Хотите перезаписать содержимое?"
+            )
+            if not result:
+                raise Exception("Операция отменена пользователем")
+        
+        project_path = Path(desktop_path) / domain
         media_path = project_path / "media"
         
         # Создаем папки
@@ -393,4 +424,4 @@ class CursorManager:
             
             return True, "Cursor AI запущен успешно"
         else:
-            return False, "Cursor AI не найден. Промпт скопирован в буфер обмена" 
+            return False, "Cursor AI не найден. Промпт скопирован в буфер обмена"
