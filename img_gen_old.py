@@ -49,12 +49,17 @@ class IntelligentContextAnalyzer:
         """Поиск по нескольким источникам"""
         sources_data = []
         
-        # 1. Поиск через DuckDuckGo
+        # 1. Поиск через Google (бесплатный API)
+        google_data = self._search_google_custom(query)
+        if google_data:
+            sources_data.extend(google_data)
+        
+        # 2. Поиск через DuckDuckGo
         duckduck_data = self._search_duckduckgo(query)
         if duckduck_data:
             sources_data.extend(duckduck_data)
         
-        # 2. Поиск в Wikipedia
+        # 3. Поиск в Wikipedia
         wiki_data = self._search_wikipedia(query)
         if wiki_data:
             sources_data.append(wiki_data)
@@ -121,6 +126,12 @@ class IntelligentContextAnalyzer:
             if not self.silent_mode:
                 print(f"⚠️ Ошибка Wikipedia: {e}")
             return None
+    
+    def _search_google_custom(self, query):
+        """Поиск через Google Custom Search API (если доступен)"""
+        # Здесь можно добавить Google Custom Search API
+        # Для демонстрации используем простой парсинг
+        return None
     
     def _analyze_search_results(self, sources_data, original_query):
         """Анализ результатов поиска для определения контекста"""
@@ -194,6 +205,7 @@ class IntelligentContextAnalyzer:
     
     def _extract_dynamic_details(self, text, query):
         """Извлекает конкретные детали из текста и запроса"""
+        # Извлекаем существительные и прилагательные
         import re
         
         # Простое извлечение значимых слов
@@ -341,12 +353,12 @@ class ThematicImageGenerator:
         if not self.silent_mode:
             print("🎨 AI Генератор Тематических Изображений для Лендингов")
             print("=" * 60)
-            print("✨ Умная генерация изображений с динамическим анализом через интернет")
+            print("✨ Умная генерация изображений с анализом через интернет")
 
     def detect_theme_from_input(self, user_input):
         """Определяет тематику с помощью интернет-поиска"""
         context_data = self.context_analyzer.search_business_context(user_input)
-        return context_data['business_type'], context_data
+        return context_data['category'], context_data
 
     def generate_intelligent_prompts(self, context_data, original_input):
         """Динамическая генерация промптов на основе интернет-анализа"""
@@ -395,6 +407,209 @@ class ThematicImageGenerator:
             "review3": f"group of happy customers, {main_theme} success stories, positive service experience",
             "favicon": f"{primary_detail} icon, {business_type} symbol, professional design, transparent background"
         }
+        
+        # Для других категорий генерируем контекстные промпты (УДАЛИТЬ - старый код)
+        elif category == 'automotive_sales':
+            return {
+                "main": "luxury car dealership showroom, multiple vehicles displayed, professional automotive sales environment",
+                "about1": "elegant sports car in showroom spotlight, premium vehicle presentation, automotive sales",
+                "about2": "professional car salesperson with customer, vehicle consultation, automotive sales process",
+                "about3": "luxury car interior showcase, premium features demonstration, automotive sales detail",
+                "review1": "happy family with new car keys, successful vehicle purchase, automotive sales satisfaction",
+                "review2": "businessman signing car purchase documents, automotive sales transaction, professional service",
+                "review3": "satisfied customers with their new vehicles, automotive dealership success stories",
+                "favicon": "car sales icon, automotive dealership symbol, vehicle key, modern design, transparent background"
+            }
+        
+        elif category == 'dental_service':
+            return {
+                "main": "modern dental clinic interior, dental chairs, professional dental office environment",
+                "about1": "dentist examining patient, dental procedure, professional dental care",
+                "about2": "dental equipment and tools, modern dental technology, clinical dental instruments",
+                "about3": "dental consultation room, oral health examination, professional dental service",
+                "review1": "patient with perfect smile after dental treatment, dental care success, happy smile",
+                "review2": "satisfied family after dental checkup, professional dental care, healthy teeth",
+                "review3": "dental patient consultation, oral health satisfaction, professional dental advice",
+                "favicon": "tooth icon, dental symbol, dental care, clean medical design, transparent background"
+            }
+        
+        elif category == 'medical_service':
+            return {
+                "main": "modern medical clinic interior, clean professional environment, medical equipment",
+                "about1": "professional doctor in white coat, medical expertise, confident portrait",
+                "about2": "modern medical equipment, healthcare technology, clinical setting",
+                "about3": "medical consultation room, doctor-patient interaction, professional care",
+                "review1": "recovered patient with doctor, successful treatment, grateful expression",
+                "review2": "healthy family after medical care, satisfied patients, medical success",
+                "review3": "elderly patient with caring doctor, medical compassion, healthcare quality",
+                "favicon": "medical cross icon, healthcare symbol, clean design, professional, transparent background"
+            }
+        
+        elif category == 'beauty_service':
+            return {
+                "main": "luxury beauty salon interior, elegant design, professional atmosphere",
+                "about1": "professional makeup artist working, beauty transformation, artistic process",
+                "about2": "spa treatment room, relaxing atmosphere, wellness and beauty",
+                "about3": "hairstyling session, professional hairdresser, beauty salon environment",
+                "review1": "beautiful woman after salon treatment, glowing skin, satisfied client",
+                "review2": "elegant lady with new hairstyle, confident and happy, beauty success",
+                "review3": "group of women enjoying beauty services, friendship and self-care",
+                "favicon": "lipstick icon, beauty symbol, elegant design, feminine style, transparent background"
+            }
+        
+        elif category == 'fitness_service':
+            return {
+                "main": "modern fitness gym interior, equipment visible, bright lighting, spacious",
+                "about1": "professional gym equipment, dumbbells and machines, clean modern design",
+                "about2": "personal trainer working with client, professional fitness coaching",
+                "about3": "group fitness class, people exercising, energetic atmosphere",
+                "review1": "fit athletic man after workout, happy expression, gym background",
+                "review2": "athletic woman in sportswear, successful fitness transformation, confident pose",
+                "review3": "group of people celebrating fitness goals, happy healthy lifestyle",
+                "favicon": "dumbbell icon, fitness symbol, simple modern design, vector style, transparent background"
+            }
+        
+        elif category == 'tech_service':
+            return {
+                "main": "modern tech office, computers and gadgets, innovative workspace environment",
+                "about1": "cutting-edge technology devices, smartphones and laptops, tech innovation",
+                "about2": "software development team working, coding and collaboration, tech environment",
+                "about3": "server room or data center, technology infrastructure, digital innovation",
+                "review1": "satisfied tech professional, successful IT specialist, confident expression",
+                "review2": "entrepreneur with tech startup success, innovation achievement, modern office",
+                "review3": "team of developers celebrating project success, tech collaboration",
+                "favicon": "gear or chip icon, technology symbol, modern design, digital style, transparent background"
+            }
+        
+        elif category == 'construction':
+            return {
+                "main": "construction site with workers, heavy machinery, building project in progress, professional construction",
+                "about1": "construction workers with blueprints, architectural planning, building project consultation",
+                "about2": "construction equipment and machinery, building tools, professional construction site",
+                "about3": "completed building project, construction success, architectural achievement",
+                "review1": "satisfied homeowner with construction team, building project completion, happy customer",
+                "review2": "construction manager explaining project to client, professional building consultation",
+                "review3": "family in front of completed house, construction project success, building satisfaction",
+                "favicon": "construction icon, building symbol, hard hat and tools, industrial design, transparent background"
+            }
+        
+        elif category == 'restaurant_service':
+            return {
+                "main": "elegant restaurant interior, dining tables, warm ambient lighting",
+                "about1": "gourmet dish presentation, fine dining, professional food photography",
+                "about2": "chef cooking in professional kitchen, culinary expertise, action shot",
+                "about3": "wine collection and bar area, premium beverages, elegant atmosphere",
+                "review1": "satisfied customer enjoying meal, happy dining experience, restaurant setting",
+                "review2": "couple on romantic dinner, elegant restaurant ambiance, joyful moment",
+                "review3": "family dinner celebration, happy customers, restaurant atmosphere",
+                "favicon": "fork and knife icon, restaurant symbol, elegant design, minimalist, transparent background"
+            }
+        
+        elif category == 'culinary_education':
+            return {
+                "main": "professional cooking school kitchen, chef instructors and students, culinary training environment",
+                "about1": "chef instructor demonstrating cooking techniques, professional kitchen, culinary education",
+                "about2": "students practicing cooking skills, hands-on culinary training, professional cooking equipment",
+                "about3": "beautifully plated dishes created by students, culinary arts showcase, food presentation",
+                "review1": "proud culinary student with chef hat, successful cooking course completion, kitchen background",
+                "review2": "group of culinary students celebrating graduation, chef certificates, culinary achievement",
+                "review3": "satisfied student chef presenting signature dish, culinary success story, professional kitchen",
+                "favicon": "chef hat icon, culinary symbol, cooking cap, transparent background"
+            }
+        
+        elif category == 'language_courses':
+            return {
+                "main": "modern language classroom, international flags, interactive learning environment",
+                "about1": "language teacher with world map, multicultural learning, language education",
+                "about2": "students practicing conversation, language exchange, communication skills",
+                "about3": "language learning materials and books, study resources, educational tools",
+                "review1": "confident student speaking foreign language, language learning success, classroom setting",
+                "review2": "multicultural group of language students, international communication, language diversity",
+                "review3": "happy student with language certificate, achievement in language learning, proud moment",
+                "favicon": "speech bubble icon, language symbol, communication bubble, transparent background"
+            }
+        
+        elif category == 'music_education':
+            return {
+                "main": "music studio with various instruments, piano, guitars, professional music learning environment",
+                "about1": "music teacher with student at piano, music lesson, instrumental instruction",
+                "about2": "recording studio equipment, microphones, music production, audio technology",
+                "about3": "sheet music and musical notes, music theory, composition materials",
+                "review1": "talented student performing on stage, musical achievement, concert performance",
+                "review2": "music students in ensemble, group performance, musical collaboration",
+                "review3": "proud music graduate with instrument, musical education success, artistic accomplishment",
+                "favicon": "musical note icon, music symbol, treble clef, transparent background"
+            }
+        
+        elif category == 'art_education':
+            return {
+                "main": "bright art studio with easels, paintings, creative workspace, artistic learning environment",
+                "about1": "art teacher demonstrating painting technique, artistic instruction, creative process",
+                "about2": "art supplies and brushes, painting materials, colorful palette, artistic tools",
+                "about3": "student artwork gallery, creative exhibitions, artistic achievements showcase",
+                "review1": "proud art student with their painting, artistic success, studio background",
+                "review2": "group of art students working on projects, creative collaboration, artistic community",
+                "review3": "satisfied artist with completed artwork, creative achievement, artistic fulfillment",
+                "favicon": "paint brush icon, art symbol, creative tool, transparent background"
+            }
+        
+        elif category == 'photography_courses':
+            return {
+                "main": "photography studio with professional lighting, cameras, photo equipment, creative workspace",
+                "about1": "photography instructor with professional camera, teaching photography techniques",
+                "about2": "portrait photography session, model and photographer, studio lighting setup",
+                "about3": "photo editing workstation, computer with photo software, digital photography workflow",
+                "review1": "photographer with professional camera equipment, photography course graduate, confident pose",
+                "review2": "photography student capturing perfect shot, creative moment, artistic photography",
+                "review3": "group of photography students on photo walk, learning expedition, camera equipment",
+                "favicon": "camera icon, photography symbol, lens aperture, transparent background"
+            }
+        
+        elif category == 'business_education':
+            return {
+                "main": "modern business classroom, presentation screen, professional learning environment",
+                "about1": "business instructor presenting to students, professional education, business concepts",
+                "about2": "business students in group discussion, teamwork, collaborative learning",
+                "about3": "business plan documents and charts, entrepreneurship materials, strategic planning",
+                "review1": "successful business graduate in professional attire, entrepreneurial achievement",
+                "review2": "business team celebrating project success, professional accomplishment, business education",
+                "review3": "confident entrepreneur with business plan, startup success, business development",
+                "favicon": "briefcase icon, business symbol, professional bag, transparent background"
+            }
+        
+        elif category == 'general_education':
+            return {
+                "main": "modern classroom or lecture hall, students and teacher, educational environment",
+                "about1": "professional teacher explaining lesson, whiteboard, educational setting",
+                "about2": "students studying together, collaborative learning, modern classroom",
+                "about3": "graduation ceremony, academic success, celebration of education",
+                "review1": "successful graduate with diploma, proud achievement, academic attire",
+                "review2": "happy student with books, educational success, confident expression",
+                "review3": "group of successful students, teamwork in education, celebration",
+                "favicon": "graduation cap icon, education symbol, academic design, simple, transparent background"
+            }
+        
+        # Для других категорий генерируем контекстные промпты
+        return self._generate_contextual_prompts(category, environment, details, keywords, original_input)
+    
+    def _generate_contextual_prompts(self, category, environment, details, keywords, original_input):
+        """Генерация контекстных промптов"""
+        
+        # Базовые элементы для промптов
+        main_activity = keywords[0] if keywords else category.replace('_', ' ')
+        specific_detail = details[0] if details else 'professional service'
+        service_type = details[1] if len(details) > 1 else 'consultation'
+        
+        return {
+            "main": f"professional {environment}, {main_activity} workspace, modern business interior, overview shot",
+            "about1": f"{main_activity} professional demonstration, {specific_detail} process, expert at work",
+            "about2": f"{environment} equipment and tools, {service_type} setup, professional workplace",
+            "about3": f"{main_activity} consultation area, client service environment, professional meeting",
+            "review1": f"satisfied customer after {main_activity} service, successful {specific_detail}, happy client",
+            "review2": f"professional {main_activity} consultation, expert advice, customer satisfaction",
+            "review3": f"group of happy customers, {main_activity} success stories, positive service experience",
+            "favicon": f"{main_activity} icon, {category.replace('_', ' ')} symbol, professional minimalist design, transparent background"
+        }
 
     def get_theme_prompts(self, theme_input):
         """Получает промпты с использованием интернет-анализа"""
@@ -441,46 +656,6 @@ class ThematicImageGenerator:
         
         return enhanced_prompt
 
-    def add_favicon_randomization(self, prompt):
-        """Добавляет специальную рандомизацию для фавиконок"""
-        
-        # Стили иконок
-        icon_styles = [
-            "minimalist icon", "modern flat icon", "geometric icon", "abstract icon",
-            "stylized icon", "contemporary icon", "sleek icon", "professional icon"
-        ]
-        
-        # Варианты дизайна
-        design_variants = [
-            "circular design", "square design", "rounded square", "hexagonal shape",
-            "shield shape", "badge style", "emblem style", "logo mark"
-        ]
-        
-        # Визуальные эффекты для иконок
-        visual_effects = [
-            "subtle gradient", "solid colors", "duo-tone", "monochrome",
-            "outlined style", "filled style", "negative space", "geometric patterns"
-        ]
-        
-        # Композиционные варианты
-        compositions = [
-            "centered composition", "balanced layout", "symmetrical design", "dynamic arrangement",
-            "focused element", "simplified form", "clean structure", "bold design"
-        ]
-        
-        # Выбираем случайные элементы
-        selected_style = random.choice(icon_styles)
-        selected_design = random.choice(design_variants)
-        selected_effect = random.choice(visual_effects)
-        selected_composition = random.choice(compositions)
-        
-        # Генерируем уникальный seed
-        unique_seed = str(uuid.uuid4())[:8]
-        
-        enhanced_prompt = f"{prompt}, {selected_style}, {selected_design}, {selected_effect}, {selected_composition}, seed:{unique_seed}"
-        
-        return enhanced_prompt
-
 class ImageGenerator:
     def __init__(self, silent_mode=False):
         """
@@ -510,73 +685,6 @@ class ImageGenerator:
             
             return final_image
         except:
-            return image
-    
-    def make_favicon_transparent(self, image):
-        """Делает фавиконку прозрачной, удаляя фон умным способом"""
-        try:
-            # Конвертируем в RGBA если нужно
-            if image.mode != 'RGBA':
-                image = image.convert('RGBA')
-            
-            # Получаем данные пикселей
-            data = image.getdata()
-            
-            # Анализируем углы изображения чтобы определить цвет фона
-            width, height = image.size
-            corner_pixels = [
-                image.getpixel((0, 0)),           # Левый верхний
-                image.getpixel((width-1, 0)),     # Правый верхний  
-                image.getpixel((0, height-1)),    # Левый нижний
-                image.getpixel((width-1, height-1)) # Правый нижний
-            ]
-            
-            # Определяем наиболее вероятный цвет фона (самый часто встречающийся в углах)
-            bg_colors = []
-            for pixel in corner_pixels:
-                if len(pixel) >= 3:  # RGB или RGBA
-                    bg_colors.append((pixel[0], pixel[1], pixel[2]))
-            
-            # Находим самый частый цвет фона
-            if bg_colors:
-                most_common_bg = max(set(bg_colors), key=bg_colors.count)
-            else:
-                most_common_bg = (255, 255, 255)  # По умолчанию белый
-            
-            # Создаем новые данные с прозрачным фоном
-            new_data = []
-            for item in data:
-                r, g, b = item[0], item[1], item[2]
-                
-                # Проверяем похожесть на фоновый цвет (с толерантностью)
-                tolerance = 30
-                bg_r, bg_g, bg_b = most_common_bg
-                
-                is_background = (
-                    abs(r - bg_r) <= tolerance and 
-                    abs(g - bg_g) <= tolerance and 
-                    abs(b - bg_b) <= tolerance
-                ) or (
-                    # Дополнительно убираем очень светлые пиксели
-                    r > 235 and g > 235 and b > 235
-                )
-                
-                if is_background:
-                    new_data.append((255, 255, 255, 0))  # Прозрачный
-                else:
-                    new_data.append(item)  # Оставляем как есть
-            
-            # Применяем новые данные
-            image.putdata(new_data)
-            
-            if not self.silent_mode:
-                print(f"🎨 Удален фон цвета RGB{most_common_bg}")
-            
-            return image
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка при создании прозрачности: {e}")
             return image
         
     def translate_prompt(self, russian_prompt: str):
@@ -643,6 +751,85 @@ class ImageGenerator:
             if not self.silent_mode:
                 print(f"❌ Ошибка: {e}")
             return None
+    
+    def generate_via_dezgo(self, prompt):
+        """Генерация через DezGO API - без вотермарков"""
+        try:
+            enhanced_prompt = f"{prompt}, high quality, detailed, masterpiece"
+            
+            if not self.silent_mode:
+                print(f"📝 Промпт: {enhanced_prompt}")
+                print("⏳ Генерация через DezGO (без вотермарков)...")
+            
+            api_url = "https://api.dezgo.com/text2image"
+            
+            data = {
+                'prompt': enhanced_prompt,
+                'model': 'epic_realism',
+                'width': 1024,
+                'height': 1024,
+                'guidance': 7.5,
+                'steps': 25,
+                'format': 'png'
+            }
+            
+            response = requests.post(api_url, data=data, timeout=120)
+            
+            if response.status_code == 200:
+                image = Image.open(BytesIO(response.content))
+                return image
+            else:
+                if not self.silent_mode:
+                    print(f"❌ DezGO недоступен: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ Ошибка DezGO: {e}")
+            return None
+    
+    def generate_via_huggingface_clean(self, prompt):
+        """Улучшенный метод через HF без вотермарков"""
+        try:
+            enhanced_prompt = f"{prompt}, high quality, detailed, masterpiece, professional photography"
+            
+            if not self.silent_mode:
+                print(f"📝 Промпт: {enhanced_prompt}")
+                print("⏳ Генерация через Hugging Face...")
+            
+            # Используем более современную модель
+            api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+            
+            headers = {"Content-Type": "application/json"}
+            data = {
+                "inputs": enhanced_prompt,
+                "parameters": {
+                    "negative_prompt": "watermark, text, logo, signature, blurry, low quality",
+                    "num_inference_steps": 25,
+                    "guidance_scale": 7.5,
+                    "width": 1024,
+                    "height": 1024
+                }
+            }
+            
+            response = requests.post(api_url, headers=headers, json=data, timeout=120)
+            
+            if response.status_code == 200:
+                image = Image.open(BytesIO(response.content))
+                return image
+            elif response.status_code == 503:
+                if not self.silent_mode:
+                    print("⏳ Модель загружается, попробуйте через минуту")
+                return None
+            else:
+                if not self.silent_mode:
+                    print(f"❌ HF недоступен: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ Ошибка HF: {e}")
+            return None
 
     def generate_thematic_set(self, theme_input, media_dir, method="1", progress_callback=None):
         """
@@ -683,26 +870,26 @@ class ImageGenerator:
             
             prompt = prompts[image_name]
             
-            # Добавляем рандомизацию для уникальности
-            if image_name == "favicon":
-                # Специальная рандомизация для фавиконок
-                prompt = thematic_gen.add_favicon_randomization(prompt)
-                prompt += ", TRANSPARENT BACKGROUND, icon design, vector style, flat design, simple logo, no background, white cutout, isolated on transparent, PNG with alpha channel, clear background, cutout style, logo without background"
-            else:
-                # Обычная рандомизация для остальных изображений
+            # Добавляем рандомизацию для уникальности (кроме фавиконки)
+            if image_name != "favicon":
                 prompt = thematic_gen.add_randomization(prompt)
             
-            # Генерируем изображение
-            image = self.generate_via_pollinations_clean(prompt)
+            # Специальные настройки для фавиконки
+            if image_name == "favicon":
+                prompt += ", icon design, vector style, flat design, simple logo, transparent PNG, alpha channel, no background, white cutout, isolated on transparent"
+            
+            # Выбираем метод генерации
+            if method == "2":
+                image = self.generate_via_dezgo(prompt)
+            elif method == "3":
+                image = self.generate_via_huggingface_clean(prompt)
+            else:
+                image = self.generate_via_pollinations_clean(prompt)
             
             if image:
-                # Для фавиконки делаем размер 512x512 и убираем фон
+                # Для фавиконки делаем размер 512x512 (потом можно уменьшить)
                 if image_name == "favicon":
                     image = image.resize((512, 512), Image.Resampling.LANCZOS)
-                    image = self.make_favicon_transparent(image)
-                    
-                    if not self.silent_mode:
-                        print("🎨 Применено удаление фона для фавиконки")
                 
                 filename = os.path.join(media_dir, f"{image_name}.png")
                 image.save(filename)
@@ -742,35 +929,95 @@ def main():
     """Основная функция для запуска как отдельной программы"""
     generator = ImageGenerator()
     
-    print("\n🌟 Динамический AI-генератор изображений для любых тематик!")
-    print("=" * 60)
-    print("🧠 Интеллектуальный анализ через интернет")
-    print("🎨 Автоматическая адаптация под любую тематику")
+    print("\n🌟 Выберите режим работы:")
+    print("1. Одиночная генерация изображения")
+    print("2. Тематический набор для лендинга (8 изображений)")
     print()
     
-    while True:
-        theme_input = input("Введите тематику бизнеса (или 'выход'): ").strip()
+    mode = input("Выберите режим (1-2): ").strip()
+    
+    if mode == "2":
+        # Тематический режим
+        print("\n🎯 РЕЖИМ: Генерация тематического набора")
+        print("=" * 50)
+        print("Примеры тематик:")
+        print("  • автосалон, недвижимость, фитнес")
+        print("  • ресторан, образование, медицина")
+        print("  • красота, технологии, или любая другая")
+        print()
         
-        if theme_input.lower() in ['выход', 'exit', 'quit']:
-            print("👋 До свидания!")
-            break
-            
+        theme_input = input("Введите тематику вашего бизнеса: ").strip()
+        
         if not theme_input:
-            continue
+            print("❌ Тематика не указана!")
+            return
         
-        try:
-            # Генерируем набор
-            results = generator.generate_thematic_set(theme_input, "media", "1")
+        print("\n🎨 Выберите метод генерации:")
+        print("1. Pollinations + удаление вотермарка (рекомендуется)")
+        print("2. DezGO (чистые изображения)")
+        print("3. Hugging Face SDXL")
+        
+        method_choice = input("Выбор (1-3 или Enter для метода 1): ").strip()
+        
+        # Генерируем набор
+        results = generator.generate_thematic_set(theme_input, "media", method_choice)
+        
+        print(f"\n💡 Теперь вы можете использовать созданные изображения в своем лендинге!")
+        print("   Просто скопируйте папку 'media' в ваш проект.")
+        
+    else:
+        # Обычный режим (одиночная генерация)
+        print("\n🎨 РЕЖИМ: Одиночная генерация")
+        print("=" * 40)
+        
+        while True:
+            print("\n📝 Введите описание изображения:")
+            prompt = input("Промпт (или 'выход' для завершения): ").strip()
             
-            print(f"\n💡 Теперь вы можете использовать созданные изображения в своем лендинге!")
-            print("   Просто скопируйте папку 'media' в ваш проект.")
-            
-            continue_choice = input("\nСоздать изображения для другой тематики? (y/n): ").strip().lower()
-            if continue_choice in ['n', 'no', 'нет']:
+            if prompt.lower() in ['выход', 'exit', 'quit']:
+                print("👋 До свидания!")
                 break
                 
-        except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            if not prompt:
+                continue
+            
+            # Переводим если нужно
+            if any(ord(char) > 127 for char in prompt):
+                english_prompt = generator.translate_prompt(prompt)
+                print(f"🔄 Перевод: {english_prompt}")
+            else:
+                english_prompt = prompt
+            
+            # Выбор метода
+            print("\n🎨 Выберите метод:")
+            print("1. Pollinations + удаление вотермарка (рекомендуется)")
+            print("2. DezGO (чистые изображения)")
+            print("3. Hugging Face SDXL")
+            
+            method_choice = input("Выбор (1-3 или Enter для метода 1): ").strip()
+            
+            # Генерируем
+            if method_choice == "2":
+                image = generator.generate_via_dezgo(english_prompt)
+            elif method_choice == "3":
+                image = generator.generate_via_huggingface_clean(english_prompt)
+            else:
+                image = generator.generate_via_pollinations_clean(english_prompt)
+            
+            if image:
+                os.makedirs("generated_images", exist_ok=True)
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"generated_images/image_{timestamp}.png"
+                image.save(filename)
+                
+                print(f"\n🎉 Готово! Изображение сохранено: {filename}")
+                
+                # Спрашиваем, хочет ли пользователь продолжить
+                continue_choice = input("\nСоздать еще одно изображение? (y/n): ").strip().lower()
+                if continue_choice in ['n', 'no', 'нет']:
+                    break
+            else:
+                print("❌ Не удалось создать изображение")
 
 if __name__ == "__main__":
-    main() 
+    main()

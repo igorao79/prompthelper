@@ -17,6 +17,107 @@ from cursor_manager import CursorManager
 from prompt_generator import create_landing_prompt
 
 
+def enable_clipboard_operations_with_var(entry_widget, text_variable):
+    """
+    Добавляет поддержку операций буфера обмена к Entry виджету с textvariable
+    
+    Args:
+        entry_widget: tk.Entry или ttk.Entry виджет
+        text_variable: tk.StringVar связанная с полем
+    """
+    def select_all(event=None):
+        try:
+            entry_widget.select_range(0, tk.END)
+            return 'break'
+        except:
+            return None
+    
+    def paste_text_with_var(event=None):
+        try:
+            clipboard_text = entry_widget.clipboard_get()
+            # Очищаем поле полностью если есть выделение или заменяем весь текст
+            if entry_widget.selection_present():
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                # Если ничего не выделено, заменяем весь текст
+                entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, clipboard_text)
+            # Обновляем переменную
+            text_variable.set(entry_widget.get())
+            return 'break'
+        except:
+            return None
+    
+    # Добавляем только Ctrl+A и переопределенный Ctrl+V
+    entry_widget.bind('<Control-a>', select_all)
+    entry_widget.bind('<Control-A>', select_all)
+    entry_widget.bind('<Control-v>', paste_text_with_var)
+    entry_widget.bind('<Control-V>', paste_text_with_var)
+    
+    # Добавляем контекстное меню
+    def show_context_menu(event):
+        context_menu = tk.Menu(entry_widget, tearoff=0)
+        try:
+            # Используем стандартные команды для копирования/вырезания
+            context_menu.add_command(label="Копировать", command=lambda: entry_widget.event_generate('<<Copy>>'))
+            context_menu.add_command(label="Вырезать", command=lambda: entry_widget.event_generate('<<Cut>>'))
+            context_menu.add_command(label="Вставить", command=paste_text_with_var)
+            context_menu.add_separator()
+            context_menu.add_command(label="Выделить всё", command=select_all)
+            
+            context_menu.tk_popup(event.x_root, event.y_root)
+        except Exception:
+            pass
+        finally:
+            try:
+                context_menu.grab_release()
+            except:
+                pass
+    
+    entry_widget.bind('<Button-3>', show_context_menu)  # Правая кнопка мыши
+
+
+def enable_clipboard_operations(entry_widget):
+    """
+    Добавляет поддержку операций буфера обмена к Entry виджету
+    
+    Args:
+        entry_widget: tk.Entry или ttk.Entry виджет
+    """
+    def select_all(event=None):
+        try:
+            entry_widget.select_range(0, tk.END)
+            return 'break'
+        except:
+            return None
+    
+    # Добавляем только Ctrl+A (выделить всё) - остальные операции оставляем стандартными
+    entry_widget.bind('<Control-a>', select_all)
+    entry_widget.bind('<Control-A>', select_all)
+    
+    # Добавляем контекстное меню
+    def show_context_menu(event):
+        context_menu = tk.Menu(entry_widget, tearoff=0)
+        try:
+            # Используем стандартные команды Tkinter
+            context_menu.add_command(label="Копировать", command=lambda: entry_widget.event_generate('<<Copy>>'))
+            context_menu.add_command(label="Вырезать", command=lambda: entry_widget.event_generate('<<Cut>>'))
+            context_menu.add_command(label="Вставить", command=lambda: entry_widget.event_generate('<<Paste>>'))
+            context_menu.add_separator()
+            context_menu.add_command(label="Выделить всё", command=select_all)
+            
+            context_menu.tk_popup(event.x_root, event.y_root)
+        except Exception:
+            pass
+        finally:
+            try:
+                context_menu.grab_release()
+            except:
+                pass
+    
+    entry_widget.bind('<Button-3>', show_context_menu)  # Правая кнопка мыши
+
+
 class CountrySearchCombobox(ttk.Frame):
     """Компактный комбобокс с поиском для стран"""
     
@@ -50,6 +151,9 @@ class CountrySearchCombobox(ttk.Frame):
             font=("Arial", 9)
         )
         self.entry.pack(side="left", fill="x", expand=True)
+        
+        # Добавляем поддержку операций буфера обмена
+        enable_clipboard_operations(self.entry)
         
         # Кнопка выбора
         select_btn = ttk.Button(
@@ -286,6 +390,9 @@ class ThemeHistoryCombobox(ttk.Frame):
         )
         self.entry.pack(fill="x", ipady=3)
         
+        # Добавляем поддержку операций буфера обмена
+        enable_clipboard_operations(self.entry)
+        
         # Кнопка истории
         self.history_btn = tk.Button(
             self,
@@ -374,6 +481,11 @@ class LandingPageGeneratorGUI:
         self.theme_var = tk.StringVar()
         self.domain_var = tk.StringVar()
         self.save_path_var = tk.StringVar(value=self.settings_manager.get_save_path())
+        
+        # Привязываем обработчики изменений для автосброса промпта
+        self.theme_var.trace('w', self._on_data_change)
+        self.selected_country.trace('w', self._on_data_change)
+        self.domain_var.trace('w', self._on_data_change)
         self.current_city = ""
         self.current_prompt = self.settings_manager.get_prompt()
         
@@ -473,6 +585,9 @@ class LandingPageGeneratorGUI:
             state="readonly"
         )
         path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=3)
+        
+        # Добавляем поддержку операций буфера обмена (только копирование для readonly поля)
+        enable_clipboard_operations(path_entry)
         
         # Кнопка выбора папки
         browse_btn = tk.Button(
@@ -613,6 +728,9 @@ class LandingPageGeneratorGUI:
             width=60
         )
         domain_entry.pack(anchor="w", ipady=3)
+        
+        # Добавляем поддержку операций буфера обмена с textvariable
+        enable_clipboard_operations_with_var(domain_entry, self.domain_var)
     
     def create_action_buttons(self):
         """Создает кнопки действий"""
@@ -709,6 +827,19 @@ class LandingPageGeneratorGUI:
         new_city = self.city_generator.get_random_city(country)
         self.current_city = new_city
         self.city_label.config(text=f"Город: {new_city}", fg="#27ae60")
+        # Сбрасываем промпт при изменении города
+        self._reset_prompt_on_change()
+    
+    def _on_data_change(self, *args):
+        """Обработчик изменения основных данных"""
+        self._reset_prompt_on_change()
+    
+    def _reset_prompt_on_change(self):
+        """Сбрасывает сохраненный промпт при изменении данных"""
+        if self.current_prompt:
+            self.current_prompt = None
+            self.settings_manager.save_prompt("")
+            print("🔄 Промпт сброшен из-за изменения данных")
     
     def edit_prompt(self):
         """Редактирование промпта"""

@@ -27,7 +27,6 @@ python -m PyInstaller ^
     --onefile ^
     --noconsole ^
     --name="Генератор_Лендингов" ^
-    --exclude-module=PIL ^
     --exclude-module=matplotlib ^
     --exclude-module=numpy ^
     --exclude-module=pandas ^
@@ -36,6 +35,10 @@ python -m PyInstaller ^
     --exclude-module=unittest ^
     --hidden-import=pyautogui ^
     --hidden-import=requests ^
+    --hidden-import=PIL ^
+    --hidden-import=PIL.Image ^
+    --hidden-import=PIL.ImageDraw ^
+    --hidden-import=img_gen ^
     --distpath="dist" ^
     --workpath="build" ^
     --clean ^
