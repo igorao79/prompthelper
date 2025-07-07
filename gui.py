@@ -103,13 +103,31 @@ class CountrySearchCombobox(ttk.Frame):
         
         # Добавляем прокрутку колесиком мыши
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            if canvas.winfo_exists():
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        # Привязываем прокрутку к нескольким элементам для лучшей работы
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        self.items_frame.bind("<MouseWheel>", _on_mousewheel)
+        self.popup_window.bind("<MouseWheel>", _on_mousewheel)
+        
+        # Также привязываем к элементам внутри popup
+        def _bind_mousewheel_to_children(widget):
+            widget.bind("<MouseWheel>", _on_mousewheel)
+            for child in widget.winfo_children():
+                _bind_mousewheel_to_children(child)
         
         # Отвязываем прокрутку при закрытии окна
         def _on_popup_destroy(event):
-            canvas.unbind_all("<MouseWheel>")
+            try:
+                if canvas.winfo_exists():
+                    canvas.unbind("<MouseWheel>")
+                if self.items_frame.winfo_exists():
+                    self.items_frame.unbind("<MouseWheel>")
+                if self.popup_window.winfo_exists():
+                    self.popup_window.unbind("<MouseWheel>")
+            except:
+                pass
         self.popup_window.bind("<Destroy>", _on_popup_destroy)
         
         # Добавляем страны
@@ -173,6 +191,25 @@ class CountrySearchCombobox(ttk.Frame):
         # Бинды
         label.bind('<Button-1>', lambda e, c=country: self._select_country(c))
         star.bind('<Button-1>', lambda e, c=country: self._toggle_favorite(c))
+        
+        # Добавляем прокрутку колесиком к элементам стран
+        if hasattr(self, 'popup_window') and self.popup_window:
+            def _item_mousewheel(event):
+                if self.popup_window and self.popup_window.winfo_exists():
+                    # Находим canvas через иерархию виджетов
+                    canvas = None
+                    parent = event.widget
+                    while parent and not isinstance(parent, tk.Canvas):
+                        parent = parent.master
+                        if hasattr(parent, 'winfo_class') and parent.winfo_class() == 'Canvas':
+                            canvas = parent
+                            break
+                    if canvas:
+                        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+            frame.bind("<MouseWheel>", _item_mousewheel)
+            label.bind("<MouseWheel>", _item_mousewheel)
+            star.bind("<MouseWheel>", _item_mousewheel)
         
         # Подсветка при наведении
         for widget in (label, star):
@@ -582,9 +619,13 @@ class LandingPageGeneratorGUI:
         section = tk.Frame(self.scrollable_frame)
         section.pack(fill="x", pady=10)
         
+        # Фрейм для кнопок промпта
+        prompt_buttons_frame = tk.Frame(section)
+        prompt_buttons_frame.pack(pady=(0, 8))
+        
         # Кнопка редактирования промпта
         edit_btn = tk.Button(
-            section,
+            prompt_buttons_frame,
             text="✏️ Настроить промпт",
             command=self.edit_prompt,
             bg="#9b59b6",
@@ -593,7 +634,20 @@ class LandingPageGeneratorGUI:
             padx=15,
             pady=5
         )
-        edit_btn.pack(pady=(0, 8))
+        edit_btn.pack(side="left", padx=(0, 5))
+        
+        # Кнопка сброса промпта  
+        reset_btn = tk.Button(
+            prompt_buttons_frame,
+            text="🔄 Сбросить",
+            command=self.reset_prompt,
+            bg="#95a5a6",
+            fg="white",
+            font=("Arial", 9, "bold"),
+            padx=15,
+            pady=5
+        )
+        reset_btn.pack(side="left")
         
         # ГЛАВНАЯ КНОПКА - СОЗДАТЬ ЛЕНДИНГ
         create_button = tk.Button(
@@ -659,19 +713,32 @@ class LandingPageGeneratorGUI:
     def edit_prompt(self):
         """Редактирование промпта"""
         try:
-            # Получаем данные (используем значения по умолчанию если не заполнены)
-            theme = self.theme_var.get().strip() or "Продажа недвижимости"
-            country = self.selected_country.get() or "Россия"
-            domain = self.domain_var.get().strip() or "example"
-            city = self.current_city or "Москва"
+            # Получаем данные - проверяем заполненность
+            theme = self.theme_var.get().strip()
+            country = self.selected_country.get()
+            domain = self.domain_var.get().strip()
+            city = self.current_city
             
-            # Генерируем промпт если нет сохраненного
-            if not self.current_prompt:
-                language = get_language_by_country(country)
-                self.current_prompt = create_landing_prompt(country, city, language, domain, theme)
+            # Проверяем заполненность обязательных полей
+            if not theme:
+                messagebox.showwarning("Предупреждение", "Введите тематику лендинга!")
+                return
+            if not country:
+                messagebox.showwarning("Предупреждение", "Выберите страну!")
+                return
+            if not domain:
+                messagebox.showwarning("Предупреждение", "Введите домен!")
+                return
+            if not city:
+                messagebox.showwarning("Предупреждение", "Сгенерируйте город!")
+                return
+            
+            # Всегда генерируем актуальный промпт с текущими значениями
+            language = get_language_by_country(country)
+            current_prompt = create_landing_prompt(country, city, language, domain, theme)
             
             # Открываем редактор
-            edited_prompt = open_text_editor(self.current_prompt)
+            edited_prompt = open_text_editor(current_prompt)
             if edited_prompt is not None:  # None означает отмену
                 self.current_prompt = edited_prompt
                 self.settings_manager.save_prompt(edited_prompt)
@@ -680,6 +747,26 @@ class LandingPageGeneratorGUI:
         except Exception as e:
             print(f"Ошибка редактирования промпта: {e}")
             messagebox.showerror("Ошибка", f"Не удалось отредактировать промпт: {e}")
+    
+    def reset_prompt(self):
+        """Сбрасывает сохраненный промпт"""
+        try:
+            if self.current_prompt:
+                result = messagebox.askyesno(
+                    "Подтверждение",
+                    "Сбросить отредактированный промпт?\n\n"
+                    "При создании лендинга будет использован\n"
+                    "стандартный промпт с актуальными данными."
+                )
+                if result:
+                    self.current_prompt = None
+                    self.settings_manager.save_prompt("")
+                    messagebox.showinfo("Готово", "Промпт сброшен! Теперь будет использован стандартный промпт.")
+            else:
+                messagebox.showinfo("Информация", "Промпт уже использует стандартные настройки.")
+        except Exception as e:
+            print(f"Ошибка сброса промпта: {e}")
+            messagebox.showerror("Ошибка", f"Не удалось сбросить промпт: {e}")
     
     def validate_form(self):
         """Проверяет заполненность формы"""
@@ -734,6 +821,9 @@ class LandingPageGeneratorGUI:
             if not result:
                 return
         
+        # Определяем тип промпта
+        prompt_type = "✏️ Отредактированный промпт" if self.current_prompt else "📋 Стандартный промпт"
+        
         result = messagebox.askyesno(
             "Подтверждение", 
             f"Создать лендинг:\n\n"
@@ -741,7 +831,11 @@ class LandingPageGeneratorGUI:
             f"Страна: {country}\n"
             f"Город: {self.current_city}\n"
             f"Домен: {domain}\n"
-            f"Папка: {save_path}\n\n"
+            f"Папка: {save_path}\n"
+            f"Промпт: {prompt_type}\n\n"
+            f"🎨 Дополнительно будет создано 8 тематических изображений:\n"
+            f"   • main, about1-3, review1-3, favicon\n"
+            f"   • Изображения будут соответствовать тематике '{theme}'\n\n"
             f"Продолжить?"
         )
         if not result:
@@ -764,19 +858,18 @@ class LandingPageGeneratorGUI:
             # Обновление статуса
             self.update_status("🔄 Создание папок...")
             
-            # Создание структуры проекта
+            # Создание структуры проекта с генерацией изображений
             project_path, media_path = self.cursor_manager.create_project_structure(
-                domain, save_path
+                domain, save_path, theme, self.update_status
             )
             
             self.update_status("📄 Подготовка промпта...")
             
-            # Используем отредактированный промпт если есть, иначе генерируем новый
+            # Используем отредактированный промпт если есть, иначе генерируем новый с актуальными данными
             if self.current_prompt:
                 full_prompt = self.current_prompt
             else:
-                base_prompt = create_landing_prompt(country, city, language, domain, theme)
-                full_prompt = base_prompt
+                full_prompt = create_landing_prompt(country, city, language, domain, theme)
             
             self.update_status("🚀 Запуск Cursor AI...")
             
@@ -790,18 +883,24 @@ class LandingPageGeneratorGUI:
                 messagebox.showinfo(
                     "Успех!", 
                     f"Проект создан успешно!\n\n"
-                    f"Папка: {project_path}\n"
-                    f"Cursor AI запущен с готовым промптом.\n\n"
-                    f"Если промпт не вставился автоматически,\n"
-                    f"нажмите Ctrl+V в Cursor AI"
+                    f"📁 Папка: {project_path}\n"
+                    f"🎨 Папка media: {media_path}\n"
+                    f"🚀 Cursor AI запущен с готовым промптом\n\n"
+                    f"🖼️ Тематические изображения созданы автоматически!\n"
+                    f"   Проверьте папку media в вашем проекте.\n\n"
+                    f"💡 Если промпт не вставился автоматически,\n"
+                    f"   нажмите Ctrl+V в Cursor AI"
                 )
             else:
                 self.update_status("⚠️ Cursor не найден, промпт скопирован")
                 messagebox.showwarning(
                     "Предупреждение",
-                    f"Папка проекта создана: {project_path}\n\n"
-                    f"Cursor AI не найден, но промпт скопирован в буфер обмена.\n"
-                    f"Откройте проект в Cursor вручную и вставьте промпт."
+                    f"📁 Папка проекта создана: {project_path}\n"
+                    f"🎨 Папка media: {media_path}\n\n"
+                    f"🖼️ Тематические изображения созданы автоматически!\n"
+                    f"   Проверьте папку media в вашем проекте.\n\n"
+                    f"⚠️ Cursor AI не найден, но промпт скопирован в буфер обмена.\n"
+                    f"   Откройте проект в Cursor вручную и вставьте промпт."
                 )
                 
         except Exception as e:

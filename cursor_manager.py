@@ -12,6 +12,14 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+# Импорт для генерации изображений
+try:
+    from img_gen import ImageGenerator
+    IMAGE_GENERATION_AVAILABLE = True
+except ImportError:
+    IMAGE_GENERATION_AVAILABLE = False
+    print("⚠️ Модуль генерации изображений недоступен")
+
 
 class CursorManager:
     """Класс для управления Cursor AI"""
@@ -364,13 +372,15 @@ class CursorManager:
         except Exception as e:
             print(f"Ошибка автовставки: {e}")
     
-    def create_project_structure(self, domain, desktop_path=None):
+    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None):
         """
-        Создает структуру папок проекта
+        Создает структуру папок проекта и генерирует тематические изображения
         
         Args:
             domain (str): Название домена
             desktop_path (Path): Путь к директории для создания проекта (опционально)
+            theme (str): Тематика для генерации изображений (опционально)
+            progress_callback (callable): Функция обратного вызова для обновления прогресса
             
         Returns:
             tuple: (project_path, media_path)
@@ -393,8 +403,46 @@ class CursorManager:
         media_path = project_path / "media"
         
         # Создаем папки
+        if progress_callback:
+            progress_callback("📁 Создание папок проекта...")
+        
         project_path.mkdir(exist_ok=True)
         media_path.mkdir(exist_ok=True)
+        
+        # Генерация тематических изображений
+        if theme and IMAGE_GENERATION_AVAILABLE:
+            try:
+                if progress_callback:
+                    progress_callback("🎨 Запуск генерации изображений...")
+                
+                # Создаем генератор в тихом режиме
+                image_generator = ImageGenerator(silent_mode=True)
+                
+                # Генерируем изображения
+                results = image_generator.generate_thematic_set(
+                    theme_input=theme,
+                    media_dir=str(media_path),
+                    method="1",  # По умолчанию Pollinations
+                    progress_callback=progress_callback
+                )
+                
+                # Подсчитываем успешные генерации
+                successful_count = len([f for f in results.values() if f is not None])
+                
+                if progress_callback:
+                    progress_callback(f"✅ Генерация изображений завершена: {successful_count}/8")
+                
+                print(f"🎨 Сгенерировано {successful_count}/8 тематических изображений")
+                
+            except Exception as e:
+                error_msg = f"Ошибка генерации изображений: {str(e)}"
+                print(f"⚠️ {error_msg}")
+                if progress_callback:
+                    progress_callback(f"⚠️ {error_msg}")
+        
+        elif theme and not IMAGE_GENERATION_AVAILABLE:
+            if progress_callback:
+                progress_callback("⚠️ Модуль генерации изображений недоступен")
         
         return project_path, media_path
     
