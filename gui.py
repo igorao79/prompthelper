@@ -20,6 +20,7 @@ from prompt_generator import create_landing_prompt
 def enable_clipboard_operations_with_var(entry_widget, text_variable):
     """
     Добавляет поддержку операций буфера обмена к Entry виджету с textvariable
+    ИСПРАВЛЕНО: никогда не блокирует копирование
     
     Args:
         entry_widget: tk.Entry или ttk.Entry виджет
@@ -28,11 +29,42 @@ def enable_clipboard_operations_with_var(entry_widget, text_variable):
     def select_all(event=None):
         try:
             entry_widget.select_range(0, tk.END)
-            return 'break'
+            entry_widget.focus_set()
         except:
-            return None
+            pass
+        return None  # НЕ возвращаем 'break'
     
-    def paste_text_with_var(event=None):
+    def copy_text(event=None):
+        try:
+            if entry_widget.selection_present():
+                text = entry_widget.selection_get()
+            else:
+                text = entry_widget.get()
+            entry_widget.clipboard_clear()
+            entry_widget.clipboard_append(text)
+        except:
+            pass
+        return None  # НЕ блокируем стандартную обработку
+    
+    def cut_text(event=None):
+        try:
+            if entry_widget.selection_present():
+                text = entry_widget.selection_get()
+                entry_widget.clipboard_clear()
+                entry_widget.clipboard_append(text)
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                text = entry_widget.get()
+                entry_widget.clipboard_clear()
+                entry_widget.clipboard_append(text)
+                entry_widget.delete(0, tk.END)
+            # Обновляем переменную
+            text_variable.set(entry_widget.get())
+        except:
+            pass
+        return None  # НЕ блокируем стандартную обработку
+    
+    def paste_text(event=None):
         try:
             clipboard_text = entry_widget.clipboard_get()
             # Очищаем поле полностью если есть выделение или заменяем весь текст
@@ -44,24 +76,22 @@ def enable_clipboard_operations_with_var(entry_widget, text_variable):
             entry_widget.insert(0, clipboard_text)
             # Обновляем переменную
             text_variable.set(entry_widget.get())
-            return 'break'
         except:
-            return None
+            pass
+        return None  # НЕ блокируем стандартную обработку
     
-    # Добавляем только Ctrl+A и переопределенный Ctrl+V
-    entry_widget.bind('<Control-a>', select_all)
-    entry_widget.bind('<Control-A>', select_all)
-    entry_widget.bind('<Control-v>', paste_text_with_var)
-    entry_widget.bind('<Control-V>', paste_text_with_var)
+    # НЕ переопределяем стандартные горячие клавиши, добавляем только Ctrl+A
+    entry_widget.bind('<Control-a>', select_all, add='+')
+    entry_widget.bind('<Control-A>', select_all, add='+')
     
     # Добавляем контекстное меню
     def show_context_menu(event):
         context_menu = tk.Menu(entry_widget, tearoff=0)
         try:
-            # Используем стандартные команды для копирования/вырезания
-            context_menu.add_command(label="Копировать", command=lambda: entry_widget.event_generate('<<Copy>>'))
-            context_menu.add_command(label="Вырезать", command=lambda: entry_widget.event_generate('<<Cut>>'))
-            context_menu.add_command(label="Вставить", command=paste_text_with_var)
+            # Используем собственные безопасные функции
+            context_menu.add_command(label="Копировать", command=copy_text)
+            context_menu.add_command(label="Вырезать", command=cut_text)
+            context_menu.add_command(label="Вставить", command=paste_text)
             context_menu.add_separator()
             context_menu.add_command(label="Выделить всё", command=select_all)
             
@@ -74,12 +104,13 @@ def enable_clipboard_operations_with_var(entry_widget, text_variable):
             except:
                 pass
     
-    entry_widget.bind('<Button-3>', show_context_menu)  # Правая кнопка мыши
+    entry_widget.bind('<Button-3>', show_context_menu, add='+')  # Правая кнопка мыши
 
 
 def enable_clipboard_operations(entry_widget):
     """
     Добавляет поддержку операций буфера обмена к Entry виджету
+    ИСПРАВЛЕНО: никогда не блокирует копирование
     
     Args:
         entry_widget: tk.Entry или ttk.Entry виджет
@@ -87,22 +118,63 @@ def enable_clipboard_operations(entry_widget):
     def select_all(event=None):
         try:
             entry_widget.select_range(0, tk.END)
-            return 'break'
+            entry_widget.focus_set()
         except:
-            return None
+            pass
+        return None  # НЕ возвращаем 'break'
     
-    # Добавляем только Ctrl+A (выделить всё) - остальные операции оставляем стандартными
-    entry_widget.bind('<Control-a>', select_all)
-    entry_widget.bind('<Control-A>', select_all)
+    def copy_text(event=None):
+        try:
+            if entry_widget.selection_present():
+                text = entry_widget.selection_get()
+            else:
+                text = entry_widget.get()
+            entry_widget.clipboard_clear()
+            entry_widget.clipboard_append(text)
+        except:
+            pass
+        return None  # НЕ блокируем стандартную обработку
+    
+    def cut_text(event=None):
+        try:
+            if entry_widget.selection_present():
+                text = entry_widget.selection_get()
+                entry_widget.clipboard_clear()
+                entry_widget.clipboard_append(text)
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                text = entry_widget.get()
+                entry_widget.clipboard_clear()
+                entry_widget.clipboard_append(text)
+                entry_widget.delete(0, tk.END)
+        except:
+            pass
+        return None  # НЕ блокируем стандартную обработку
+    
+    def paste_text(event=None):
+        try:
+            clipboard_text = entry_widget.clipboard_get()
+            if entry_widget.selection_present():
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, clipboard_text)
+        except:
+            pass
+        return None  # НЕ блокируем стандартную обработку
+    
+    # НЕ переопределяем стандартные горячие клавиши, добавляем только Ctrl+A
+    entry_widget.bind('<Control-a>', select_all, add='+')
+    entry_widget.bind('<Control-A>', select_all, add='+')
     
     # Добавляем контекстное меню
     def show_context_menu(event):
         context_menu = tk.Menu(entry_widget, tearoff=0)
         try:
-            # Используем стандартные команды Tkinter
-            context_menu.add_command(label="Копировать", command=lambda: entry_widget.event_generate('<<Copy>>'))
-            context_menu.add_command(label="Вырезать", command=lambda: entry_widget.event_generate('<<Cut>>'))
-            context_menu.add_command(label="Вставить", command=lambda: entry_widget.event_generate('<<Paste>>'))
+            # Используем собственные безопасные функции
+            context_menu.add_command(label="Копировать", command=copy_text)
+            context_menu.add_command(label="Вырезать", command=cut_text)
+            context_menu.add_command(label="Вставить", command=paste_text)
             context_menu.add_separator()
             context_menu.add_command(label="Выделить всё", command=select_all)
             
@@ -115,7 +187,7 @@ def enable_clipboard_operations(entry_widget):
             except:
                 pass
     
-    entry_widget.bind('<Button-3>', show_context_menu)  # Правая кнопка мыши
+    entry_widget.bind('<Button-3>', show_context_menu, add='+')  # Правая кнопка мыши
 
 
 class CountrySearchCombobox(ttk.Frame):
@@ -482,6 +554,7 @@ class LandingPageGeneratorGUI:
         self.domain_var = tk.StringVar()
         self.save_path_var = tk.StringVar(value=self.settings_manager.get_save_path())
         self.project_path_var = tk.StringVar()  # Для управления изображениями
+        self.last_created_project_path = None  # Для автоматического выбора папки при перегенерации
         
         # Привязываем обработчики изменений для автосброса промпта
         self.theme_var.trace('w', self._on_data_change)
@@ -1146,6 +1219,10 @@ class LandingPageGeneratorGUI:
                 domain, save_path, theme, self.update_status
             )
             
+            # Сохраняем путь проекта для автоматического выбора при перегенерации
+            self.last_created_project_path = project_path
+            print(f"💾 Сохранен путь проекта для автовыбора: {project_path}")
+            
             self.update_status("📄 Подготовка промпта...")
             
             # Используем отредактированный промпт если есть, иначе генерируем новый с актуальными данными
@@ -1342,21 +1419,43 @@ class LandingPageGeneratorGUI:
             # Применяем рандомизацию
             if image_name == "favicon":
                 prompt = thematic_gen.add_favicon_randomization(prompt)
-                prompt += ", TRANSPARENT BACKGROUND, icon design, vector style, flat design, simple logo, no background, white cutout, isolated on transparent, PNG with alpha channel, clear background, cutout style, logo without background"
+                prompt += ", TRANSPARENT BACKGROUND, vector style, flat design, simple symbol, no background, isolated on transparent, PNG with alpha channel, clear background, cutout style, symbol without background, NO TEXT, NO LETTERS, pure visual symbol"
             else:
                 prompt = thematic_gen.add_randomization(prompt)
             
             # Специальная обработка для фавиконки
-            if image_name == "favicon" and hasattr(image_generator, 'use_icons8_for_favicons') and image_generator.use_icons8_for_favicons and image_generator.icons8_manager:
-                # Используем Icons8 для фавиконки
+            if image_name == "favicon":
                 filename = Path(media_path) / f"{image_name}.png"
-                favicon_success = image_generator.icons8_manager.create_favicon_from_theme(theme, str(filename), 512)
+                favicon_created = False
                 
-                if favicon_success:
-                    self.update_status(f"✅ Фавиконка Icons8 пересоздана!")
-                    messagebox.showinfo("Готово", f"Фавиконка '{image_name}' успешно пересоздана с Icons8!")
-                else:
-                    # Fallback на AI генерацию
+                # Метод 1: Современный AI генератор (приоритетный)
+                try:
+                    from modern_favicon_gen import ModernFaviconGenerator
+                    modern_gen = ModernFaviconGenerator(silent_mode=True)
+                    favicon_created = modern_gen.generate_favicon_from_prompt(
+                        prompt=theme,  # Используем тематику напрямую
+                        output_path=str(filename),
+                        size=512,
+                        style="modern_flat"
+                    )
+                    if favicon_created:
+                        self.update_status(f"🚀 Современная AI фавиконка пересоздана!")
+                        messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана с современным AI!")
+                except ImportError:
+                    self.update_status(f"⚠️ Современный генератор недоступен")
+                except Exception as e:
+                    self.update_status(f"⚠️ Ошибка современного генератора: {e}")
+                
+                # Метод 2: Icons8 (если современный генератор не сработал)
+                if not favicon_created and hasattr(image_generator, 'use_icons8_for_favicons') and image_generator.use_icons8_for_favicons and image_generator.icons8_manager:
+                    favicon_created = image_generator.icons8_manager.create_favicon_from_theme(theme, str(filename), 512)
+                    if favicon_created:
+                        self.update_status(f"✅ Фавиконка Icons8 пересоздана!")
+                        messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана с Icons8!")
+                
+                # Метод 3: Базовый AI (fallback)
+                if not favicon_created:
+                    self.update_status(f"⚠️ Переключение на базовый AI генератор...")
                     image = image_generator.generate_via_pollinations_clean(prompt)
                     if image:
                         from PIL import Image
@@ -1365,14 +1464,13 @@ class LandingPageGeneratorGUI:
                         
                         # Используем сжатие для AI фавиконки (50кб)
                         if image_generator.save_compressed_image(image, str(filename), target_size_kb=50):
-                            self.update_status(f"✅ AI фавиконка пересоздана с сжатием!")
-                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана через AI (Icons8 недоступен)")
-                        else:
-                            self.update_status(f"❌ Не удалось сохранить {image_name}")
-                            messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
-                    else:
-                        self.update_status(f"❌ Не удалось создать {image_name}")
-                        messagebox.showerror("Ошибка", f"Не удалось создать фавиконку '{image_name}'")
+                            favicon_created = True
+                            self.update_status(f"✅ Базовая AI фавиконка пересоздана!")
+                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (базовый AI)")
+                
+                if not favicon_created:
+                    self.update_status(f"❌ Не удалось создать фавиконку")
+                    messagebox.showerror("Ошибка", f"Не удалось создать фавиконку '{image_name}'")
             else:
                 # Обычная генерация для остальных изображений
                 image = image_generator.generate_via_pollinations_clean(prompt)
@@ -1382,17 +1480,49 @@ class LandingPageGeneratorGUI:
                     
                     # Специальная обработка для AI фавиконки
                     if image_name == "favicon":
-                        from PIL import Image
-                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
-                        image = image_generator.make_favicon_transparent(image)
-                        
-                        # Используем сжатие для AI фавиконки (50кб)
-                        if image_generator.save_compressed_image(image, str(filename), target_size_kb=50):
-                            self.update_status(f"✅ AI фавиконка пересоздана с сжатием!")
-                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' успешно пересоздана!")
-                        else:
-                            self.update_status(f"❌ Не удалось сохранить {image_name}")
-                            messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
+                        # Пытаемся использовать современную обработку
+                        try:
+                            from modern_favicon_gen import ModernFaviconGenerator
+                            modern_gen = ModernFaviconGenerator(silent_mode=True)
+                            
+                            # Применяем современное удаление фона к существующему изображению
+                            processed_image = modern_gen._advanced_background_removal(image, "modern_flat")
+                            if processed_image:
+                                from PIL import Image
+                                processed_image = processed_image.resize((512, 512), Image.Resampling.LANCZOS)
+                                processed_image = modern_gen._optimize_favicon_quality(processed_image, 512)
+                                
+                                if modern_gen._save_optimized_favicon(processed_image, str(filename), target_size_kb=50):
+                                    self.update_status(f"🚀 Современная обработка фавиконки применена!")
+                                    messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана с современным AI!")
+                                else:
+                                    self.update_status(f"❌ Не удалось сохранить {image_name}")
+                                    messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
+                            else:
+                                # Fallback на базовый алгоритм
+                                from PIL import Image
+                                image = image.resize((512, 512), Image.Resampling.LANCZOS)
+                                image = image_generator.make_favicon_transparent(image)
+                                
+                                if image_generator.save_compressed_image(image, str(filename), target_size_kb=50):
+                                    self.update_status(f"✅ Базовая AI фавиконка пересоздана!")
+                                    messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (базовый AI)!")
+                                else:
+                                    self.update_status(f"❌ Не удалось сохранить {image_name}")
+                                    messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
+                        except Exception as e:
+                            self.update_status(f"⚠️ Ошибка современной обработки: {e}")
+                            # Fallback на базовый алгоритм
+                            from PIL import Image
+                            image = image.resize((512, 512), Image.Resampling.LANCZOS)
+                            image = image_generator.make_favicon_transparent(image)
+                            
+                            if image_generator.save_compressed_image(image, str(filename), target_size_kb=50):
+                                self.update_status(f"✅ Базовая AI фавиконка пересоздана!")
+                                messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (базовый AI)!")
+                            else:
+                                self.update_status(f"❌ Не удалось сохранить {image_name}")
+                                messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
                     else:
                         # Для обычных изображений используем сжатие до 150кб
                         if image_generator.save_compressed_image(image, str(filename), target_size_kb=150):
@@ -1450,8 +1580,23 @@ class LandingPageGeneratorGUI:
     def reset_form_after_creation(self):
         """Сбрасывает форму после создания лендинга для возможности создания нового"""
         try:
-            # Очищаем все поля формы
-            self.theme_var.set("")  # Очищаем тематику
+            # Сохраняем данные для автоматического заполнения перегенерации
+            last_theme = self.theme_var.get().strip()
+            last_domain = self.domain_var.get().strip()
+            
+            # Автоматически устанавливаем папку последнего проекта для перегенерации
+            if hasattr(self, 'last_created_project_path') and self.last_created_project_path:
+                self.project_path_var.set(self.last_created_project_path)
+                print(f"🎯 Автоматически выбрана папка проекта для перегенерации: {self.last_created_project_path}")
+                
+                # Оставляем тематику для удобства перегенерации
+                # НЕ очищаем тематику, чтобы пользователь мог сразу перегенерировать
+                print(f"💡 Тематика '{last_theme}' сохранена для возможной перегенерации")
+            else:
+                # Очищаем тематику только если нет сохраненного проекта
+                self.theme_var.set("")
+            
+            # Очищаем остальные поля формы  
             self.domain_var.set("") # Очищаем домен
             self.selected_country.set("")  # Очищаем страну
             self.current_city = ""  # Очищаем город
@@ -1463,17 +1608,21 @@ class LandingPageGeneratorGUI:
             # Очищаем поисковые поля в комбобоксах
             if hasattr(self.country_combo, 'entry'):
                 self.country_combo.entry.delete(0, tk.END)
-            if hasattr(self.theme_combo, 'entry'):
+            # НЕ очищаем theme_combo если тематика сохранена
+            if not last_theme and hasattr(self.theme_combo, 'entry'):
                 self.theme_combo.entry.delete(0, tk.END)
             
             # Очищаем текущий промпт
             self.current_prompt = None
             self.settings_manager.save_prompt("")
             
-            # Обновляем статус
-            self.update_status("✅ Готов к созданию нового лендинга")
+            # Обновляем статус с подсказкой
+            if hasattr(self, 'last_created_project_path') and self.last_created_project_path:
+                self.update_status("✅ Проект создан! Папка автоматически выбрана для перегенерации")
+            else:
+                self.update_status("✅ Готов к созданию нового лендинга")
             
-            print("🔄 Форма полностью сброшена, готова для нового лендинга")
+            print("🔄 Форма сброшена, проект готов для перегенерации изображений")
             
         except Exception as e:
             print(f"Ошибка сброса формы: {e}")

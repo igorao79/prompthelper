@@ -11,60 +11,250 @@ import re
 from urllib.parse import quote
 from pathlib import Path
 
-class IntelligentContextAnalyzer:
-    """Умный анализатор контекста бизнеса с использованием интернета"""
+class IntelligentContextAnalyzer_DEPRECATED_DO_NOT_USE:
+    """УМНЫЙ анализатор любых тематик без интернета"""
     
     def __init__(self, silent_mode=False):
         self.silent_mode = silent_mode
-        self.cache = {}  # Кэш для результатов поиска
         
+        # Словарь переводов ключевых слов
+        self.translations = {
+            # Типы деятельности
+            'продажа': 'sales', 'продаж': 'sales', 'продаем': 'sales',
+            'покупка': 'purchase', 'покупаем': 'purchase',
+            'аренда': 'rental', 'арендуем': 'rental', 'сдаем': 'rental',
+            'производство': 'manufacturing', 'производим': 'manufacturing',
+            'изготовление': 'manufacturing', 'изготавливаем': 'manufacturing',
+            'ремонт': 'repair', 'ремонтируем': 'repair', 'починка': 'repair',
+            'установка': 'installation', 'устанавливаем': 'installation',
+            'монтаж': 'installation', 'монтируем': 'installation',
+            'строительство': 'construction', 'строим': 'construction',
+            'консультация': 'consulting', 'консультируем': 'consulting',
+            'обучение': 'training', 'обучаем': 'training', 'курсы': 'training',
+            'доставка': 'delivery', 'доставляем': 'delivery',
+            'перевозка': 'transportation', 'перевозим': 'transportation',
+            'дизайн': 'design', 'проектирование': 'design',
+            
+            # Предметы и товары
+            'лестниц': 'stairs', 'лестницы': 'stairs', 'лестница': 'stairs',
+            'окн': 'windows', 'окна': 'windows', 'окно': 'windows',
+            'двер': 'doors', 'дверь': 'doors', 'двери': 'doors',
+            'мебел': 'furniture', 'мебель': 'furniture',
+            'автомобил': 'cars', 'машин': 'cars', 'авто': 'cars',
+            'телефон': 'phones', 'смартфон': 'smartphones',
+            'компьютер': 'computers', 'ноутбук': 'laptops',
+            'одежд': 'clothing', 'одежда': 'clothing',
+            'обув': 'shoes', 'обувь': 'shoes',
+            'стройматериал': 'building materials', 'материал': 'materials',
+            'инструмент': 'tools', 'оборудование': 'equipment',
+            'сантехник': 'plumbing', 'сантехника': 'plumbing',
+            'электрик': 'electrical', 'электрика': 'electrical',
+            'кровл': 'roofing', 'крыш': 'roofing', 'кровля': 'roofing',
+            'фундамент': 'foundation', 'подвал': 'basement',
+            'кухн': 'kitchen', 'кухня': 'kitchen', 'кухни': 'kitchen',
+            'ванн': 'bathroom', 'ванная': 'bathroom',
+            'плитк': 'tiles', 'плитка': 'tiles',
+            'обои': 'wallpaper', 'краск': 'paint', 'покраск': 'painting',
+            
+            # Транспорт
+            'грузовик': 'trucks', 'фур': 'trucks', 'фура': 'trucks',
+            'прицеп': 'trailers', 'полуприцеп': 'semi-trailers',
+            'мотоцикл': 'motorcycles', 'скутер': 'scooters',
+            'велосипед': 'bicycles', 'самокат': 'scooters',
+            'лодк': 'boats', 'яхт': 'yachts', 'катер': 'boats',
+            
+            # Еда и напитки  
+            'хлеб': 'bread', 'выпечка': 'bakery', 'торт': 'cakes',
+            'мяс': 'meat', 'колбас': 'sausages',
+            'молок': 'milk', 'сыр': 'cheese', 'творог': 'cottage cheese',
+            'овощ': 'vegetables', 'фрукт': 'fruits',
+            'кофе': 'coffee', 'чай': 'tea', 'напитк': 'beverages',
+            'пиц': 'pizza', 'бургер': 'burgers', 'суш': 'sushi',
+            'ресторан': 'restaurant', 'кафе': 'cafe', 'бар': 'bar',
+            
+            # Услуги
+            'стрижк': 'haircut', 'парикмахер': 'barbershop',
+            'маникюр': 'manicure', 'педикюр': 'pedicure',
+            'массаж': 'massage', 'косметолог': 'cosmetology',
+            'фотограф': 'photography', 'видеосъемк': 'videography',
+            'уборк': 'cleaning', 'клининг': 'cleaning',
+            'стирк': 'laundry', 'химчистк': 'dry cleaning',
+            'охран': 'security', 'сигнализац': 'alarm systems',
+            
+            # Медицина
+            'стоматолог': 'dentistry', 'зубн': 'dental',
+            'терапевт': 'therapy', 'хирург': 'surgery',
+            'педиатр': 'pediatrics', 'гинеколог': 'gynecology',
+            'кардиолог': 'cardiology', 'невролог': 'neurology',
+            'офтальмолог': 'ophthalmology', 'лор': 'ENT',
+            'массажист': 'massage therapist',
+            
+            # Животные
+            'ветеринар': 'veterinary', 'груминг': 'pet grooming',
+            'зоомагазин': 'pet store', 'корм': 'pet food',
+            'собак': 'dogs', 'кошк': 'cats', 'птиц': 'birds',
+            
+            # Образование
+            'школ': 'school', 'университет': 'university',
+            'детский сад': 'kindergarten', 'репетитор': 'tutoring',
+            'языков': 'language courses', 'компьютерн': 'computer courses',
+            
+            # Развлечения
+            'игр': 'games', 'развлечен': 'entertainment',
+            'квест': 'escape room', 'боулинг': 'bowling',
+            'кинотеатр': 'cinema', 'театр': 'theater',
+            'концерт': 'concerts', 'праздник': 'events',
+            
+            # Спорт и фитнес
+            'спортзал': 'gym', 'фитнес': 'fitness',
+            'йог': 'yoga', 'пилатес': 'pilates',
+            'тренер': 'trainer', 'тренировк': 'training',
+            'плаван': 'swimming', 'бокс': 'boxing',
+            'карате': 'karate', 'дзюдо': 'judo',
+            
+            # Красота
+            'салон красоты': 'beauty salon', 'барбершоп': 'barbershop',
+            'косметика': 'cosmetics', 'парфюм': 'perfume',
+            'татуировк': 'tattoo', 'пирсинг': 'piercing',
+            
+            # Недвижимость
+            'квартир': 'apartments', 'дом': 'houses', 'коттедж': 'cottages',
+            'офис': 'offices', 'склад': 'warehouses', 'гараж': 'garages',
+            'участок': 'land plots', 'дач': 'country houses',
+            
+            # Финансы
+            'банк': 'banking', 'кредит': 'loans', 'ипотек': 'mortgage',
+            'страхован': 'insurance', 'инвестиц': 'investments',
+            
+            # Юридические
+            'юрист': 'legal services', 'адвокат': 'lawyer',
+            'нотариус': 'notary', 'регистрац': 'registration',
+            
+            # IT
+            'сайт': 'website', 'приложен': 'mobile app',
+            'програм': 'software', 'дизайн': 'design',
+            'реклам': 'advertising', 'маркетинг': 'marketing',
+        }
+        
+        # Типы бизнес-деятельности
+        self.business_types = {
+            'retail': ['продажа', 'магазин', 'торговля', 'покупка'],
+            'manufacturing': ['производство', 'изготовление', 'завод', 'фабрика'],
+            'service': ['услуги', 'сервис', 'обслуживание', 'помощь'],
+            'repair': ['ремонт', 'починка', 'восстановление', 'замена'],
+            'installation': ['установка', 'монтаж', 'подключение'],
+            'construction': ['строительство', 'стройка', 'возведение'],
+            'consulting': ['консультация', 'совет', 'помощь', 'поддержка'],
+            'training': ['обучение', 'курсы', 'тренинг', 'образование'],
+            'healthcare': ['медицин', 'лечение', 'здоровье', 'терапия'],
+            'beauty': ['красота', 'салон', 'стрижка', 'маникюр'],
+            'food': ['еда', 'питание', 'ресторан', 'кафе', 'готовка'],
+            'transportation': ['перевозка', 'доставка', 'транспорт', 'логистика'],
+        }
+    
     def search_business_context(self, query):
-        """Поиск информации о бизнесе в интернете"""
-        try:
-            if not self.silent_mode:
-                print(f"🔍 Ищу информацию о: {query}")
-            
-            # Проверяем кэш
-            if query in self.cache:
-                if not self.silent_mode:
-                    print("📋 Использую кэшированные данные")
-                return self.cache[query]
-            
-            # Улучшенные поисковые запросы
-            search_queries = [
-                f"{query} услуги бизнес",
-                f"{query} деятельность",
-                f"{query} что это",
-                query  # Оригинальный запрос
-            ]
-            
-            # Пробуем разные запросы
-            best_context = None
-            for search_query in search_queries:
-                context_data = self._multi_source_search(search_query)
+        """Умный анализ любой тематики БЕЗ интернета"""
+        if not self.silent_mode:
+            print(f"🧠 Умный анализ тематики: {query}")
+        
+        # Анализируем ключевые слова
+        analysis = self._analyze_keywords(query)
+        
+        # Определяем тип деятельности
+        business_category = self._determine_business_category(query, analysis)
+        
+        # Создаем контекст
+        context = {
+            'category': 'smart_analysis',
+            'business_type': analysis['main_topic'],
+            'activity_type': analysis['activity_type'],
+            'english_terms': analysis['english_terms'],
+            'business_category': business_category,
+            'confidence': 0.8,
+            'keywords': analysis['english_terms'][:3],
+            'environment': f"professional {analysis['main_topic']} {business_category}"
+        }
+        
+        if not self.silent_mode:
+            print(f"🎯 Тип деятельности: {analysis['activity_type']}")
+            print(f"🏢 Категория: {business_category}")
+            print(f"🔤 Английские термины: {', '.join(analysis['english_terms'][:3])}")
+        
+        return context
+    
+    def _analyze_keywords(self, query):
+        """Анализирует ключевые слова и переводит их"""
+        query_lower = query.lower()
+        
+        # Ищем ключевые слова и переводим
+        found_translations = []
+        activity_type = 'service'  # по умолчанию
+        
+        for ru_word, en_translation in self.translations.items():
+            if ru_word in query_lower:
+                found_translations.append(en_translation)
                 
-                # Берем первый успешный результат
-                if context_data and context_data.get('confidence', 0) > 0.5:
-                    best_context = context_data
-                    break
-            
-            # Если не нашли хорошего результата, используем первый доступный
-            if not best_context:
-                best_context = self._multi_source_search(search_queries[0])
-            
-            # Если все еще нет результата, используем fallback
-            if not best_context:
-                best_context = self._dynamic_fallback_analysis(query)
-            
-            # Сохраняем в кэш
-            self.cache[query] = best_context
-            
-            return best_context
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка поиска: {e}")
-            return self._dynamic_fallback_analysis(query)
+                # Определяем тип деятельности по первому найденному слову
+                if ru_word in ['продажа', 'продаж', 'продаем', 'магазин', 'торговля']:
+                    activity_type = 'sales'
+                elif ru_word in ['производство', 'производим', 'изготовление', 'изготавливаем']:
+                    activity_type = 'manufacturing'
+                elif ru_word in ['ремонт', 'ремонтируем', 'починка']:
+                    activity_type = 'repair'
+                elif ru_word in ['установка', 'устанавливаем', 'монтаж', 'монтируем']:
+                    activity_type = 'installation'
+                elif ru_word in ['строительство', 'строим']:
+                    activity_type = 'construction'
+                elif ru_word in ['консультация', 'консультируем']:
+                    activity_type = 'consulting'
+                elif ru_word in ['обучение', 'обучаем', 'курсы']:
+                    activity_type = 'training'
+                elif ru_word in ['доставка', 'доставляем', 'перевозка', 'перевозим']:
+                    activity_type = 'delivery'
+        
+        # Если не нашли переводов, создаем из исходной темы
+        if not found_translations:
+            # Берем последнее слово как основной предмет
+            words = query_lower.split()
+            if words:
+                main_topic = words[-1]  # последнее слово обычно предмет
+                found_translations = [main_topic]
+            else:
+                found_translations = [query_lower]
+        
+        # Определяем главную тему (обычно последний элемент или предмет)
+        main_topic = found_translations[-1] if found_translations else query_lower
+        
+        return {
+            'activity_type': activity_type,
+            'main_topic': main_topic,
+            'english_terms': found_translations,
+            'original_query': query
+        }
+    
+    def _determine_business_category(self, query, analysis):
+        """Определяет категорию бизнеса"""
+        query_lower = query.lower()
+        
+        # Проверяем по ключевым словам
+        for category, keywords in self.business_types.items():
+            for keyword in keywords:
+                if keyword in query_lower:
+                    return category
+        
+        # По умолчанию возвращаем на основе анализа
+        activity_map = {
+            'sales': 'retail',
+            'manufacturing': 'manufacturing', 
+            'repair': 'service',
+            'installation': 'service',
+            'construction': 'construction',
+            'consulting': 'consulting',
+            'training': 'training',
+            'delivery': 'transportation'
+        }
+        
+        return activity_map.get(analysis['activity_type'], 'service')
     
     def _multi_source_search(self, query):
         """Поиск по нескольким источникам"""
@@ -84,53 +274,76 @@ class IntelligentContextAnalyzer:
         return self._analyze_search_results(sources_data, query)
     
     def _search_duckduckgo(self, query):
-        """Поиск через DuckDuckGo API"""
+        """ИСПРАВЛЕННЫЙ поиск через DuckDuckGo API"""
         try:
+            # Простой запрос без лишних слов
             url = "https://api.duckduckgo.com/"
             params = {
                 'q': query,
                 'format': 'json',
                 'no_html': '1',
-                'skip_disambig': '1'
+                'skip_disambig': '1',
+                'no_redirect': '1'
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, timeout=15)
             
-            # Обрабатываем 200 и 202 статусы
+            # 202 это нормальный статус для DuckDuckGo
             if response.status_code in [200, 202]:
                 data = response.json()
-                
                 results = []
                 
-                # Основной ответ
-                if data.get('Abstract'):
+                # Основной ответ (Abstract)
+                if data.get('Abstract') and len(data.get('Abstract', '')) > 20:
                     results.append({
-                        'title': data.get('Heading', ''),
+                        'title': data.get('Heading', query),
                         'description': data.get('Abstract', ''),
-                        'source': 'DuckDuckGo Abstract'
+                        'source': 'DuckDuckGo Abstract',
+                        'relevance': 'high'
                     })
                 
-                # Связанные темы
-                for topic in data.get('RelatedTopics', [])[:3]:
-                    if isinstance(topic, dict) and topic.get('Text'):
-                        results.append({
-                            'title': topic.get('FirstURL', '').split('/')[-1],
-                            'description': topic.get('Text', ''),
-                            'source': 'DuckDuckGo Related'
-                        })
-                
-                # Определения из Answer
-                if data.get('Answer'):
+                # Быстрые ответы (Answer) - часто самые точные
+                if data.get('Answer') and len(data.get('Answer', '')) > 10:
                     results.append({
-                        'title': 'Definition',
+                        'title': 'Определение',
                         'description': data.get('Answer', ''),
-                        'source': 'DuckDuckGo Answer'
+                        'source': 'DuckDuckGo Answer',
+                        'relevance': 'high'
                     })
                 
-                if not self.silent_mode and results:
-                    print(f"✅ DuckDuckGo найдено {len(results)} результатов")
-                elif not self.silent_mode:
-                    print(f"⚠️ DuckDuckGo не вернул данных (статус {response.status_code})")
+                # Связанные темы - ИСПРАВЛЕННАЯ обработка
+                for topic in data.get('RelatedTopics', [])[:5]:
+                    if isinstance(topic, dict) and topic.get('Text'):
+                        text = topic.get('Text', '')
+                        if len(text) > 30:
+                            # Проверяем релевантность - либо содержит слова из запроса, либо берем первые результаты
+                            query_words = query.lower().split()
+                            is_relevant = any(word in text.lower() for word in query_words if len(word) > 2)
+                            
+                            if is_relevant or len(results) == 0:  # Берем релевантные или первые результаты если нет других
+                                results.append({
+                                    'title': topic.get('FirstURL', '').split('/')[-1].replace('_', ' ') if topic.get('FirstURL') else query,
+                                    'description': text,
+                                    'source': 'DuckDuckGo Related',
+                                    'relevance': 'medium'
+                                })
+                
+                # Результаты поиска (Results) - если нет других данных
+                if not results and data.get('Results'):
+                    for result in data.get('Results', [])[:3]:
+                        if result.get('Text'):
+                            results.append({
+                                'title': result.get('Text', ''),
+                                'description': result.get('Text', ''),
+                                'source': 'DuckDuckGo Results',
+                                'relevance': 'low'
+                            })
+                
+                if not self.silent_mode:
+                    if results:
+                        print(f"✅ DuckDuckGo найдено {len(results)} результатов")
+                    else:
+                        print(f"⚠️ DuckDuckGo: пустой ответ для '{query}'")
                 
                 return results if results else None
                 
@@ -140,68 +353,132 @@ class IntelligentContextAnalyzer:
             return None
     
     def _search_wikipedia(self, query):
-        """Поиск в Wikipedia"""
+        """УЛУЧШЕННЫЙ поиск в Wikipedia с множественными запросами"""
         try:
-            # Сначала ищем статьи по запросу
-            search_url = "https://ru.wikipedia.org/w/api.php"
-            search_params = {
-                'action': 'query',
-                'format': 'json',
-                'list': 'search',
-                'srsearch': query,
-                'srlimit': 3,
-                'srprop': 'snippet'
-            }
+            # Пробуем разные варианты поисковых запросов
+            search_variants = [
+                query,  # Оригинальный запрос
+                f"{query} услуги",  # + услуги 
+                f"{query} деятельность",  # + деятельность
+                f"{query} бизнес",  # + бизнес
+                query.replace('недвижимость', 'недвижимости агентство'),  # Специфичные замены
+                query.replace('авто', 'автомобильный сервис')
+            ]
             
-            search_response = requests.get(search_url, params=search_params, timeout=10)
+            best_result = None
+            best_relevance = 0
             
-            if search_response.status_code == 200:
-                search_data = search_response.json()
-                search_results = search_data.get('query', {}).get('search', [])
-                
-                if search_results:
-                    # Берем первый результат и получаем его содержимое
-                    first_result = search_results[0]
-                    page_title = first_result.get('title', '')
-                    
-                    # Получаем краткое содержание страницы
-                    content_url = "https://ru.wikipedia.org/api/rest_v1/page/summary/" + quote(page_title)
-                    content_response = requests.get(content_url, timeout=10)
-                    
-                    if content_response.status_code == 200:
-                        content_data = content_response.json()
+            for search_query in search_variants:
+                result = self._single_wikipedia_search(search_query, query)
+                if result:
+                    # Проверяем релевантность
+                    relevance = self._calculate_wikipedia_relevance(result['description'], query)
+                    if relevance > best_relevance:
+                        best_relevance = relevance
+                        best_result = result
+                        best_result['relevance_score'] = relevance
                         
-                        if not self.silent_mode:
-                            print(f"✅ Wikipedia найдена статья: {page_title}")
-                        
-                        return {
-                            'title': content_data.get('title', page_title),
-                            'description': content_data.get('extract', first_result.get('snippet', '').replace('<span class="searchmatch">', '').replace('</span>', '')),
-                            'source': 'Wikipedia'
-                        }
-                    else:
-                        # Если не удалось получить содержимое, используем snippet
-                        if not self.silent_mode:
-                            print(f"⚠️ Wikipedia: использую snippet для {page_title}")
-                        
-                        return {
-                            'title': page_title,
-                            'description': first_result.get('snippet', '').replace('<span class="searchmatch">', '').replace('</span>', ''),
-                            'source': 'Wikipedia'
-                        }
-                else:
-                    if not self.silent_mode:
-                        print(f"⚠️ Wikipedia: статьи не найдены для '{query}'")
-                    return None
+                    # Если нашли очень релевантный результат, останавливаемся
+                    if relevance > 0.7:
+                        break
+            
+            if best_result:
+                if not self.silent_mode:
+                    print(f"✅ Wikipedia лучший результат: {best_result['title']} (релевантность: {best_relevance:.2f})")
+                return best_result
             else:
                 if not self.silent_mode:
-                    print(f"⚠️ Wikipedia поиск ошибка: {search_response.status_code}")
+                    print(f"⚠️ Wikipedia: релевантные статьи не найдены для '{query}'")
                 return None
                 
         except Exception as e:
             if not self.silent_mode:
                 print(f"⚠️ Ошибка Wikipedia: {e}")
             return None
+            
+    def _single_wikipedia_search(self, search_query, original_query):
+        """Выполняет одиночный поиск в Wikipedia"""
+        try:
+            search_url = "https://ru.wikipedia.org/w/api.php"
+            search_params = {
+                'action': 'query',
+                'format': 'json',
+                'list': 'search',
+                'srsearch': search_query,
+                'srlimit': 5,  # Увеличили лимит
+                'srprop': 'snippet|titlesnippet'
+            }
+            
+            search_response = requests.get(search_url, params=search_params, timeout=12)
+            
+            if search_response.status_code == 200:
+                search_data = search_response.json()
+                search_results = search_data.get('query', {}).get('search', [])
+                
+                # Ищем наиболее релевантный результат среди первых 5
+                for result in search_results:
+                    page_title = result.get('title', '')
+                    snippet = result.get('snippet', '').replace('<span class="searchmatch">', '').replace('</span>', '')
+                    
+                    # Быстрая проверка релевантности по заголовку и snippet
+                    title_relevance = self._calculate_wikipedia_relevance(page_title, original_query)
+                    snippet_relevance = self._calculate_wikipedia_relevance(snippet, original_query)
+                    
+                    if title_relevance > 0.3 or snippet_relevance > 0.2:
+                        # Получаем полное содержание
+                        content_url = "https://ru.wikipedia.org/api/rest_v1/page/summary/" + quote(page_title)
+                        try:
+                            content_response = requests.get(content_url, timeout=8)
+                            if content_response.status_code == 200:
+                                content_data = content_response.json()
+                                return {
+                                    'title': content_data.get('title', page_title),
+                                    'description': content_data.get('extract', snippet),
+                                    'source': 'Wikipedia'
+                                }
+                        except:
+                            pass
+                        
+                        # Fallback на snippet
+                        return {
+                            'title': page_title,
+                            'description': snippet,
+                            'source': 'Wikipedia'
+                        }
+                
+                    return None
+            else:
+                return None
+                
+        except Exception:
+            return None
+    
+    def _calculate_wikipedia_relevance(self, text, query):
+        """Вычисляет релевантность текста к запросу"""
+        if not text or not query:
+            return 0
+        
+        text_lower = text.lower()
+        query_words = query.lower().split()
+        
+        # Подсчитываем совпадения слов
+        matches = sum(1 for word in query_words if word in text_lower)
+        
+        # Бонусы за специфичные совпадения
+        bonus = 0
+        if query.lower() in text_lower:
+            bonus += 0.3
+        
+        # Штрафы за нерелевантные слова
+        penalty = 0
+        irrelevant_words = ['статья', 'категория', 'шаблон', 'файл', 'обсуждение']
+        if any(word in text_lower for word in irrelevant_words):
+            penalty = 0.2
+        
+        base_score = matches / max(len(query_words), 1)
+        final_score = min(1.0, base_score + bonus - penalty)
+        
+        return final_score
     
     def _analyze_search_results(self, sources_data, original_query):
         """Анализ результатов поиска для определения контекста"""
@@ -237,7 +514,7 @@ class IntelligentContextAnalyzer:
         return context
     
     def _check_content_relevance(self, found_text, original_query):
-        """Проверяет релевантность найденного контента к исходному запросу"""
+        """Проверяет релевантность найденного контента к исходному запросу БЕЗ хардкода"""
         found_text_lower = found_text.lower()
         query_words = original_query.lower().split()
         
@@ -249,80 +526,43 @@ class IntelligentContextAnalyzer:
             if len(word) > 2 and word in found_text_lower:
                 found_words += 1
         
-        # Базовая релевантность по словам
+        # Базовая релевантность по словам - ТОЛЬКО ЭТО, никаких хардкодированных тематик
         word_relevance = found_words / max(total_query_words, 1) if total_query_words > 0 else 0
         
-        # Дополнительная проверка на тематические маркеры
-        theme_markers = {
-            'кулинар': ['кулинар', 'повар', 'готовк', 'еда', 'блюд', 'рецепт', 'кухн'],
-            'авто': ['авто', 'машин', 'транспорт', 'двигател', 'ремонт', 'диагностика'],
-            'стоматолог': ['стоматолог', 'зуб', 'стоматология', 'медицин', 'врач'],
-            'детск': ['детск', 'дети', 'ребен', 'воспитан', 'игр'],
-            'фото': ['фото', 'съемк', 'камер', 'изображен'],
-            'курс': ['курс', 'обучен', 'учеб', 'образован', 'школ']
-        }
+        # Дополнительный бонус за точное совпадение запроса
+        exact_match_bonus = 0
+        if original_query.lower() in found_text_lower:
+            exact_match_bonus = 0.3
         
-        theme_bonus = 0
-        for key_word in query_words:
-            if key_word in theme_markers:
-                theme_words = theme_markers[key_word]
-                theme_matches = sum(1 for theme_word in theme_words if theme_word in found_text_lower)
-                if theme_matches > 0:
-                    theme_bonus += 0.2
-        
-        final_relevance = min(word_relevance + theme_bonus, 1.0)
+        final_relevance = min(word_relevance + exact_match_bonus, 1.0)
         return final_relevance
     
     def _dynamic_context_extraction(self, text, query):
-        """Динамическое извлечение контекста из текста без фиксированных категорий"""
+        """Динамическое извлечение контекста из текста БЕЗ предварительных категорий"""
         text_lower = text.lower()
         query_lower = query.lower()
         combined_text = f"{text_lower} {query_lower}".strip()
         
-        # Анализируем ключевые слова для определения типа деятельности
-        activity_indicators = {
-            'education': ['курсы', 'обучение', 'школа', 'учеба', 'преподавание', 'изучение', 'образование', 'учитель', 'ученик'],
-            'service': ['услуги', 'сервис', 'обслуживание', 'консультация', 'помощь', 'ремонт', 'мастер', 'починка'],
-            'medical': ['медицин', 'здоровье', 'лечение', 'диагностика', 'клиника', 'врач', 'стоматолог', 'зубы', 'больн'],
-            'automotive': ['авто', 'машин', 'автомобил', 'транспорт', 'автосервис', 'двигател'],
-            'food': ['кулинар', 'еда', 'готовк', 'повар', 'ресторан', 'кафе', 'питание', 'блюд', 'кухн'],
-            'beauty': ['красота', 'салон', 'косметол', 'парикмахер', 'маникюр', 'стрижк', 'прическ'],
-            'fitness': ['фитнес', 'спорт', 'тренировк', 'тренер', 'спортзал', 'физкультур'],
-            'tech': ['технолог', 'компьютер', 'программир', 'сайт', 'веб', 'it', 'софт'],
-            'art': ['искусств', 'творчеств', 'художеств', 'дизайн', 'рисован', 'картин'],
-            'music': ['музык', 'инструмент', 'песн', 'концерт', 'пиани', 'гитар'],
-            'photography': ['фото', 'съемк', 'камер', 'фотограф'],
-            'construction': ['строител', 'стройк', 'отделк', 'монтаж'],
-            'childcare': ['детск', 'сад', 'дети', 'ребенок', 'воспитан', 'игровая'],
-            'appliance_repair': ['холодильник', 'стиральн', 'техник', 'бытовая', 'электроприбор']
-        }
+        # Извлекаем ключевые слова ТОЛЬКО из найденного текста
+        meaningful_words = self._extract_dynamic_details(combined_text, query_lower)
         
-        # Определяем основной тип деятельности
-        activity_scores = {}
-        for activity, keywords in activity_indicators.items():
-            score = sum(1 for keyword in keywords if keyword in combined_text)
-            if score > 0:
-                activity_scores[activity] = score
-        
-        main_activity = max(activity_scores.keys(), key=lambda k: activity_scores[k]) if activity_scores else 'general'
-        
-        # Извлекаем конкретные детали из текста
-        details = self._extract_dynamic_details(combined_text, query_lower)
+        # Определяем основной тип деятельности ТОЛЬКО из текста
+        main_activity = meaningful_words[0] if meaningful_words else query_lower.split()[0]
         
         # Определяем среду на основе контекста
-        environment = self._determine_dynamic_environment(main_activity, details, query_lower)
+        environment = self._determine_dynamic_environment(main_activity, meaningful_words, query_lower)
         
         # Определяем специфичность темы
-        specificity = self._calculate_specificity(query_lower, details)
+        specificity = self._calculate_specificity(query_lower, meaningful_words)
         
         return {
-            'category': 'dynamic_business',  # Единая категория
+            'category': 'internet_search_based',  # Единая категория
             'business_type': main_activity,
-            'confidence': min(0.3 + specificity * 0.4, 0.9),
-            'details': details[:5],
+            'confidence': min(0.4 + specificity * 0.3, 0.8),
+            'details': meaningful_words[:5],
             'keywords': self._extract_smart_keywords(combined_text, query_lower),
             'environment': environment,
-            'theme_description': self._generate_theme_description(main_activity, details, query_lower)
+            'theme_description': self._generate_theme_description(main_activity, meaningful_words, query_lower)
         }
     
     def _extract_dynamic_details(self, text, query):
@@ -349,40 +589,18 @@ class IntelligentContextAnalyzer:
         return sorted(word_scores.keys(), key=lambda w: word_scores[w], reverse=True)[:5]
     
     def _determine_dynamic_environment(self, activity, details, query):
-        """Динамически определяет среду на основе анализа"""
-        # Базовые среды для типов деятельности
-        base_environments = {
-            'education': 'educational facility',
-            'service': 'service center',
-            'medical': 'medical facility', 
-            'automotive': 'automotive facility',
-            'food': 'culinary environment',
-            'beauty': 'beauty salon',
-            'fitness': 'fitness facility',
-            'tech': 'modern office',
-            'art': 'creative studio',
-            'music': 'music studio',
-            'photography': 'photography studio',
-            'construction': 'construction site',
-            'childcare': 'kindergarten classroom',
-            'appliance_repair': 'technical service workshop'
-        }
+        """Динамически определяет среду ТОЛЬКО на основе найденных данных"""
+        # Создаем среду на основе ключевых слов из интернет поиска
+        environment_words = []
         
-        base_env = base_environments.get(activity, 'professional office')
+        # Добавляем найденные ключевые слова
+        environment_words.extend([activity] + details[:2])
         
-        # Уточняем среду на основе деталей
-        if 'кулинар' in query and 'курс' in query:
-            return 'professional culinary school kitchen'
-        elif 'фото' in query and ('курс' in query or 'обучен' in query):
-            return 'photography studio with professional equipment'
-        elif 'музык' in query and 'курс' in query:
-            return 'music studio with instruments'
-        elif 'автосервис' in query or 'ремонт авто' in query:
-            return 'automotive service garage'
-        elif 'автосалон' in query:
-            return 'car dealership showroom'
-        
-        return base_env
+        # Создаем описание среды из реальных найденных данных
+        if len(environment_words) >= 2:
+            return f"professional {environment_words[0]} {environment_words[1]} workplace"
+        else:
+            return f"professional {activity} workplace"
     
     def _calculate_specificity(self, query, details):
         """Вычисляет специфичность темы"""
@@ -427,690 +645,29 @@ class IntelligentContextAnalyzer:
             return main_detail
     
     def _dynamic_fallback_analysis(self, query):
-        """Динамический fallback анализ без интернета"""
+        """Динамический fallback анализ - ТОЛЬКО на основе ключевых слов из запроса"""
         query_lower = query.lower()
         
         if not self.silent_mode:
-            print(f"💪 Локальный анализ (точное определение)")
+            print(f"💪 Локальный анализ (чистый поиск по ключевым словам)")
         
-        # Улучшенный анализ на основе запроса пользователя
-        details = self._extract_fallback_details(query_lower)
-        
-        # ТОЧНОЕ определение тематики и среды
-        activity, environment = self._precise_theme_detection(query_lower)
-        
-        # Генерируем качественное описание темы
-        theme_description = self._generate_precise_description(query_lower, activity)
-        
-        return {
-            'category': 'dynamic_business',
-            'business_type': activity,
-            'confidence': 0.8,  # Высокая уверенность для точного локального анализа
-            'details': details,
-            'keywords': query.split()[:5],
-            'environment': environment,
-            'theme_description': theme_description
-        }
-    
-    def _precise_theme_detection(self, query_lower):
-        """Точное определение тематики и среды"""
-        
-        # Специфические комбинации с высоким приоритетом
-        if 'кулинар' in query_lower and 'курс' in query_lower:
-            return 'food', 'professional culinary school kitchen'
-        elif 'фото' in query_lower and 'курс' in query_lower:
-            return 'photography', 'photography studio classroom'
-        elif 'музык' in query_lower and 'курс' in query_lower:
-            return 'music', 'music education studio'
-        elif 'диагностика' in query_lower and 'авто' in query_lower:
-            return 'automotive', 'automotive diagnostic center'
-        elif 'ремонт' in query_lower and 'авто' in query_lower:
-            return 'automotive', 'automotive repair workshop'
-        elif 'детск' in query_lower and 'сад' in query_lower:
-            return 'childcare', 'bright kindergarten classroom'
-        elif 'стоматолог' in query_lower or 'стоматология' in query_lower:
-            return 'medical', 'modern dental clinic'
-        elif 'ремонт' in query_lower and 'холодильник' in query_lower:
-            return 'appliance_repair', 'appliance repair workshop'
-        
-        # Основные категории
-        elif any(word in query_lower for word in ['кулинар', 'повар', 'готовк', 'кухн']):
-            return 'food', 'professional kitchen'
-        elif any(word in query_lower for word in ['фото', 'съемк', 'камер']):
-            return 'photography', 'photography studio'
-        elif any(word in query_lower for word in ['музык', 'инструмент']):
-            return 'music', 'music studio'
-        elif any(word in query_lower for word in ['авто', 'автосервис', 'машин']):
-            return 'automotive', 'automotive service center'
-        elif any(word in query_lower for word in ['стоматолог', 'зубы']):
-            return 'medical', 'dental office'
-        elif any(word in query_lower for word in ['детск', 'дети', 'ребен']):
-            return 'childcare', 'children activity center'
-        elif any(word in query_lower for word in ['курс', 'обучен', 'школа', 'учеб']):
-            return 'education', 'modern classroom'
-        elif any(word in query_lower for word in ['ремонт', 'мастер', 'починка']):
-            return 'service', 'professional service workshop'
-        elif any(word in query_lower for word in ['красота', 'салон', 'парикмахер']):
-            return 'beauty', 'modern beauty salon'
-        elif any(word in query_lower for word in ['фитнес', 'спорт', 'тренер']):
-            return 'fitness', 'modern fitness center'
-        else:
-            return 'service', 'professional business office'
-    
-    def _generate_precise_description(self, query_lower, activity):
-        """Генерирует точное описание темы"""
-        
-        # Извлекаем ключевые слова
+        # Извлекаем ключевые слова без предварительной категоризации
         words = query_lower.split()
-        main_words = [w for w in words if len(w) > 3][:2]
+        meaningful_words = [w for w in words if len(w) > 2][:5]
         
-        if main_words:
-            return ' '.join(main_words)
-        else:
-            # Базовые описания по типу деятельности
-            descriptions = {
-                'food': 'кулинарные услуги',
-                'photography': 'фотографические услуги', 
-                'music': 'музыкальные занятия',
-                'automotive': 'автомобильные услуги',
-                'medical': 'медицинские услуги',
-                'childcare': 'детские услуги',
-                'education': 'образовательные услуги',
-                'service': 'профессиональные услуги',
-                'beauty': 'косметические услуги',
-                'fitness': 'фитнес услуги'
-            }
-            return descriptions.get(activity, 'бизнес услуги')
-    
-    def _extract_fallback_details(self, query):
-        """Извлекает детали из запроса для fallback анализа"""
-        import re
+        # Базовый анализ ТОЛЬКО на основе пользовательского ввода
+        main_keyword = meaningful_words[0] if meaningful_words else query_lower.split()[0]
         
-        # Простое извлечение значимых слов
-        words = re.findall(r'\b[а-яё]{3,}\b', query)
-        
-        # Фильтруем служебные слова
-        stop_words = {
-            'услуги', 'сервис', 'компания', 'организация', 'предприятие', 
-            'деятельность', 'работа', 'бизнес', 'центр', 'группа', 'описание'
-        }
-        
-        meaningful_words = [w for w in words if w not in stop_words]
-        
-        # Возвращаем наиболее длинные слова
-        return sorted(meaningful_words, key=len, reverse=True)[:3]
-
-class ThematicImageGenerator:
-    def __init__(self, silent_mode=False):
-        """
-        Умный генератор тематических изображений для лендингов
-        
-        Args:
-            silent_mode (bool): Если True, не выводит сообщения в консоль
-        """
-        self.silent_mode = silent_mode
-        self.context_analyzer = IntelligentContextAnalyzer(silent_mode)
-        
-        if not self.silent_mode:
-            print("🎨 AI Генератор Тематических Изображений для Лендингов")
-            print("=" * 60)
-            print("✨ Умная генерация изображений с динамическим анализом через интернет")
-
-    def detect_theme_from_input(self, user_input):
-        """Определяет тематику с помощью интернет-поиска"""
-        context_data = self.context_analyzer.search_business_context(user_input)
-        return context_data['business_type'], context_data
-
-    def generate_intelligent_prompts(self, context_data, original_input):
-        """Динамическая генерация промптов на основе интернет-анализа"""
-        
-        business_type = context_data.get('business_type', 'general')
-        environment = context_data['environment']
-        details = context_data['details']
-        keywords = context_data['keywords']
-        theme_description = context_data.get('theme_description', original_input)
-        
-        # Динамическая генерация промптов на основе типа деятельности и среды
-        return self._generate_dynamic_prompts(business_type, environment, details, keywords, theme_description, original_input)
-    
-    def _generate_dynamic_prompts(self, business_type, environment, details, keywords, theme_description, original_input):
-        """Генерирует промпты динамически на основе анализа"""
-        
-        # Используем правильные термины для промптов
-        clean_theme = theme_description if theme_description else original_input
-        
-        # СПЕЦИАЛЬНЫЕ промпты для конкретных тематик
-        if 'кулинар' in original_input.lower() and 'курс' in original_input.lower():
-            return self._generate_culinary_course_prompts()
-        elif 'фото' in original_input.lower() and 'курс' in original_input.lower():
-            return self._generate_photography_course_prompts()
-        elif 'диагностика' in original_input.lower() and 'авто' in original_input.lower():
-            return self._generate_auto_diagnostic_prompts()
-        elif 'стоматолог' in original_input.lower() or 'стоматология' in original_input.lower():
-            return self._generate_dental_prompts()
-        elif 'детск' in original_input.lower() and 'сад' in original_input.lower():
-            return self._generate_kindergarten_prompts()
-        
-        # ОБЩИЕ промпты для остальных тематик
-        return self._generate_general_business_prompts(business_type, environment, clean_theme)
-    
-    def _generate_culinary_course_prompts(self):
-        """Специальные промпты для кулинарных курсов"""
         return {
-            "main": "professional culinary school kitchen, chef instructor teaching cooking techniques, students learning culinary arts",
-            "about1": "professional chef demonstrating cooking techniques, culinary education in action, hands-on cooking instruction",
-            "about2": "modern culinary school kitchen equipment, professional cooking tools and appliances, culinary training facility",
-            "about3": "culinary consultation and course planning, chef discussing recipes with students, cooking class planning",
-            "review1": "satisfied student after completing cooking course, successful culinary education experience, happy cook",
-            "review2": "professional culinary instructor, expert cooking teacher, satisfied cooking course graduate",
-            "review3": "group of happy cooking course graduates, successful culinary education stories, cooking skills achievement",
-            "favicon": "chef hat icon, culinary education symbol, cooking course logo, professional culinary design"
-        }
-    
-    def _generate_photography_course_prompts(self):
-        """Специальные промпты для фотокурсов"""
-        return {
-            "main": "photography studio classroom, professional photographer teaching camera techniques, students learning photography",
-            "about1": "photography instructor demonstrating camera settings, hands-on photography education, professional photo training",
-            "about2": "professional photography studio equipment, cameras and lighting setup, photography education facility",
-            "about3": "photography consultation and course planning, instructor discussing techniques with students, photo class planning",
-            "review1": "satisfied student after photography course completion, successful photo education experience, happy photographer",
-            "review2": "professional photography instructor, expert photo teacher, satisfied photography course graduate",
-            "review3": "group of happy photography graduates, successful photo education stories, photography skills achievement",
-            "favicon": "camera icon, photography education symbol, photo course logo, professional photography design"
-        }
-    
-    def _generate_auto_diagnostic_prompts(self):
-        """Специальные промпты для автодиагностики"""
-        return {
-            "main": "professional automotive diagnostic center, mechanic using diagnostic equipment, car engine analysis",
-            "about1": "automotive technician performing car diagnostics, professional vehicle inspection, expert mechanic at work",
-            "about2": "modern automotive diagnostic equipment, professional car diagnostic tools, auto service facility",
-            "about3": "automotive consultation and diagnosis explanation, mechanic discussing car issues with client, vehicle service planning",
-            "review1": "satisfied customer after car diagnostic service, successful vehicle repair experience, happy car owner",
-            "review2": "professional automotive diagnostic specialist, expert car mechanic, satisfied auto service client",
-            "review3": "group of satisfied auto service customers, successful car repair stories, automotive service satisfaction",
-            "favicon": "car diagnostic icon, automotive service symbol, vehicle inspection logo, professional auto design"
-        }
-    
-    def _generate_dental_prompts(self):
-        """Специальные промпты для стоматологии"""
-        return {
-            "main": "modern dental clinic, professional dentist examining patient, clean dental office environment",
-            "about1": "dentist performing dental examination, professional dental care, expert dentist at work",
-            "about2": "modern dental equipment and tools, professional dental office setup, dental clinic facility",
-            "about3": "dental consultation and treatment planning, dentist discussing treatment with patient, dental care planning",
-            "review1": "satisfied patient after dental treatment, successful dental care experience, happy smile",
-            "review2": "professional dentist, expert dental specialist, satisfied dental patient",
-            "review3": "group of satisfied dental patients, successful dental treatment stories, dental care satisfaction",
-            "favicon": "tooth icon, dental care symbol, dentist logo, professional dental design"
-        }
-    
-    def _generate_kindergarten_prompts(self):
-        """Специальные промпты для детского сада"""
-        return {
-            "main": "bright kindergarten classroom, children playing and learning, professional childcare environment",
-            "about1": "kindergarten teacher with children, educational play activities, professional childcare in action",
-            "about2": "colorful kindergarten classroom with toys and learning materials, children's educational environment",
-            "about3": "parent consultation at kindergarten, discussing child development with teachers, childcare planning",
-            "review1": "happy child enjoying kindergarten activities, successful early education experience, joyful learning",
-            "review2": "satisfied parent and happy child, professional kindergarten teacher, quality childcare service",
-            "review3": "group of happy children and parents, successful kindergarten stories, quality early education",
-            "favicon": "children icon, kindergarten symbol, childcare logo, professional early education design"
-        }
-    
-    def _generate_general_business_prompts(self, business_type, environment, theme):
-        """Общие промпты для любого бизнеса"""
-        return {
-            "main": f"{environment}, professional {business_type} service, expert specialist at work",
-            "about1": f"professional {business_type} specialist providing service, expert working with client, quality service delivery",
-            "about2": f"{environment} with professional equipment, {business_type} workspace setup, service facility",
-            "about3": f"{theme} consultation area, client meeting with specialist, professional service planning",
-            "review1": f"satisfied customer after {business_type} service, successful {theme} experience, happy client",
-            "review2": f"professional {business_type} specialist, expert service provider, satisfied customer testimonial",
-            "review3": f"group of happy customers, successful {theme} stories, positive service reviews",
-            "favicon": f"{business_type} icon, professional service symbol, business logo design"
+            'category': 'internet_search_based',
+            'business_type': main_keyword,
+            'confidence': 0.6,  # Средняя уверенность - лучше искать в интернете
+            'details': meaningful_words,
+            'keywords': meaningful_words,
+            'environment': f"professional {main_keyword} workplace",
+            'theme_description': f"услуги {main_keyword}"
         }
 
-    def get_theme_prompts(self, theme_input):
-        """Получает промпты с использованием интернет-анализа"""
-        detected_theme, context_data = self.detect_theme_from_input(theme_input)
-        
-        if not self.silent_mode:
-            print(f"🎯 Определена категория: {detected_theme}")
-            print(f"📊 Уверенность: {context_data['confidence']:.2f}")
-            print(f"🔍 Детали: {', '.join(context_data['details'])}")
-            print(f"🏢 Среда: {context_data['environment']}")
-        
-        prompts = self.generate_intelligent_prompts(context_data, theme_input)
-        return prompts, detected_theme
-
-    def add_randomization(self, prompt):
-        """Добавляет случайные элементы к промпту для уникальности"""
-        
-        # Случайные стили и характеристики
-        styles = [
-            "natural lighting", "soft lighting", "bright ambient", "professional lighting"
-        ]
-        
-        # Случайные ракурсы
-        angles = [
-            "wide angle shot", "medium shot", "close-up view", "establishing shot", 
-            "straight on", "professional angle"
-        ]
-        
-        # Случайные детали интерьера/экстерьера
-        details = [
-            "modern furniture", "elegant decor", "contemporary design", "minimalist style",
-            "professional setup", "clean lines", "stylish arrangement"
-        ]
-        
-        # Добавляем случайные элементы (убрали цветовые схемы)
-        selected_style = random.choice(styles)
-        selected_angle = random.choice(angles)
-        selected_detail = random.choice(details)
-        
-        # Генерируем уникальный seed для дополнительной рандомизации
-        unique_seed = str(uuid.uuid4())[:8]
-        
-        enhanced_prompt = f"{prompt}, {selected_style}, {selected_angle}, {selected_detail}, seed:{unique_seed}"
-        
-        return enhanced_prompt
-
-    def add_favicon_randomization(self, prompt):
-        """Добавляет специальную рандомизацию для фавиконок"""
-        
-        # Стили иконок
-        icon_styles = [
-            "minimalist icon", "modern flat icon", "geometric icon", "abstract icon",
-            "stylized icon", "contemporary icon", "sleek icon", "professional icon"
-        ]
-        
-        # Варианты дизайна
-        design_variants = [
-            "circular design", "square design", "rounded square", "hexagonal shape",
-            "shield shape", "badge style", "emblem style", "logo mark"
-        ]
-        
-        # Визуальные эффекты для иконок
-        visual_effects = [
-            "subtle gradient", "solid colors", "duo-tone", "monochrome",
-            "outlined style", "filled style", "negative space", "geometric patterns"
-        ]
-        
-        # Композиционные варианты
-        compositions = [
-            "centered composition", "balanced layout", "symmetrical design", "dynamic arrangement",
-            "focused element", "simplified form", "clean structure", "bold design"
-        ]
-        
-        # Выбираем случайные элементы
-        selected_style = random.choice(icon_styles)
-        selected_design = random.choice(design_variants)
-        selected_effect = random.choice(visual_effects)
-        selected_composition = random.choice(compositions)
-        
-        # Генерируем уникальный seed
-        unique_seed = str(uuid.uuid4())[:8]
-        
-        enhanced_prompt = f"{prompt}, {selected_style}, {selected_design}, {selected_effect}, {selected_composition}, seed:{unique_seed}"
-        
-        return enhanced_prompt
-
-class ImageGenerator:
-    def __init__(self, silent_mode=False, use_icons8_for_favicons=True):
-        """
-        Простой и надежный генератор изображений без вотермарков
-        
-        Args:
-            silent_mode (bool): Если True, не выводит сообщения в консоль
-            use_icons8_for_favicons (bool): Использовать Icons8 для фавиконок
-        """
-        self.silent_mode = silent_mode
-        self.use_icons8_for_favicons = use_icons8_for_favicons
-        
-        # Инициализируем Icons8 Manager если нужно
-        self.icons8_manager = None
-        if self.use_icons8_for_favicons:
-            try:
-                from icons8_api import Icons8Manager
-                self.icons8_manager = Icons8Manager(silent_mode=True)
-                if not silent_mode:
-                    print("🎯 Icons8 Manager подключен для фавиконок")
-            except ImportError:
-                if not silent_mode:
-                    print("⚠️ Icons8 API недоступен, используется AI генерация")
-                self.use_icons8_for_favicons = False
-        
-        if not silent_mode:
-            print("🎨 AI Генератор Изображений")
-            print("=" * 50)
-            print("✨ Высококачественные изображения без вотермарков")
-            if self.use_icons8_for_favicons:
-                print("🎯 Icons8 интегрирован для фавиконок")
-        
-    def remove_watermark(self, image):
-        """Удаляет вотермарк снизу изображения"""
-        try:
-            width, height = image.size
-            
-            # Обрезаем нижние 30 пикселей где обычно вотермарк
-            cropped_height = height - 30
-            cropped_image = image.crop((0, 0, width, cropped_height))
-            
-            # Растягиваем обратно до оригинального размера
-            final_image = cropped_image.resize((width, height), Image.Resampling.LANCZOS)
-            
-            return final_image
-        except:
-            return image
-    
-    def make_favicon_transparent(self, image):
-        """Делает фавиконку прозрачной с использованием продвинутого алгоритма"""
-        try:
-            # Пытаемся использовать продвинутый процессор
-            try:
-                from favicon_processor import AdvancedFaviconProcessor
-                processor = AdvancedFaviconProcessor(silent_mode=True)
-                
-                # Сохраняем временно
-                import tempfile
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
-                    image.save(temp_file.name)
-                    
-                    # Обрабатываем
-                    processed = processor._advanced_background_removal(image)
-                    if processed:
-                        if not self.silent_mode:
-                            print("🎨 Применен продвинутый алгоритм удаления фона")
-                        return processed
-                    
-            except ImportError:
-                if not self.silent_mode:
-                    print("⚠️ Продвинутый процессор недоступен, используется базовый алгоритм")
-            
-            # Базовый алгоритм (улучшенный)
-            return self._basic_background_removal(image)
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка при создании прозрачности: {e}")
-            return image
-    
-    def _basic_background_removal(self, image):
-        """Базовый улучшенный алгоритм удаления фона"""
-        try:
-            # Конвертируем в RGBA если нужно
-            if image.mode != 'RGBA':
-                image = image.convert('RGBA')
-            
-            # Получаем данные пикселей
-            data = image.getdata()
-            width, height = image.size
-            
-            # Анализируем края изображения более тщательно
-            edge_pixels = []
-            
-            # Собираем больше пикселей с краев
-            edge_sample_size = max(5, min(width, height) // 20)
-            
-            # Верхний и нижний края
-            for x in range(0, width, max(1, width//edge_sample_size)):
-                edge_pixels.append(image.getpixel((x, 0)))
-                edge_pixels.append(image.getpixel((x, height-1)))
-            
-            # Левый и правый края  
-            for y in range(0, height, max(1, height//edge_sample_size)):
-                edge_pixels.append(image.getpixel((0, y)))
-                edge_pixels.append(image.getpixel((width-1, y)))
-            
-            # Определяем наиболее вероятный цвет фона
-            bg_color = self._find_background_color(edge_pixels)
-            
-            if not bg_color:
-                if not self.silent_mode:
-                    print("🎨 Фон не обнаружен, прозрачность не применена")
-                return image
-            
-            # Создаем новые данные с прозрачным фоном
-            new_data = []
-            pixels_made_transparent = 0
-            
-            for item in data:
-                if self._is_background_pixel_improved(item, bg_color):
-                    new_data.append((255, 255, 255, 0))  # Прозрачный
-                    pixels_made_transparent += 1
-                else:
-                    new_data.append(item)  # Оставляем как есть
-            
-            # Проверяем разумность удаления
-            total_pixels = len(data)
-            transparency_ratio = pixels_made_transparent / total_pixels
-            
-            if transparency_ratio > 0.8:  # Повысили лимит
-                if not self.silent_mode:
-                    print(f"🚫 Слишком много пикселей для удаления ({transparency_ratio:.1%}), прозрачность не применена")
-                return image
-            
-            # Применяем новые данные
-            image.putdata(new_data)
-            
-            if not self.silent_mode:
-                print(f"🎨 Удален фон RGB{bg_color}, прозрачных пикселей: {transparency_ratio:.1%}")
-            
-            return image
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка базового удаления фона: {e}")
-            return image
-    
-    def _find_background_color(self, pixels):
-        """Находит цвет фона из пикселей краев"""
-        # Фильтруем только светлые пиксели
-        light_pixels = []
-        for pixel in pixels:
-            if len(pixel) >= 3:
-                r, g, b = pixel[0], pixel[1], pixel[2]
-                # Расширили диапазон для лучшего определения
-                if r > 220 and g > 220 and b > 220:
-                    light_pixels.append((r, g, b))
-        
-        if not light_pixels:
-            return None
-        
-        # Группируем похожие цвета
-        color_groups = {}
-        for color in light_pixels:
-            # Округляем до групп по 15
-            group_key = (
-                (color[0] // 15) * 15,
-                (color[1] // 15) * 15,
-                (color[2] // 15) * 15
-            )
-            color_groups[group_key] = color_groups.get(group_key, 0) + 1
-        
-        if not color_groups:
-            return None
-        
-        # Возвращаем самую частую группу
-        return max(color_groups.keys(), key=lambda k: color_groups[k])
-    
-    def _is_background_pixel_improved(self, pixel, bg_color, tolerance=30):
-        """Улучшенная проверка фонового пикселя"""
-        if len(pixel) < 3 or not bg_color:
-            return False
-        
-        r, g, b = pixel[0], pixel[1], pixel[2]
-        bg_r, bg_g, bg_b = bg_color[0], bg_color[1], bg_color[2]
-        
-        # Проверяем близость цветов
-        distance = ((r - bg_r) ** 2 + (g - bg_g) ** 2 + (b - bg_b) ** 2) ** 0.5
-        
-        # Дополнительная проверка на светлость
-        is_light = r > 210 and g > 210 and b > 210
-        
-        return distance <= tolerance and is_light
-        
-    def translate_prompt(self, russian_prompt: str):
-        """Простой перевод промпта на английский"""
-        translations = {
-            "кот": "cat", "котенок": "kitten", "котеночек": "cute kitten",
-            "собака": "dog", "щенок": "puppy", "песик": "dog",
-            "закат": "sunset", "горы": "mountains", "лес": "forest",
-            "море": "ocean", "пляж": "beach", "дом": "house", 
-            "город": "city", "автомобиль": "car", "машина": "car",
-            "цветы": "flowers", "роза": "rose", "тюльпан": "tulip",
-            "девушка": "woman", "женщина": "woman", "девочка": "girl",
-            "мужчина": "man", "парень": "young man", "мальчик": "boy",
-            "ребенок": "child", "дети": "children",
-            "красивый": "beautiful", "красивая": "beautiful",
-            "реалистичный": "realistic", "фотореалистичный": "photorealistic",
-            "портрет": "portrait", "пейзаж": "landscape",
-            "природа": "nature", "весна": "spring", "лето": "summer",
-            "осень": "autumn", "зима": "winter",
-            "дождь": "rain", "снег": "snow", "солнце": "sun",
-            "небо": "sky", "облака": "clouds", "звезды": "stars",
-            "еда": "food", "торт": "cake", "пицца": "pizza"
-        }
-        
-        english_prompt = russian_prompt.lower()
-        for ru, en in translations.items():
-            english_prompt = english_prompt.replace(ru, en)
-        
-        return english_prompt
-    
-    def generate_via_pollinations_clean(self, prompt):
-        """Генерация через Pollinations AI с удалением вотермарка"""
-        try:
-            enhanced_prompt = f"{prompt}, high quality, detailed, masterpiece, 8k, professional photography"
-            
-            base_url = "https://image.pollinations.ai/prompt/"
-            
-            import urllib.parse
-            encoded_prompt = urllib.parse.quote(enhanced_prompt)
-            
-            params = "?width=1024&height=1024&model=flux&enhance=true&nologo=true"
-            
-            image_url = base_url + encoded_prompt + params
-            
-            if not self.silent_mode:
-                print(f"📝 Промпт: {enhanced_prompt}")
-                print("⏳ Генерация изображения без вотермарка...")
-            
-            response = requests.get(image_url, timeout=120)
-            
-            if response.status_code == 200:
-                image = Image.open(BytesIO(response.content))
-                
-                # Удаляем вотермарк если есть
-                clean_image = self.remove_watermark(image)
-                
-                return clean_image
-            else:
-                if not self.silent_mode:
-                    print(f"❌ Ошибка: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"❌ Ошибка: {e}")
-            return None
-
-    def compress_image(self, image, target_size_kb=150, quality=85):
-        """
-        Сжимает изображение до указанного размера в килобайтах
-        
-        Args:
-            image: PIL Image объект
-            target_size_kb: Целевой размер в килобайтах (по умолчанию 150кб)
-            quality: Качество JPEG (по умолчанию 85)
-        
-        Returns:
-            PIL Image: Сжатое изображение
-        """
-        try:
-            # Сохраняем исходные размеры
-            original_width, original_height = image.size
-            
-            # Если изображение слишком большое, уменьшаем его
-            max_dimension = 1200  # Максимальный размер стороны
-            if original_width > max_dimension or original_height > max_dimension:
-                # Вычисляем новые размеры с сохранением пропорций
-                if original_width > original_height:
-                    new_width = max_dimension
-                    new_height = int((original_height * max_dimension) / original_width)
-                else:
-                    new_height = max_dimension
-                    new_width = int((original_width * max_dimension) / original_height)
-                
-                image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                
-                if not self.silent_mode:
-                    print(f"🔄 Размер изменен с {original_width}x{original_height} на {new_width}x{new_height}")
-            
-            # Определяем формат для сжатия
-            has_transparency = False
-            if image.mode in ('RGBA', 'LA') or 'transparency' in image.info:
-                has_transparency = True
-            
-            # Сжатие для изображений с прозрачностью (PNG)
-            if has_transparency:
-                return self._compress_png(image, target_size_kb)
-            else:
-                # Сжатие для обычных изображений (JPEG)
-                return self._compress_jpeg(image, target_size_kb, quality)
-                
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка сжатия: {e}")
-            return image
-    
-    def _compress_jpeg(self, image, target_size_kb, initial_quality=85):
-        """Сжимает изображение в JPEG формате"""
-        try:
-            # Конвертируем в RGB если нужно
-            if image.mode in ('RGBA', 'LA'):
-                # Создаем белый фон
-                background = Image.new('RGB', image.size, (255, 255, 255))
-                if image.mode == 'RGBA':
-                    background.paste(image, mask=image.split()[-1])
-                else:
-                    background.paste(image, mask=image.split()[-1])
-                image = background
-            elif image.mode != 'RGB':
-                image = image.convert('RGB')
-            
-            # Пробуем разные уровни качества
-            for quality in range(initial_quality, 20, -5):
-                # Сохраняем в память
-                import io
-                buffer = io.BytesIO()
-                image.save(buffer, format='JPEG', quality=quality, optimize=True)
-                size_kb = len(buffer.getvalue()) / 1024
-                
-                if size_kb <= target_size_kb:
-                    if not self.silent_mode:
-                        print(f"📦 Сжато до {size_kb:.1f}кб (качество: {quality})")
-                    
-                    # Возвращаем изображение из буфера
-                    buffer.seek(0)
-                    return Image.open(buffer)
-                    
-            # Если не удалось достичь целевого размера, возвращаем с минимальным качеством
-            if not self.silent_mode:
-                print(f"⚠️ Не удалось достичь {target_size_kb}кб, сжато с качеством 25")
-            
-            buffer = io.BytesIO()
-            image.save(buffer, format='JPEG', quality=25, optimize=True)
-            buffer.seek(0)
-            return Image.open(buffer)
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка JPEG сжатия: {e}")
-            return image
-    
     def _compress_png(self, image, target_size_kb):
         """Сжимает PNG изображение с сохранением прозрачности"""
         try:
@@ -1163,254 +720,857 @@ class ImageGenerator:
             if not self.silent_mode:
                 print(f"⚠️ Ошибка PNG сжатия: {e}")
             return image
-    
-    def save_compressed_image(self, image, filepath, target_size_kb=150):
-        """
-        Сжимает и сохраняет изображение
-        
-        Args:
-            image: PIL Image объект
-            filepath: Путь для сохранения
-            target_size_kb: Целевой размер в килобайтах
-        """
-        try:
-            # Сжимаем изображение
-            compressed_image = self.compress_image(image, target_size_kb)
-            
-            # Определяем формат по расширению файла
-            file_path = Path(filepath)
-            extension = file_path.suffix.lower()
-            
-            # Определяем лучший формат для сжатия
-            has_transparency = False
-            if compressed_image.mode in ('RGBA', 'LA') or 'transparency' in compressed_image.info:
-                has_transparency = True
-            
-            # Сохраняем в соответствующем формате
-            if extension == '.png' and has_transparency:
-                # PNG с прозрачностью
-                compressed_image.save(filepath, format='PNG', optimize=True)
-            elif extension == '.png' and not has_transparency:
-                # PNG без прозрачности - конвертируем в JPEG для лучшего сжатия
-                jpeg_path = str(file_path).replace('.png', '.jpg')
-                if compressed_image.mode in ('RGBA', 'LA'):
-                    background = Image.new('RGB', compressed_image.size, (255, 255, 255))
-                    if compressed_image.mode == 'RGBA':
-                        background.paste(compressed_image, mask=compressed_image.split()[-1])
-                    compressed_image = background
-                elif compressed_image.mode != 'RGB':
-                    compressed_image = compressed_image.convert('RGB')
-                
-                compressed_image.save(jpeg_path, format='JPEG', quality=85, optimize=True)
-                # Переименовываем обратно в PNG для совместимости
-                os.rename(jpeg_path, filepath)
-            elif extension in ['.jpg', '.jpeg']:
-                # JPEG формат
-                if compressed_image.mode in ('RGBA', 'LA'):
-                    background = Image.new('RGB', compressed_image.size, (255, 255, 255))
-                    if compressed_image.mode == 'RGBA':
-                        background.paste(compressed_image, mask=compressed_image.split()[-1])
-                    compressed_image = background
-                elif compressed_image.mode != 'RGB':
-                    compressed_image = compressed_image.convert('RGB')
-                
-                compressed_image.save(filepath, format='JPEG', quality=85, optimize=True)
-            else:
-                # По умолчанию используем наиболее подходящий формат
-                if has_transparency:
-                    compressed_image.save(filepath, format='PNG', optimize=True)
-                else:
-                    # Сохраняем как JPEG для лучшего сжатия
-                    if compressed_image.mode in ('RGBA', 'LA'):
-                        background = Image.new('RGB', compressed_image.size, (255, 255, 255))
-                        if compressed_image.mode == 'RGBA':
-                            background.paste(compressed_image, mask=compressed_image.split()[-1])
-                        compressed_image = background
-                    elif compressed_image.mode != 'RGB':
-                        compressed_image = compressed_image.convert('RGB')
-                    
-                    jpeg_path = str(file_path).replace(extension, '.jpg')
-                    compressed_image.save(jpeg_path, format='JPEG', quality=85, optimize=True)
-                    os.rename(jpeg_path, filepath)
-            
-            # Проверяем итоговый размер
-            final_size_kb = Path(filepath).stat().st_size / 1024
-            if not self.silent_mode:
-                print(f"💾 Сохранено: {filepath} ({final_size_kb:.1f}кб)")
-            
-            return True
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"❌ Ошибка сохранения: {e}")
-            return False
 
+# ===== НЕДОСТАЮЩИЕ КЛАССЫ ДЛЯ СОВМЕСТИМОСТИ =====
+
+class ImageGenerator:
+    """Класс для генерации полного набора тематических изображений"""
+    
+    def __init__(self, silent_mode=False, use_icons8_for_favicons=True):
+        self.silent_mode = silent_mode
+        self.use_icons8_for_favicons = use_icons8_for_favicons
+        # Старый анализатор больше не используется - используем SmartPromptGenerator
+        
+        # Импорты для генерации
+        try:
+            from icons8_api import Icons8API
+            self.icons8_api = Icons8API()
+            self.icons8_manager = self.icons8_api  # Алиас для совместимости с GUI
+        except ImportError:
+            self.icons8_api = None
+            self.icons8_manager = None
+            if not silent_mode:
+                print("⚠️ Icons8 API недоступен")
+        
+        # Импорты для генерации
+        try:
+            from modern_favicon_gen import ModernFaviconGenerator
+            self.favicon_generator = ModernFaviconGenerator()
+        except ImportError:
+            self.favicon_generator = None
+            if not silent_mode:
+                print("⚠️ ModernFaviconGenerator недоступен")
+    
     def generate_thematic_set(self, theme_input, media_dir, method="1", progress_callback=None):
         """
-        Генерирует полный набор из 8 тематических изображений
+        Генерирует полный набор тематических изображений
         
         Args:
-            theme_input (str): Тематика бизнеса
+            theme_input (str): Тематика 
             media_dir (str): Путь к папке media
-            method (str): Метод генерации (1, 2, 3)
-            progress_callback (callable): Функция обратного вызова для обновления прогресса
+            method (str): Метод генерации
+            progress_callback (callable): Функция обратного вызова
             
         Returns:
-            dict: Результаты генерации {имя_файла: путь_к_файлу или None}
+            dict: Словарь с результатами генерации
         """
-        thematic_gen = ThematicImageGenerator(silent_mode=self.silent_mode)
-        prompts, detected_theme = thematic_gen.get_theme_prompts(theme_input)
-        
-        # Создаем папку media если её нет
-        os.makedirs(media_dir, exist_ok=True)
-        
         if not self.silent_mode:
-            print(f"\n🎨 Начинаю генерацию 8 изображений для тематики: {detected_theme}")
-            print("=" * 60)
+            print(f"🎨 Генерация тематических изображений для: {theme_input}")
         
-        if progress_callback:
-            progress_callback(f"🎨 Генерация изображений для тематики: {detected_theme}")
+        # Получаем умные промпты напрямую (БЕЗ старого анализатора)
+        prompts, theme_data = self._generate_prompts(theme_input)
         
-        image_names = ["main", "about1", "about2", "about3", "review1", "review2", "review3", "favicon"]
         results = {}
+        image_names = ['main', 'about1', 'about2', 'about3', 'review1', 'review2', 'review3', 'favicon']
         
-        for i, image_name in enumerate(image_names, 1):
-            if not self.silent_mode:
-                print(f"\n🖼️  Генерация {i}/8: {image_name}")
-                print("-" * 40)
-            
+        for i, image_name in enumerate(image_names):
             if progress_callback:
-                progress_callback(f"🖼️  Генерация {i}/8: {image_name}")
+                progress_callback(f"🎨 Генерация {image_name} ({i+1}/8)...")
             
-            prompt = prompts[image_name]
-            
-            # Добавляем рандомизацию для уникальности
-            if image_name == "favicon":
-                # Специальная рандомизация для фавиконок
-                prompt = thematic_gen.add_favicon_randomization(prompt)
-                prompt += ", TRANSPARENT BACKGROUND, icon design, vector style, flat design, simple logo, no background, white cutout, isolated on transparent, PNG with alpha channel, clear background, cutout style, logo without background"
-            else:
-                # Обычная рандомизация для остальных изображений
-                prompt = thematic_gen.add_randomization(prompt)
-            
-            # Специальная обработка для фавиконки
-            if image_name == "favicon" and self.use_icons8_for_favicons and self.icons8_manager:
-                # Используем Icons8 для фавиконки
-                filename = os.path.join(media_dir, f"{image_name}.png")
-                favicon_success = self.icons8_manager.create_favicon_from_theme(theme_input, filename, 512)
+            try:
+                if image_name == 'favicon' and self.use_icons8_for_favicons and self.icons8_api:
+                    # Генерируем фавикон через Icons8
+                    result = self._generate_favicon_via_icons8(theme_input, media_dir, theme_data)
+                else:
+                    # Генерируем обычное изображение
+                    result = self._generate_image_via_pollinations(
+                        prompts.get(image_name, theme_input), 
+                        image_name, 
+                        media_dir
+                    )
                 
-                if favicon_success:
-                    results[image_name] = filename
-                    if not self.silent_mode:
-                        print(f"✅ Фавиконка Icons8 сохранена: {filename}")
-                else:
-                    if not self.silent_mode:
-                        print("⚠️ Icons8 не сработал, переключаюсь на AI генерацию")
-                    # Fallback на AI генерацию
-                    image = self.generate_via_pollinations_clean(prompt)
-                    if image:
-                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
-                        image = self.make_favicon_transparent(image)
-                        
-                        # Используем сжатие для AI фавиконки (целевой размер 50кб)
-                        filename = os.path.join(media_dir, f"{image_name}.png")
-                        if self.save_compressed_image(image, filename, target_size_kb=50):
-                            results[image_name] = filename
-                            if not self.silent_mode:
-                                print(f"✅ AI фавиконка сохранена: {filename}")
-                        else:
-                            results[image_name] = None
-                    else:
-                        results[image_name] = None
-            else:
-                # Обычная генерация для остальных изображений
-                image = self.generate_via_pollinations_clean(prompt)
+                results[image_name] = result
                 
-                if image:
-                    filename = os.path.join(media_dir, f"{image_name}.png")
+                if not self.silent_mode:
+                    status = "✅" if result else "❌"
+                    print(f"{status} {image_name}: {'Успешно' if result else 'Ошибка'}")
                     
-                    # Для AI фавиконки делаем размер 512x512 и убираем фон
-                    if image_name == "favicon":
-                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
-                        image = self.make_favicon_transparent(image)
-                        
-                        # Используем сжатие для AI фавиконки (целевой размер 50кб)
-                        if self.save_compressed_image(image, filename, target_size_kb=50):
-                            results[image_name] = filename
-                            if not self.silent_mode:
-                                print(f"✅ AI фавиконка сохранена с сжатием: {filename}")
-                        else:
-                            results[image_name] = None
-                    else:
-                        # Для обычных изображений используем сжатие до 150кб
-                        if self.save_compressed_image(image, filename, target_size_kb=150):
-                            results[image_name] = filename
-                            if not self.silent_mode:
-                                print(f"✅ Сохранено с сжатием: {filename}")
-                        else:
-                            results[image_name] = None
-                    
-                    # Небольшая задержка между запросами (не нужна для Icons8)
-                    if image_name != "favicon" or not self.use_icons8_for_favicons:
-                        time.sleep(2)
-                else:
-                    if not self.silent_mode:
-                        print(f"❌ Не удалось создать {image_name}")
-                    results[image_name] = None
-        
-        # Показываем результаты
-        if not self.silent_mode:
-            print(f"\n🎉 ГЕНЕРАЦИЯ ЗАВЕРШЕНА!")
-            print("=" * 60)
-            print(f"📁 Папка: {media_dir}")
-            print(f"🎯 Тематика: {detected_theme}")
-            print("\n📋 Созданные файлы:")
-            
-            for name, filename in results.items():
-                if filename:
-                    print(f"  ✅ {name}: {filename}")
-                else:
-                    print(f"  ❌ {name}: НЕ СОЗДАН")
-        
-        if progress_callback:
-            successful_count = len([f for f in results.values() if f is not None])
-            progress_callback(f"✅ Создано {successful_count}/8 изображений")
+            except Exception as e:
+                if not self.silent_mode:
+                    print(f"❌ Ошибка генерации {image_name}: {e}")
+                results[image_name] = None
         
         return results
-
-def main():
-    """Основная функция для запуска как отдельной программы"""
-    generator = ImageGenerator()
     
-    print("\n🌟 Динамический AI-генератор изображений для любых тематик!")
-    print("=" * 60)
-    print("🧠 Интеллектуальный анализ через интернет")
-    print("🎨 Автоматическая адаптация под любую тематику")
-    print()
-    
-    while True:
-        theme_input = input("Введите тематику бизнеса (или 'выход'): ").strip()
-        
-        if theme_input.lower() in ['выход', 'exit', 'quit']:
-            print("👋 До свидания!")
-            break
-            
-        if not theme_input:
-            continue
-        
+    def _generate_favicon_via_icons8(self, theme, media_dir, theme_data):
+        """Генерирует фавикон через Icons8"""
         try:
-            # Генерируем набор
-            results = generator.generate_thematic_set(theme_input, "media", "1")
+            # Используем данные темы для улучшения поиска иконки
+            business_type = theme_data.get('business_type', theme)
+            icon_path = self.icons8_api.download_icon(
+                business_type,
+                str(media_dir),
+                'favicon'
+            )
+            return icon_path
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"⚠️ Icons8 ошибка, используем Pollinations: {e}")
+            # Fallback на Pollinations
+            return self._generate_image_via_pollinations(theme, 'favicon', media_dir)
+    
+    def _generate_image_via_pollinations(self, prompt, image_name, media_dir):
+        """Генерирует изображение через современный API с разнообразием"""
+        try:
+            # Используем новый современный API генератор
+            from modern_image_api import ModernImageAPI
+            modern_api = ModernImageAPI(silent_mode=self.silent_mode)
             
-            print(f"\n💡 Теперь вы можете использовать созданные изображения в своем лендинге!")
-            print("   Просто скопируйте папку 'media' в ваш проект.")
+            # Определяем размер
+            size = '512x512' if image_name == 'favicon' else '1024x768'
             
-            continue_choice = input("\nСоздать изображения для другой тематики? (y/n): ").strip().lower()
-            if continue_choice in ['n', 'no', 'нет']:
-                break
+            # Генерируем с разнообразием
+            result = modern_api.generate_image(
+                prompt=prompt,
+                image_name=image_name,
+                output_dir=media_dir,
+                size=size
+            )
+            
+            return result
+            
+        except ImportError:
+            # Fallback на старый метод если новый API недоступен
+            if not self.silent_mode:
+                print("⚠️ Современный API недоступен, используется базовый")
+            return self._generate_image_fallback(prompt, image_name, media_dir)
+        
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ Ошибка современного API: {e}")
+            return self._generate_image_fallback(prompt, image_name, media_dir)
+
+    def _generate_image_fallback(self, prompt, image_name, media_dir):
+        """Fallback метод генерации изображений"""
+        try:
+            import requests
+            from pathlib import Path
+            from PIL import Image
+            
+            # API Pollinations
+            api_url = "https://image.pollinations.ai/prompt/"
+            full_prompt = f"{prompt}, high quality, professional"
+            
+            # Параметры для разных типов изображений
+            if image_name == 'favicon':
+                params = "?width=512&height=512&model=flux"
+                target_size_kb = 50  # Фавиконы до 50кб
+                output_path = Path(media_dir) / f"{image_name}.png"  # PNG для прозрачности
+            else:
+                params = "?width=1024&height=768&model=flux"
+                target_size_kb = 150  # Остальные изображения до 150кб
+                output_path = Path(media_dir) / f"{image_name}.jpg"  # JPEG для лучшего сжатия
+            
+            url = f"{api_url}{full_prompt}{params}"
+            
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                # Загружаем в PIL Image для обработки
+                import io
+                image = Image.open(io.BytesIO(response.content))
+                
+                # Обрезаем водяной знак
+                cropped_image = self._remove_pollinations_watermark_from_image(image)
+                
+                # Сжимаем и сохраняем с автоматическим контролем размера
+                if self.save_compressed_image(cropped_image, str(output_path), target_size_kb=target_size_kb):
+                    if not self.silent_mode:
+                        final_size_kb = output_path.stat().st_size / 1024
+                        print(f"🎨 {image_name}: Создано и сжато до {final_size_kb:.1f}кб")
+                    return str(output_path)
+                else:
+                    if not self.silent_mode:
+                        print(f"❌ Не удалось сохранить {image_name}")
+            
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ Fallback ошибка: {e}")
+        
+        return None
+
+    def generate_via_pollinations_clean(self, prompt):
+        """Генерирует изображение через Pollinations и возвращает PIL Image объект"""
+        try:
+            import requests
+            from PIL import Image
+            import io
+            
+            # API Pollinations
+            api_url = "https://image.pollinations.ai/prompt/"
+            full_prompt = f"{prompt}, high quality, professional"
+            params = "?width=1024&height=768&model=flux"
+            
+            url = f"{api_url}{full_prompt}{params}"
+            
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                # Загружаем в PIL Image
+                image = Image.open(io.BytesIO(response.content))
+                
+                # Применяем обрезку водяного знака
+                cropped_image = self._remove_pollinations_watermark_from_image(image)
+                
+                if not self.silent_mode:
+                    print(f"🎨 Изображение сгенерировано и обрезано")
+                
+                return cropped_image
+            
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ Ошибка генерации: {e}")
+        
+        return None
+
+    def make_favicon_transparent(self, image):
+        """Делает фон фавикона прозрачным"""
+        try:
+            from PIL import Image
+            
+            # Конвертируем в RGBA если нужно
+            if image.mode != 'RGBA':
+                image = image.convert('RGBA')
+            
+            # Простой алгоритм удаления белого фона
+            data = image.getdata()
+            new_data = []
+            
+            for item in data:
+                # Если пиксель белый или близкий к белому - делаем прозрачным
+                if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                    new_data.append((255, 255, 255, 0))  # прозрачный
+                else:
+                    new_data.append(item)
+            
+            image.putdata(new_data)
+            
+            if not self.silent_mode:
+                print("🔍 Фон фавикона сделан прозрачным")
+            
+            return image
+            
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"⚠️ Ошибка создания прозрачности: {e}")
+            return image
+
+    def save_compressed_image(self, image, filepath, target_size_kb=150):
+        """УЛУЧШЕННОЕ сжатие изображений с сохранением качества"""
+        try:
+            from PIL import Image
+            import io
+            
+            # Определяем формат по расширению файла
+            if filepath.lower().endswith('.png'):
+                format_type = 'PNG'
+            else:
+                format_type = 'JPEG'
+            
+            # Для PNG - более деликатное сжатие с сохранением качества
+            if format_type == 'PNG':
+                # Проверяем исходный размер
+                buffer = io.BytesIO()
+                image.save(buffer, format='PNG', optimize=True)
+                size_kb = len(buffer.getvalue()) / 1024
+                
+                if size_kb <= target_size_kb:
+                    # Если размер уже подходит - сохраняем без изменений
+                    with open(filepath, 'wb') as f:
+                        f.write(buffer.getvalue())
+                    
+                    if not self.silent_mode:
+                        print(f"📦 PNG сохранен {size_kb:.1f}кб (без сжатия)")
+                    return True
+                
+                # Стратегия 1: Легкое ресайз с сохранением качества (только если сильно превышает)
+                if size_kb > target_size_kb * 1.5:  # Только если превышает в 1.5 раза
+                    for scale in [0.95, 0.9, 0.85, 0.8]:  # Более мягкий ресайз
+                        new_width = int(image.width * scale)
+                        new_height = int(image.height * scale)
+                        
+                        # Высококачественный ресайз
+                        resized = image.resize((new_width, new_height), Image.LANCZOS)
+                        
+                        buffer = io.BytesIO()
+                        resized.save(buffer, format='PNG', optimize=True)
+                        size_kb = len(buffer.getvalue()) / 1024
+                        
+                        if size_kb <= target_size_kb:
+                            with open(filepath, 'wb') as f:
+                                f.write(buffer.getvalue())
+                            
+                            if not self.silent_mode:
+                                print(f"📦 PNG сжат до {size_kb:.1f}кб (легкий ресайз {scale:.2f}x)")
+                            return True
+                
+                # Стратегия 2: Деликатная квантизация с большим количеством цветов
+                if image.mode == 'RGBA':
+                    # Для прозрачных изображений - больше цветов
+                    quantized = image.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+                    quantized = quantized.convert('RGBA')
+                else:
+                    # Для обычных изображений - тоже больше цветов
+                    quantized = image.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+                
+                buffer = io.BytesIO()
+                quantized.save(buffer, format='PNG', optimize=True)
+                size_kb = len(buffer.getvalue()) / 1024
+                
+                if size_kb <= target_size_kb:
+                    with open(filepath, 'wb') as f:
+                        f.write(buffer.getvalue())
+                    
+                    if not self.silent_mode:
+                        print(f"📦 PNG сжат до {size_kb:.1f}кб (деликатная квантизация 256 цветов)")
+                    return True
+                
+                # Стратегия 3: Комбинированная - легкий ресайз + квантизация
+                for scale in [0.9, 0.85, 0.8]:
+                    new_width = int(image.width * scale)
+                    new_height = int(image.height * scale)
+                    resized = image.resize((new_width, new_height), Image.LANCZOS)
+                    
+                    if resized.mode == 'RGBA':
+                        final_image = resized.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+                        final_image = final_image.convert('RGBA')
+                    else:
+                        final_image = resized.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+                    
+                    buffer = io.BytesIO()
+                    final_image.save(buffer, format='PNG', optimize=True)
+                    size_kb = len(buffer.getvalue()) / 1024
+                    
+                    if size_kb <= target_size_kb:
+                        with open(filepath, 'wb') as f:
+                            f.write(buffer.getvalue())
+                        
+                        if not self.silent_mode:
+                            print(f"📦 PNG сжат до {size_kb:.1f}кб (ресайз {scale:.2f}x + 256 цветов)")
+                        return True
+                
+                # Крайний случай - сохраняем как есть, но предупреждаем
+                buffer = io.BytesIO()
+                image.save(buffer, format='PNG', optimize=True)
+                size_kb = len(buffer.getvalue()) / 1024
+                
+                with open(filepath, 'wb') as f:
+                    f.write(buffer.getvalue())
+                
+                if not self.silent_mode:
+                    print(f"⚠️ PNG сохранен {size_kb:.1f}кб (превышает лимит, но качество сохранено)")
+                return True
+            
+            else:
+                # Для JPEG - более качественное сжатие
+                # Конвертируем в RGB если нужно (JPEG не поддерживает прозрачность)
+                if image.mode in ('RGBA', 'LA'):
+                    # Создаем белый фон
+                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                    if image.mode == 'RGBA':
+                        rgb_image.paste(image, mask=image.split()[-1])
+                    else:
+                        rgb_image.paste(image)
+                    image = rgb_image
+                elif image.mode not in ('RGB', 'L'):
+                    image = image.convert('RGB')
+                
+                # Пробуем более высокие уровни качества для JPEG
+                for quality in [95, 90, 85, 80, 75, 70, 65, 60]:  # Начинаем с высокого качества
+                    buffer = io.BytesIO()
+                    image.save(buffer, format='JPEG', quality=quality, optimize=True)
+                    size_kb = len(buffer.getvalue()) / 1024
+                    
+                    if size_kb <= target_size_kb:
+                        with open(filepath, 'wb') as f:
+                            f.write(buffer.getvalue())
+                        
+                        if not self.silent_mode:
+                            print(f"📦 JPEG сжат до {size_kb:.1f}кб (качество {quality}%)")
+                        return True
+                
+                # Если все еще не помещается - легкий ресайз с хорошим качеством
+                for scale in [0.95, 0.9, 0.85]:
+                    new_width = int(image.width * scale)
+                    new_height = int(image.height * scale)
+                    resized = image.resize((new_width, new_height), Image.LANCZOS)
+                    
+                    for quality in [85, 80, 75, 70]:  # Сохраняем хорошее качество
+                        buffer = io.BytesIO()
+                        resized.save(buffer, format='JPEG', quality=quality, optimize=True)
+                        size_kb = len(buffer.getvalue()) / 1024
+                        
+                        if size_kb <= target_size_kb:
+                            with open(filepath, 'wb') as f:
+                                f.write(buffer.getvalue())
+                            
+                            if not self.silent_mode:
+                                print(f"📦 JPEG сжат до {size_kb:.1f}кб (ресайз {scale:.2f}x, качество {quality}%)")
+                            return True
+                
+                # Последняя попытка с минимально приемлемым качеством
+                buffer = io.BytesIO()
+                image.save(buffer, format='JPEG', quality=65, optimize=True)
+                size_kb = len(buffer.getvalue()) / 1024
+                
+                with open(filepath, 'wb') as f:
+                    f.write(buffer.getvalue())
+                
+                if not self.silent_mode:
+                    if size_kb <= target_size_kb:
+                        print(f"📦 JPEG сжат до {size_kb:.1f}кб (качество 65%)")
+                    else:
+                        print(f"⚠️ JPEG сохранен {size_kb:.1f}кб (превышает лимит, но качество сохранено)")
+                return True
                 
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            if not self.silent_mode:
+                print(f"❌ Ошибка сжатия: {e}")
+            return False
 
-if __name__ == "__main__":
-    main() 
+    def _remove_pollinations_watermark_from_image(self, image):
+        """Удаляет водяной знак с PIL Image объекта"""
+        try:
+            width, height = image.size
+            
+            # Определяем область обрезки
+            if width >= 1024 and height >= 768:
+                crop_box = (0, 0, width - 80, height - 60)
+            elif width >= 512 and height >= 512:
+                crop_box = (0, 0, width - 50, height - 40)
+            else:
+                crop_box = (0, 0, width - 30, height - 25)
+            
+            # Обрезаем изображение
+            cropped_img = image.crop(crop_box)
+            
+            if not self.silent_mode:
+                new_width, new_height = cropped_img.size
+                print(f"✂️ Обрезано с {width}x{height} до {new_width}x{new_height}")
+            
+            return cropped_img
+            
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"⚠️ Ошибка обрезки: {e}")
+            return image
+
+    def _generate_prompts(self, theme_input):
+        """УМНАЯ генерация промптов для ЛЮБЫХ тематик"""
+        # Импортируем умный генератор
+        try:
+            from smart_prompt_generator import SmartPromptGenerator
+            smart_gen = SmartPromptGenerator()
+            prompts, analysis = smart_gen.generate_prompts(theme_input, silent_mode=self.silent_mode)
+            
+            theme_data = {
+                'business_type': analysis['main_product'],
+                'activity_type': analysis['activity_type'],
+                'analysis': analysis
+            }
+            
+            return prompts, theme_data
+            
+        except ImportError:
+            # Фоллбэк на старую систему, если умный генератор недоступен
+            if not self.silent_mode:
+                print("⚠️ Умный генератор недоступен, используется базовая система")
+            return self._generate_fallback_prompts(theme_input)
+    
+    def _generate_fallback_prompts(self, theme_input):
+        """Простая фоллбэк система для генерации промптов"""
+        business_type = theme_input.lower()
+        
+        prompts = {
+            'main': f"professional {business_type} business exterior, modern commercial building",
+            'about1': f"{business_type} interior, professional workspace, modern facilities",
+            'about2': f"professional working with {business_type}, quality service delivery",
+            'about3': f"excellent {business_type} results, professional quality work",
+            'review1': f"satisfied {business_type} customer, happy client experience",
+            'review2': f"{business_type} consultation, professional service meeting",
+            'review3': f"professional {business_type} team, experienced staff",
+            'favicon': f"{business_type} icon, business symbol, professional logo"
+        }
+        
+        theme_data = {
+            'business_type': business_type,
+            'activity_type': 'service'
+        }
+        
+        return prompts, theme_data
+
+    def _generate_auto_prompts(self, business_type):
+        """Специализированные промпты для автобизнеса"""
+        prompts = {}
+        
+        main_variants = [
+            f"modern car dealership exterior, glass showroom windows, luxury cars displayed",
+            f"professional auto service garage, clean workshop, modern equipment",
+            f"car showroom interior, shiny new vehicles, professional lighting",
+            f"auto repair shop front view, service bay doors, professional signage"
+        ]
+        prompts['main'] = self._select_random_variant(main_variants)
+        
+        about1_variants = [
+            f"car showroom interior, luxury vehicles on display, modern dealership design",
+            f"auto service workshop, mechanic tools, clean organized garage",
+            f"car repair bay, hydraulic lifts, professional automotive equipment",
+            f"vehicle inspection area, diagnostic equipment, modern auto service"
+        ]
+        prompts['about1'] = self._select_random_variant(about1_variants)
+        
+        about2_variants = [
+            f"professional mechanic working on car engine, automotive repair process",
+            f"car salesman showing vehicle features to customers, professional consultation",
+            f"automotive technician using diagnostic equipment, precision work",
+            f"expert mechanic servicing car, professional automotive maintenance"
+        ]
+        prompts['about2'] = self._select_random_variant(about2_variants)
+        
+        about3_variants = [
+            f"perfectly serviced car, high quality automotive repair results",
+            f"luxury car in showroom, premium vehicle sales offering",
+            f"satisfied customer receiving car keys, successful automotive service",
+            f"restored vehicle, professional auto body work, excellent results"
+        ]
+        prompts['about3'] = self._select_random_variant(about3_variants)
+        
+        review1_variants = [
+            f"happy customer receiving car keys, satisfied smile, successful car purchase",
+            f"pleased client with serviced vehicle, automotive satisfaction, thumbs up",
+            f"delighted car owner, professional automotive service experience"
+        ]
+        prompts['review1'] = self._select_random_variant(review1_variants)
+        
+        review2_variants = [
+            f"car consultation meeting, salesman explaining vehicle features",
+            f"automotive service advisor discussing repair options with customer",
+            f"professional car buying consultation, expert automotive guidance"
+        ]
+        prompts['review2'] = self._select_random_variant(review2_variants)
+        
+        review3_variants = [
+            f"professional automotive team, skilled mechanics, excellent car service",
+            f"car dealership staff, experienced automotive professionals, quality service",
+            f"auto service team, qualified technicians, professional uniforms"
+        ]
+        prompts['review3'] = self._select_random_variant(review3_variants)
+        
+        prompts['favicon'] = "car icon, automotive symbol, simple vehicle logo design"
+        
+        return prompts
+    
+    def _generate_medical_prompts(self, business_type):
+        """Специализированные промпты для медицины"""
+        prompts = {}
+        
+        main_variants = [
+            f"modern dental clinic exterior, medical center building, professional healthcare",
+            f"medical office entrance, clean professional healthcare facility",
+            f"dental practice front view, modern medical building design"
+        ]
+        prompts['main'] = self._select_random_variant(main_variants)
+        
+        about1_variants = [
+            f"dental office interior, modern dental chair, professional medical equipment",
+            f"medical consultation room, clean healthcare environment, modern facilities",
+            f"dental clinic waiting area, comfortable medical office design"
+        ]
+        prompts['about1'] = self._select_random_variant(about1_variants)
+        
+        about2_variants = [
+            f"dentist working with patient, professional dental care, medical precision",
+            f"medical consultation process, healthcare professional examining patient",
+            f"dental treatment procedure, skilled dentist, professional healthcare"
+        ]
+        prompts['about2'] = self._select_random_variant(about2_variants)
+        
+        about3_variants = [
+            f"perfect dental results, healthy smile, professional dental care outcome",
+            f"successful medical treatment, patient health improvement, quality healthcare",
+            f"excellent dental work, satisfied patient, professional medical results"
+        ]
+        prompts['about3'] = self._select_random_variant(about3_variants)
+        
+        review1_variants = [
+            f"happy patient after dental treatment, satisfied smile, quality healthcare",
+            f"pleased medical patient, successful treatment results, healthcare satisfaction",
+            f"grateful patient, excellent medical care experience, positive outcome"
+        ]
+        prompts['review1'] = self._select_random_variant(review1_variants)
+        
+        review2_variants = [
+            f"medical consultation, doctor explaining treatment options to patient",
+            f"dental consultation meeting, professional healthcare advice, patient care",
+            f"healthcare professional consultation, medical expertise, patient guidance"
+        ]
+        prompts['review2'] = self._select_random_variant(review2_variants)
+        
+        review3_variants = [
+            f"medical team, professional healthcare staff, quality patient care",
+            f"dental clinic team, experienced medical professionals, healthcare excellence",
+            f"healthcare specialists, qualified medical staff, professional medical service"
+        ]
+        prompts['review3'] = self._select_random_variant(review3_variants)
+        
+        prompts['favicon'] = "medical cross icon, healthcare symbol, dental logo design"
+        
+        return prompts
+    
+    def _generate_food_prompts(self, business_type):
+        """Специализированные промпты для общепита"""
+        prompts = {}
+        
+        main_variants = [
+            f"cozy coffee shop exterior, cafe storefront, welcoming entrance",
+            f"modern restaurant facade, elegant dining establishment, attractive exterior",
+            f"charming cafe building, coffee shop front view, inviting atmosphere"
+        ]
+        prompts['main'] = self._select_random_variant(main_variants)
+        
+        about1_variants = [
+            f"coffee shop interior, cozy seating area, warm cafe atmosphere",
+            f"restaurant dining room, elegant table setting, comfortable dining space",
+            f"cafe interior design, modern coffee bar, relaxing environment"
+        ]
+        prompts['about1'] = self._select_random_variant(about1_variants)
+        
+        about2_variants = [
+            f"barista making coffee, professional coffee preparation, skilled brewing",
+            f"chef cooking in restaurant kitchen, culinary expertise, food preparation",
+            f"cafe staff serving customers, professional food service, hospitality"
+        ]
+        prompts['about2'] = self._select_random_variant(about2_variants)
+        
+        about3_variants = [
+            f"delicious coffee and pastries, high quality cafe offerings, food presentation",
+            f"gourmet restaurant dishes, culinary excellence, fine dining presentation",
+            f"artisan coffee drinks, premium cafe products, beautiful food styling"
+        ]
+        prompts['about3'] = self._select_random_variant(about3_variants)
+        
+        review1_variants = [
+            f"happy cafe customer enjoying coffee, satisfied dining experience",
+            f"pleased restaurant guest, excellent meal experience, culinary satisfaction",
+            f"delighted coffee shop visitor, positive cafe experience, customer joy"
+        ]
+        prompts['review1'] = self._select_random_variant(review1_variants)
+        
+        review2_variants = [
+            f"friendly cafe service, barista recommending drinks, personalized attention",
+            f"restaurant consultation, waiter explaining menu, professional food service",
+            f"coffee shop consultation, expert coffee recommendations, customer guidance"
+        ]
+        prompts['review2'] = self._select_random_variant(review2_variants)
+        
+        review3_variants = [
+            f"professional cafe team, skilled baristas, excellent coffee service",
+            f"restaurant staff, experienced culinary team, quality food service",
+            f"coffee shop employees, friendly service team, hospitality professionals"
+        ]
+        prompts['review3'] = self._select_random_variant(review3_variants)
+        
+        prompts['favicon'] = "coffee cup icon, cafe symbol, restaurant logo design"
+        
+        return prompts
+    
+    def _generate_beauty_prompts(self, business_type):
+        """Специализированные промпты для салонов красоты"""
+        prompts = {}
+        
+        main_variants = [
+            f"modern beauty salon exterior, stylish salon front, professional beauty services",
+            f"barbershop storefront, classic barber pole, traditional grooming establishment",
+            f"elegant beauty spa entrance, luxury salon design, premium beauty services"
+        ]
+        prompts['main'] = self._select_random_variant(main_variants)
+        
+        about1_variants = [
+            f"beauty salon interior, modern styling stations, elegant salon design",
+            f"barbershop interior, classic barber chairs, traditional grooming atmosphere",
+            f"spa treatment room, relaxing beauty environment, luxurious salon space"
+        ]
+        prompts['about1'] = self._select_random_variant(about1_variants)
+        
+        about2_variants = [
+            f"hairstylist cutting hair, professional beauty service, skilled styling",
+            f"barber grooming client, traditional barbering techniques, expert grooming",
+            f"beauty treatment process, professional cosmetologist, quality beauty care"
+        ]
+        prompts['about2'] = self._select_random_variant(about2_variants)
+        
+        about3_variants = [
+            f"perfect hairstyle result, beautiful styling outcome, professional beauty work",
+            f"satisfied grooming results, excellent barbering, quality men's grooming",
+            f"stunning beauty transformation, professional salon results, beauty excellence"
+        ]
+        prompts['about3'] = self._select_random_variant(about3_variants)
+        
+        review1_variants = [
+            f"happy salon client, satisfied with new hairstyle, beauty service satisfaction",
+            f"pleased barbershop customer, excellent grooming experience, men's satisfaction",
+            f"delighted beauty client, transformation satisfaction, positive beauty experience"
+        ]
+        prompts['review1'] = self._select_random_variant(review1_variants)
+        
+        review2_variants = [
+            f"beauty consultation, stylist discussing hair options with client",
+            f"barbershop consultation, barber explaining grooming services, professional advice",
+            f"salon consultation meeting, beauty expert guidance, personalized beauty care"
+        ]
+        prompts['review2'] = self._select_random_variant(review2_variants)
+        
+        review3_variants = [
+            f"professional salon team, skilled stylists, excellent beauty service",
+            f"barbershop staff, experienced barbers, quality grooming professionals",
+            f"beauty salon specialists, qualified cosmetologists, professional beauty care"
+        ]
+        prompts['review3'] = self._select_random_variant(review3_variants)
+        
+        prompts['favicon'] = "scissors icon, beauty symbol, salon logo design"
+        
+        return prompts
+    
+    def _generate_universal_prompts(self, business_type):
+        """Универсальные промпты для любого бизнеса"""
+        prompts = {}
+        
+        main_variants = [
+            f"modern {business_type} exterior view, professional building design",
+            f"elegant {business_type} entrance, welcoming business atmosphere",
+            f"contemporary {business_type} facility, modern commercial architecture"
+        ]
+        prompts['main'] = self._select_random_variant(main_variants)
+        
+        about1_variants = [
+            f"{business_type} interior design, professional workspace, modern facilities",
+            f"inside {business_type}, comfortable customer area, organized layout",
+            f"{business_type} working environment, professional equipment, clean design"
+        ]
+        prompts['about1'] = self._select_random_variant(about1_variants)
+        
+        about2_variants = [
+            f"professional working at {business_type}, high quality service delivery",
+            f"{business_type} service process, skilled professional, attention to detail",
+            f"expert at work, {business_type} expertise, professional precision"
+        ]
+        prompts['about2'] = self._select_random_variant(about2_variants)
+        
+        about3_variants = [
+            f"high quality {business_type} results, professional outcome, customer satisfaction",
+            f"excellent {business_type} service results, premium quality work",
+            f"successful {business_type} project, professional excellence, quality delivery"
+        ]
+        prompts['about3'] = self._select_random_variant(about3_variants)
+        
+        review1_variants = [
+            f"happy {business_type} customer, satisfied client, positive experience",
+            f"pleased customer with {business_type} service, satisfaction and joy",
+            f"delighted {business_type} client, excellent service experience"
+        ]
+        prompts['review1'] = self._select_random_variant(review1_variants)
+        
+        review2_variants = [
+            f"professional {business_type} consultation, expert advice, customer guidance",
+            f"{business_type} service consultation, professional recommendations",
+            f"customer meeting at {business_type}, personalized professional attention"
+        ]
+        prompts['review2'] = self._select_random_variant(review2_variants)
+        
+        review3_variants = [
+            f"professional {business_type} team, skilled staff, excellent service",
+            f"{business_type} specialists, experienced professionals, quality team",
+            f"qualified {business_type} staff, professional service team, customer care"
+        ]
+        prompts['review3'] = self._select_random_variant(review3_variants)
+        
+        prompts['favicon'] = f"simple {business_type} icon, professional symbol, business logo"
+        
+        return prompts
+    
+    def _select_random_variant(self, variants):
+        """Выбирает случайный вариант из списка"""
+        import random
+        return random.choice(variants)
+
+
+class ThematicImageGenerator:
+    """Упрощенный генератор для совместимости"""
+    
+    def __init__(self, silent_mode=False):
+        self.silent_mode = silent_mode
+        self.image_generator = ImageGenerator(silent_mode=silent_mode)
+    
+    def generate_single_image(self, prompt, image_name, output_dir):
+        """Генерирует одно изображение"""
+        return self.image_generator._generate_image_via_pollinations(
+            prompt, image_name, output_dir
+        )
+    
+    def get_theme_prompts(self, theme_input):
+        """Получает промпты для темы - для совместимости с GUI"""
+        # Генерируем умные промпты напрямую
+        prompts, theme_data = self.image_generator._generate_prompts(theme_input)
+        
+        return prompts, theme_data
+    
+    def add_randomization(self, prompt):
+        """Добавляет рандомизацию к промпту для обычных изображений"""
+        import random
+        
+        # Стили для рандомизации
+        styles = [
+            "professional", "modern", "clean", "elegant", "minimalist",
+            "sophisticated", "premium", "high-quality", "detailed"
+        ]
+        
+        # Цветовые схемы
+        colors = [
+            "vibrant colors", "soft colors", "natural tones", "warm palette",
+            "cool tones", "balanced colors", "harmonious colors"
+        ]
+        
+        # Композиция
+        composition = [
+            "well-composed", "balanced composition", "dynamic composition",
+            "centered composition", "artistic composition"
+        ]
+        
+        selected_style = random.choice(styles)
+        selected_color = random.choice(colors) 
+        selected_comp = random.choice(composition)
+        
+        enhanced_prompt = f"{prompt}, {selected_style}, {selected_color}, {selected_comp}, photorealistic"
+        
+        return enhanced_prompt
+    
+    def add_favicon_randomization(self, prompt):
+        """Добавляет рандомизацию специально для фавиконов"""
+        import random
+        
+        # Стили для фавиконов
+        favicon_styles = [
+            "flat design", "minimal design", "geometric design", "simple icon",
+            "clean symbol", "modern icon", "vector style", "logo style"
+        ]
+        
+        # Цвета для фавиконов
+        favicon_colors = [
+            "bold colors", "single color", "duo-tone", "monochrome",
+            "bright accent", "professional colors"
+        ]
+        
+        selected_style = random.choice(favicon_styles)
+        selected_color = random.choice(favicon_colors)
+        
+        enhanced_prompt = f"{prompt}, {selected_style}, {selected_color}, icon, symbol"
+        
+        return enhanced_prompt

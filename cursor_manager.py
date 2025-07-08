@@ -16,9 +16,9 @@ from tkinter import filedialog, messagebox
 try:
     from img_gen import ImageGenerator
     IMAGE_GENERATION_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     IMAGE_GENERATION_AVAILABLE = False
-    print("⚠️ Модуль генерации изображений недоступен")
+    print(f"⚠️ Модуль генерации изображений недоступен: {e}")
 
 
 class CursorManager:

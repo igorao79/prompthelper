@@ -1,4 +1,14 @@
 pyautogui>=0.9.54
 requests>=2.31.0
 pyinstaller>=6.14.0
-Pillow>=10.0.0 
+Pillow>=10.0.0
+
+# Современная обработка изображений и AI удаление фона
+rembg>=2.0.56
+opencv-python>=4.8.0
+numpy>=1.24.0
+scikit-image>=0.21.0
+
+# Дополнительные библиотеки для качественной обработки
+pillow-simd>=10.0.0;platform_machine=="x86_64"
+imageio>=2.31.0 
