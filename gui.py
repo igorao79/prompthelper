@@ -468,8 +468,8 @@ class LandingPageGeneratorGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Генератор Лендингов v2.0")
-        self.root.geometry("800x750")
-        self.root.resizable(False, False)
+        self.root.geometry("850x900")  # Увеличил размер окна
+        self.root.resizable(True, True)  # Разрешил изменение размеров
         
         # Компоненты
         self.city_generator = CityGenerator()
@@ -481,6 +481,7 @@ class LandingPageGeneratorGUI:
         self.theme_var = tk.StringVar()
         self.domain_var = tk.StringVar()
         self.save_path_var = tk.StringVar(value=self.settings_manager.get_save_path())
+        self.project_path_var = tk.StringVar()  # Для управления изображениями
         
         # Привязываем обработчики изменений для автосброса промпта
         self.theme_var.trace('w', self._on_data_change)
@@ -514,7 +515,7 @@ class LandingPageGeneratorGUI:
             header.pack(fill="x")
             
             print("🖼️ Создание прокручиваемой области...")
-            # Создаем основной фрейм с прокруткой
+            # Создаем прокручиваемую область с канвасом и скроллбаром
             self.create_scrollable_frame()
             
             print("📁 Создание секции папки...")
@@ -541,6 +542,10 @@ class LandingPageGeneratorGUI:
             # Кнопки действий
             self.create_action_buttons()
             
+            print("🎨 Создание секции управления изображениями...")
+            # Секция управления изображениями
+            self.create_image_management_section()
+            
             print("📊 Создание секции статуса...")
             # Статус
             self.create_status_section()
@@ -554,14 +559,48 @@ class LandingPageGeneratorGUI:
             raise
         
     def create_scrollable_frame(self):
-        """Создает основную область без прокрутки"""
-        # Основной контейнер без отступов
+        """Создает прокручиваемую область с канвасом и скроллбаром"""
+        # Основной контейнер
         main_container = tk.Frame(self.root, bg="#f0f0f0")
         main_container.pack(fill="both", expand=True)
         
-        # Содержимое напрямую без канваса и скролла
-        self.scrollable_frame = tk.Frame(main_container, bg="#f0f0f0")
-        self.scrollable_frame.pack(fill="both", expand=True, padx=15, pady=10)
+        # Создаем канвас и скроллбар
+        self.canvas = tk.Canvas(main_container, bg="#f0f0f0", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=self.canvas.yview)
+        
+        # Фрейм для содержимого
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#f0f0f0")
+        
+        # Привязываем скроллбар к канвасу
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Размещаем элементы
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Добавляем фрейм в канвас
+        self.canvas_frame = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        
+        # Обработчики событий
+        def configure_scroll_region(event):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
+        def configure_canvas_width(event):
+            canvas_width = event.width
+            self.canvas.itemconfig(self.canvas_frame, width=canvas_width)
+        
+        def _on_mousewheel(event):
+            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Привязываем обработчики
+        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
+        self.canvas.bind("<Configure>", configure_canvas_width)
+        
+        # Привязываем скролл мыши к канвасу и всем дочерним элементам
+        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Добавляем отступы для содержимого
+        self.scrollable_frame.configure(padx=15, pady=10)
     
     def create_save_path_section(self):
         """Создает секцию выбора папки для сохранения"""
@@ -782,6 +821,119 @@ class LandingPageGeneratorGUI:
             cursor="hand2"
         )
         create_button.pack()
+    
+    def create_image_management_section(self):
+        """Создает секцию управления изображениями"""
+        # Основной фрейм секции
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="🎨 Управление изображениями", 
+            font=("Arial", 10, "bold"),
+            padx=10,
+            pady=8
+        )
+        section.pack(fill="x", pady=10)
+        
+        # Описание
+        description = tk.Label(
+            section,
+            text="Пересоздать отдельные изображения для существующего проекта",
+            font=("Arial", 9),
+            fg="#555555"
+        )
+        description.pack(pady=(0, 8))
+        
+        # Поле для выбора папки проекта
+        project_frame = tk.Frame(section)
+        project_frame.pack(fill="x", pady=(0, 8))
+        
+        tk.Label(project_frame, text="Папка проекта:", font=("Arial", 9)).pack(anchor="w")
+        
+        path_frame = tk.Frame(project_frame)
+        path_frame.pack(fill="x", pady=(2, 0))
+        
+        project_entry = tk.Entry(
+            path_frame, 
+            textvariable=self.project_path_var,
+            font=("Arial", 9)
+        )
+        project_entry.pack(side="left", fill="x", expand=True)
+        enable_clipboard_operations_with_var(project_entry, self.project_path_var)
+        
+        browse_project_btn = tk.Button(
+            path_frame,
+            text="📁",
+            command=self.browse_project_path,
+            font=("Arial", 8),
+            padx=8
+        )
+        browse_project_btn.pack(side="right", padx=(5, 0))
+        
+        # Фрейм с кнопками для отдельных изображений
+        buttons_frame = tk.Frame(section)
+        buttons_frame.pack(fill="x", pady=(8, 0))
+        
+        # Создаем кнопки в две строки
+        row1 = tk.Frame(buttons_frame)
+        row1.pack(fill="x", pady=(0, 4))
+        
+        row2 = tk.Frame(buttons_frame)
+        row2.pack(fill="x")
+        
+        # Первая строка кнопок
+        image_buttons_row1 = [
+            ("🖼️ Main", "main", "#e74c3c"),
+            ("📖 About1", "about1", "#3498db"),
+            ("📘 About2", "about2", "#3498db"),
+            ("📙 About3", "about3", "#3498db")
+        ]
+        
+        for text, image_name, color in image_buttons_row1:
+            btn = tk.Button(
+                row1,
+                text=text,
+                command=lambda name=image_name: self.regenerate_single_image(name),
+                bg=color,
+                fg="white",
+                font=("Arial", 8, "bold"),
+                padx=10,
+                pady=3
+            )
+            btn.pack(side="left", expand=True, fill="x", padx=2)
+        
+        # Вторая строка кнопок
+        image_buttons_row2 = [
+            ("⭐ Review1", "review1", "#f39c12"),
+            ("⭐ Review2", "review2", "#f39c12"),
+            ("⭐ Review3", "review3", "#f39c12"),
+            ("🎯 Favicon", "favicon", "#9b59b6")
+        ]
+        
+        for text, image_name, color in image_buttons_row2:
+            btn = tk.Button(
+                row2,
+                text=text,
+                command=lambda name=image_name: self.regenerate_single_image(name),
+                bg=color,
+                fg="white",
+                font=("Arial", 8, "bold"),
+                padx=10,
+                pady=3
+            )
+            btn.pack(side="left", expand=True, fill="x", padx=2)
+        
+        # Кнопка для пересоздания всех изображений
+        regenerate_all_btn = tk.Button(
+            section,
+            text="🔄 Пересоздать ВСЕ изображения",
+            command=self.regenerate_all_images,
+            bg="#34495e",
+            fg="white",
+            font=("Arial", 9, "bold"),
+            padx=15,
+            pady=5
+        )
+        regenerate_all_btn.pack(pady=(8, 0))
     
     def create_status_section(self):
         """Создает секцию статуса"""
@@ -1022,6 +1174,8 @@ class LandingPageGeneratorGUI:
                     f"💡 Если промпт не вставился автоматически,\n"
                     f"   нажмите Ctrl+V в Cursor AI"
                 )
+                # Сбрасываем форму для возможности создания нового лендинга
+                self.reset_form_after_creation()
             else:
                 self.update_status("⚠️ Cursor не найден, промпт скопирован")
                 messagebox.showwarning(
@@ -1033,6 +1187,8 @@ class LandingPageGeneratorGUI:
                     f"⚠️ Cursor AI не найден, но промпт скопирован в буфер обмена.\n"
                     f"   Откройте проект в Cursor вручную и вставьте промпт."
                 )
+                # Сбрасываем форму для возможности создания нового лендинга
+                self.reset_form_after_creation()
                 
         except Exception as e:
             error_msg = f"Ошибка: {str(e)}"
@@ -1044,6 +1200,283 @@ class LandingPageGeneratorGUI:
         """Обновляет статус"""
         self.status_label.config(text=text)
         self.root.update()
+    
+    def browse_project_path(self):
+        """Выбор папки существующего проекта"""
+        try:
+            current_path = self.project_path_var.get()
+            initial_dir = current_path if current_path and Path(current_path).exists() else self.save_path_var.get()
+            
+            project_path = filedialog.askdirectory(
+                title="Выберите папку проекта с изображениями",
+                initialdir=initial_dir
+            )
+            
+            if project_path:
+                # Проверяем есть ли папка media
+                media_path = Path(project_path) / "media"
+                if not media_path.exists():
+                    result = messagebox.askyesno(
+                        "Папка media не найдена",
+                        f"В выбранной папке нет подпапки 'media'.\n\n"
+                        f"Создать папку media в:\n{project_path}?"
+                    )
+                    if result:
+                        media_path.mkdir(exist_ok=True)
+                        self.project_path_var.set(project_path)
+                    # Если пользователь сказал "Нет", не устанавливаем путь
+                else:
+                    self.project_path_var.set(project_path)
+                    # Проверяем сколько изображений уже есть
+                    existing_images = list(media_path.glob("*.png"))
+                    messagebox.showinfo("Проект выбран", f"Папка проекта:\n{project_path}\n\nПапка media найдена!\nИзображений в папке: {len(existing_images)}")
+                    
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось выбрать папку: {e}")
+    
+    def regenerate_single_image(self, image_name):
+        """Пересоздает одно конкретное изображение"""
+        if not self._validate_image_regeneration():
+            return
+            
+        try:
+            project_path = self.project_path_var.get()
+            media_path = Path(project_path) / "media"
+            theme = self.theme_var.get().strip()
+            
+            if not theme:
+                messagebox.showwarning("Предупреждение", "Введите тематику для генерации изображения!")
+                return
+            
+            # Подтверждение
+            result = messagebox.askyesno(
+                "Подтверждение пересоздания",
+                f"Пересоздать изображение '{image_name}'?\n\n"
+                f"Тематика: {theme}\n"
+                f"Папка: {media_path}\n\n"
+                f"Существующий файл будет заменен."
+            )
+            if not result:
+                return
+            
+            # Запуск в отдельном потоке
+            threading.Thread(
+                target=self._regenerate_image_process,
+                args=(image_name, str(media_path), theme),
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось пересоздать изображение: {e}")
+    
+    def regenerate_all_images(self):
+        """Пересоздает все изображения"""
+        if not self._validate_image_regeneration():
+            return
+            
+        try:
+            project_path = self.project_path_var.get()
+            media_path = Path(project_path) / "media"
+            theme = self.theme_var.get().strip()
+            
+            if not theme:
+                messagebox.showwarning("Предупреждение", "Введите тематику для генерации изображений!")
+                return
+            
+            # Подтверждение
+            result = messagebox.askyesno(
+                "Подтверждение пересоздания всех изображений",
+                f"Пересоздать ВСЕ изображения?\n\n"
+                f"Тематика: {theme}\n"
+                f"Папка: {media_path}\n\n"
+                f"Все существующие файлы будут заменены!\n"
+                f"Это займет несколько минут."
+            )
+            if not result:
+                return
+            
+            # Запуск в отдельном потоке
+            threading.Thread(
+                target=self._regenerate_all_images_process,
+                args=(str(media_path), theme),
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось пересоздать изображения: {e}")
+    
+    def _validate_image_regeneration(self):
+        """Проверяет возможность пересоздания изображений"""
+        project_path = self.project_path_var.get().strip()
+        if not project_path:
+            messagebox.showwarning("Предупреждение", "Выберите папку проекта!")
+            return False
+            
+        if not Path(project_path).exists():
+            messagebox.showerror("Ошибка", f"Папка проекта не существует:\n{project_path}")
+            return False
+            
+        media_path = Path(project_path) / "media"
+        if not media_path.exists():
+            messagebox.showerror("Ошибка", f"Папка media не найдена:\n{media_path}")
+            return False
+            
+        return True
+    
+    def _regenerate_image_process(self, image_name, media_path, theme):
+        """Процесс пересоздания одного изображения"""
+        try:
+            self.update_status(f"🎨 Пересоздание изображения {image_name}...")
+            
+            # Импортируем генератор
+            from img_gen import ThematicImageGenerator, ImageGenerator
+            
+            # Создаем генераторы с поддержкой Icons8
+            image_generator = ImageGenerator(silent_mode=True, use_icons8_for_favicons=True)
+            thematic_gen = ThematicImageGenerator(silent_mode=True)
+            
+            # Получаем промпты
+            prompts, detected_theme = thematic_gen.get_theme_prompts(theme)
+            prompt = prompts[image_name]
+            
+            # Применяем рандомизацию
+            if image_name == "favicon":
+                prompt = thematic_gen.add_favicon_randomization(prompt)
+                prompt += ", TRANSPARENT BACKGROUND, icon design, vector style, flat design, simple logo, no background, white cutout, isolated on transparent, PNG with alpha channel, clear background, cutout style, logo without background"
+            else:
+                prompt = thematic_gen.add_randomization(prompt)
+            
+            # Специальная обработка для фавиконки
+            if image_name == "favicon" and hasattr(image_generator, 'use_icons8_for_favicons') and image_generator.use_icons8_for_favicons and image_generator.icons8_manager:
+                # Используем Icons8 для фавиконки
+                filename = Path(media_path) / f"{image_name}.png"
+                favicon_success = image_generator.icons8_manager.create_favicon_from_theme(theme, str(filename), 512)
+                
+                if favicon_success:
+                    self.update_status(f"✅ Фавиконка Icons8 пересоздана!")
+                    messagebox.showinfo("Готово", f"Фавиконка '{image_name}' успешно пересоздана с Icons8!")
+                else:
+                    # Fallback на AI генерацию
+                    image = image_generator.generate_via_pollinations_clean(prompt)
+                    if image:
+                        from PIL import Image
+                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
+                        image = image_generator.make_favicon_transparent(image)
+                        
+                        # Используем сжатие для AI фавиконки (50кб)
+                        if image_generator.save_compressed_image(image, str(filename), target_size_kb=50):
+                            self.update_status(f"✅ AI фавиконка пересоздана с сжатием!")
+                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана через AI (Icons8 недоступен)")
+                        else:
+                            self.update_status(f"❌ Не удалось сохранить {image_name}")
+                            messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
+                    else:
+                        self.update_status(f"❌ Не удалось создать {image_name}")
+                        messagebox.showerror("Ошибка", f"Не удалось создать фавиконку '{image_name}'")
+            else:
+                # Обычная генерация для остальных изображений
+                image = image_generator.generate_via_pollinations_clean(prompt)
+                
+                if image:
+                    filename = Path(media_path) / f"{image_name}.png"
+                    
+                    # Специальная обработка для AI фавиконки
+                    if image_name == "favicon":
+                        from PIL import Image
+                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
+                        image = image_generator.make_favicon_transparent(image)
+                        
+                        # Используем сжатие для AI фавиконки (50кб)
+                        if image_generator.save_compressed_image(image, str(filename), target_size_kb=50):
+                            self.update_status(f"✅ AI фавиконка пересоздана с сжатием!")
+                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' успешно пересоздана!")
+                        else:
+                            self.update_status(f"❌ Не удалось сохранить {image_name}")
+                            messagebox.showerror("Ошибка", f"Не удалось сохранить фавиконку '{image_name}'")
+                    else:
+                        # Для обычных изображений используем сжатие до 150кб
+                        if image_generator.save_compressed_image(image, str(filename), target_size_kb=150):
+                            self.update_status(f"✅ Изображение {image_name} пересоздано с сжатием!")
+                            messagebox.showinfo("Готово", f"Изображение '{image_name}' успешно пересоздано!")
+                        else:
+                            self.update_status(f"❌ Не удалось сохранить {image_name}")
+                            messagebox.showerror("Ошибка", f"Не удалось сохранить изображение '{image_name}'")
+                else:
+                    self.update_status(f"❌ Не удалось создать {image_name}")
+                    messagebox.showerror("Ошибка", f"Не удалось создать изображение '{image_name}'")
+                
+        except Exception as e:
+            error_msg = f"Ошибка пересоздания {image_name}: {str(e)}"
+            self.update_status(f"❌ {error_msg}")
+            messagebox.showerror("Ошибка", error_msg)
+    
+    def _regenerate_all_images_process(self, media_path, theme):
+        """Процесс пересоздания всех изображений"""
+        try:
+            self.update_status("🎨 Пересоздание всех изображений...")
+            
+            # Импортируем генератор
+            from img_gen import ImageGenerator
+            
+            # Создаем генератор с поддержкой Icons8
+            image_generator = ImageGenerator(silent_mode=True, use_icons8_for_favicons=True)
+            
+            # Генерируем полный набор
+            results = image_generator.generate_thematic_set(
+                theme_input=theme,
+                media_dir=media_path,
+                method="1",
+                progress_callback=self.update_status
+            )
+            
+            # Подсчитываем результаты
+            successful_count = len([f for f in results.values() if f is not None])
+            
+            self.update_status(f"✅ Пересоздано {successful_count}/8 изображений")
+            
+            messagebox.showinfo(
+                "Готово",
+                f"Пересоздание завершено!\n\n"
+                f"Успешно: {successful_count}/8 изображений\n"
+                f"Папка: {media_path}\n\n"
+                f"Проверьте результат в папке media."
+            )
+            
+        except Exception as e:
+            error_msg = f"Ошибка пересоздания изображений: {str(e)}"
+            self.update_status(f"❌ {error_msg}")
+            messagebox.showerror("Ошибка", error_msg)
+    
+    def reset_form_after_creation(self):
+        """Сбрасывает форму после создания лендинга для возможности создания нового"""
+        try:
+            # Очищаем все поля формы
+            self.theme_var.set("")  # Очищаем тематику
+            self.domain_var.set("") # Очищаем домен
+            self.selected_country.set("")  # Очищаем страну
+            self.current_city = ""  # Очищаем город
+            
+            # Обновляем отображение
+            self.language_label.config(text="Язык: Не выбран", fg="#7f8c8d")
+            self.city_label.config(text="Город: Не сгенерирован", fg="#7f8c8d")
+            
+            # Очищаем поисковые поля в комбобоксах
+            if hasattr(self.country_combo, 'entry'):
+                self.country_combo.entry.delete(0, tk.END)
+            if hasattr(self.theme_combo, 'entry'):
+                self.theme_combo.entry.delete(0, tk.END)
+            
+            # Очищаем текущий промпт
+            self.current_prompt = None
+            self.settings_manager.save_prompt("")
+            
+            # Обновляем статус
+            self.update_status("✅ Готов к созданию нового лендинга")
+            
+            print("🔄 Форма полностью сброшена, готова для нового лендинга")
+            
+        except Exception as e:
+            print(f"Ошибка сброса формы: {e}")
     
     def on_closing(self):
         """Обработчик закрытия окна"""

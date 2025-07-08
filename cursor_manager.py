@@ -415,8 +415,8 @@ class CursorManager:
                 if progress_callback:
                     progress_callback("🎨 Запуск генерации изображений...")
                 
-                # Создаем генератор в тихом режиме
-                image_generator = ImageGenerator(silent_mode=True)
+                # Создаем генератор в тихом режиме с поддержкой Icons8
+                image_generator = ImageGenerator(silent_mode=True, use_icons8_for_favicons=True)
                 
                 # Генерируем изображения
                 results = image_generator.generate_thematic_set(
