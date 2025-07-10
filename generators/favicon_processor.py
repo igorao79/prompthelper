@@ -437,5 +437,8 @@ def main():
     else:
         print("❌ Не удалось обработать тестовое изображение")
 
+# Alias для совместимости с другими модулями
+FaviconProcessor = AdvancedFaviconProcessor
+
 if __name__ == "__main__":
     main() 

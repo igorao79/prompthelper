@@ -14,7 +14,7 @@ from tkinter import filedialog, messagebox
 
 # Импорт для генерации изображений
 try:
-    from img_gen import ImageGenerator
+    from generators.image_generator import ImageGenerator
     IMAGE_GENERATION_AVAILABLE = True
 except ImportError as e:
     IMAGE_GENERATION_AVAILABLE = False
@@ -427,7 +427,7 @@ class CursorManager:
                 )
                 
                 # Подсчитываем успешные генерации
-                successful_count = len([f for f in results.values() if f is not None])
+                successful_count = results if isinstance(results, int) else 0
                 
                 if progress_callback:
                     progress_callback(f"✅ Генерация изображений завершена: {successful_count}/8")

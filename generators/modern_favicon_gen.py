@@ -148,15 +148,17 @@ class ModernFaviconGenerator:
         
         base_style = style_prompts.get(style, style_prompts["modern_flat"])
         
-        # Создаем промпт специально для фавиконки БЕЗ ТЕКСТА
+        # Создаем промпт специально для ИКОНКИ фавиконки БЕЗ ФОТО
         favicon_prompt = (
             f"{prompt}, {base_style}, "
-            "simple composition, centered design, clear background, "
-            "high contrast, scalable design, vector style, professional quality, "
-            "clean edges, optimized for small sizes, transparent background, "
-            "PNG format, isolated object, NO TEXT, NO LETTERS, NO WORDS, "
-            "symmetrical layout, bold colors, crisp details, symbol only, "
-            "graphic element, visual icon without text, pure visual design"
+            "ICON SYMBOL ONLY, NO PHOTO, NO REALISTIC IMAGES, NO PEOPLE, "
+            "simple geometric icon, flat design logo, vector emblem, "
+            "minimalist symbol, abstract pictogram, brand mark, "
+            "solid shapes, clean lines, bold contrast, "
+            "isolated on transparent, centered design, scalable icon, "
+            "NO TEXT, NO LETTERS, NO WORDS, NO PHOTOGRAPHY, "
+            "pure graphic symbol, digital icon art, logo design style, "
+            "simple composition, clear silhouette, geometric forms"
         )
         
         return favicon_prompt
@@ -170,10 +172,10 @@ class ModernFaviconGenerator:
             import urllib.parse
             encoded_prompt = urllib.parse.quote(enhanced_prompt)
             
-            # Специальные параметры для фавиконок
+            # Специальные параметры для ИКОНОК (не фото!)
             params = (
                 f"?width={size}&height={size}&model=flux&enhance=true&nologo=true"
-                "&style=digital-art&quality=high"
+                "&style=vector-art&quality=high&seed=icon"
             )
             
             image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}{params}"
@@ -563,22 +565,29 @@ class ModernFaviconGenerator:
             return image
     
     def _save_optimized_favicon(self, image, output_path, target_size_kb=50):
-        """Сохраняет фавиконку с оптимальным сжатием"""
+        """Сохраняет фавиконку с оптимальным сжатием в формате JPG"""
         try:
             # Создаем директорию если нужно
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
-            # Оптимизируем прозрачность
-            optimized = self._optimize_transparency(image)
+            # Для JPG убираем прозрачность и ставим белый фон
+            if image.mode == 'RGBA':
+                # Создаем белый фон
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                # Накладываем изображение с учетом альфа-канала
+                background.paste(image, mask=image.split()[-1])
+                optimized = background
+            else:
+                optimized = image.convert('RGB')
             
-            # Сохраняем с различными уровнями оптимизации
-            for optimize_level in [True, False]:
+            # Сохраняем с оптимальным качеством для достижения нужного размера
+            for quality in [95, 85, 75, 65, 55]:
                 try:
                     optimized.save(
                         output_path,
-                        format='PNG',
-                        optimize=optimize_level,
-                        compress_level=9
+                        format='JPEG',
+                        quality=quality,
+                        optimize=True
                     )
                     
                     # Проверяем размер файла
@@ -589,8 +598,8 @@ class ModernFaviconGenerator:
                 except Exception as e:
                     continue
             
-            # Если не удалось достичь целевого размера, сохраняем как есть
-            optimized.save(output_path, format='PNG')
+            # Если не удалось достичь целевого размера, сохраняем с минимальным качеством
+            optimized.save(output_path, format='JPEG', quality=50, optimize=True)
             return True
             
         except Exception as e:
