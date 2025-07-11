@@ -256,10 +256,26 @@ class SimpleThematicFavicon:
                     ['#6495ED', '#B0E0E6', '#F0F8FF']
                 ]
             },
+            'эвакуатор': {
+                'symbols': ['🚛', '🔧', '⚙️', '🔗', '🚨'], 
+                'colors': [
+                    ['#FF4500', '#FFD700', '#FFA500'],
+                    ['#DC143C', '#FF6347', '#FF8C00'],
+                    ['#B22222', '#DAA520', '#CD853F']
+                ]
+            },
+            'эвакуац': {
+                'symbols': ['🚛', '🔧', '⚙️', '🔗', '🚨'], 
+                'colors': [
+                    ['#FF4500', '#FFD700', '#FFA500'],
+                    ['#DC143C', '#FF6347', '#FF8C00'],
+                    ['#B22222', '#DAA520', '#CD853F']
+                ]
+            },
         }
         
-        # Fallback символы для неизвестных тематик
-        self.fallback_symbols = ['🔷', '🔶', '⭐', '🎯', '🔵', '🟢', '🟡', '🟠', '🟣']
+        # Fallback символы для неизвестных тематик (НЕ КРУГИ!)
+        self.fallback_symbols = ['🔧', '⚡', '🎪', '📦', '🎨', '⚙️', '🏪', '✨', '🚀']
         self.fallback_colors = [
             ['#4169E1', '#87CEEB', '#B0C4DE'],
             ['#32CD32', '#90EE90', '#98FB98'],
@@ -358,12 +374,38 @@ class SimpleThematicFavicon:
             # Пытаемся использовать системный шрифт с поддержкой эмодзи
             font_size = size // 3
             
-            # Список шрифтов для попытки
+            # Кроссплатформенные шрифты для фавиконок
             font_paths = [
+                # Windows
                 "C:/Windows/Fonts/seguiemj.ttf",  # Windows Emoji
                 "C:/Windows/Fonts/arial.ttf",     # Arial
-                "/System/Library/Fonts/Apple Color Emoji.ttc",  # macOS
-                "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf",  # Linux
+                "C:/Windows/Fonts/calibri.ttf",
+                "C:/Windows/Fonts/segoeui.ttf",
+                
+                # macOS
+                "/System/Library/Fonts/Apple Color Emoji.ttc",
+                "/System/Library/Fonts/Arial.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",
+                
+                # Linux - эмодзи шрифты
+                "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf",
+                "/usr/share/fonts/truetype/emoji/NotoColorEmoji.ttf",
+                "/usr/share/fonts/emoji/NotoColorEmoji.ttf",
+                "/usr/share/fonts/TTF/NotoColorEmoji.ttf",
+                
+                # Linux - обычные шрифты
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                "/usr/share/fonts/truetype/ubuntu/Ubuntu-Regular.ttf",
+                "/usr/share/fonts/TTF/arial.ttf",
+                "/usr/share/fonts/truetype/arial.ttf",
+                
+                # Linux пользовательские папки
+                str(Path.home() / ".fonts/NotoColorEmoji.ttf"),
+                str(Path.home() / ".local/share/fonts/NotoColorEmoji.ttf"),
+                str(Path.home() / ".fonts/arial.ttf"),
+                str(Path.home() / ".local/share/fonts/arial.ttf"),
             ]
             
             font = None
@@ -399,16 +441,35 @@ class SimpleThematicFavicon:
             self._draw_fallback_shape(draw, size, colors)
     
     def _draw_fallback_shape(self, draw, size, colors):
-        """Рисует простую фигуру как fallback"""
+        """Рисует красивую геометрическую фигуру как fallback (НЕ КРУГ!)"""
         center = size // 2
-        radius = size // 4
         
-        # Рисуем круг
-        color = self._hex_to_rgb(colors[0])
-        draw.ellipse([
-            center - radius, center - radius,
-            center + radius, center + radius
-        ], fill=color, outline='white', width=3)
+        # Рисуем красивый ромб с градиентом
+        diamond_size = size // 3
+        
+        color1 = self._hex_to_rgb(colors[0])
+        color2 = self._hex_to_rgb(colors[1]) if len(colors) > 1 else color1
+        
+        # Создаем точки ромба
+        points = [
+            (center, center - diamond_size),  # верх
+            (center + diamond_size, center),  # право
+            (center, center + diamond_size),  # низ
+            (center - diamond_size, center)   # лево
+        ]
+        
+        # Рисуем заполненный ромб
+        draw.polygon(points, fill=color1, outline='white', width=4)
+        
+        # Добавляем внутренний ромб меньшего размера
+        inner_size = diamond_size // 2
+        inner_points = [
+            (center, center - inner_size),
+            (center + inner_size, center),
+            (center, center + inner_size),
+            (center - inner_size, center)
+        ]
+        draw.polygon(inner_points, fill=color2, outline='white', width=2)
     
     def _hex_to_rgb(self, hex_color):
         """Конвертирует HEX в RGB"""

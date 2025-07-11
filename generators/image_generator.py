@@ -85,9 +85,28 @@ class ImageGenerator:
         return generated_count
     
     def _generate_favicon_simple(self, theme, media_dir):
-        """Генерирует фавикон через ВАРИАТИВНЫЙ тематический генератор"""
+        """Генерирует фавикон через УЛУЧШЕННЫЙ тематический генератор с резервными методами"""
+        if not self.silent_mode:
+            print(f"🎨 Начинаю генерацию фавиконки для темы: {theme}")
+        
+        # Метод 1: Простой тематический фавикон (приоритетный)
         try:
-            # Используем вариативный генератор для получения промпта
+            from generators.simple_thematic_favicon import SimpleThematicFavicon
+            simple_favicon = SimpleThematicFavicon(silent_mode=self.silent_mode)
+            
+            # Создаем путь для фавиконки
+            favicon_path = Path(media_dir) / "favicon.jpg"
+            
+            if simple_favicon.create_thematic_favicon(theme, str(favicon_path)):
+                if not self.silent_mode:
+                    print("✅ Фавиконка создана через простой тематический генератор!")
+                return str(favicon_path)
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"⚠️ Простой генератор не сработал: {e}")
+        
+        # Метод 2: Вариативный генератор промптов
+        try:
             from generators.smart_variative_prompts import SmartVariativePrompts
             
             generator = SmartVariativePrompts()
@@ -95,19 +114,37 @@ class ImageGenerator:
             favicon_prompt = prompts.get('favicon', f'{theme} icon symbol')
             
             if not self.silent_mode:
-                print(f"🎨 Фавикон промпт: {favicon_prompt[:50]}...")
+                print(f"🎨 Пробую вариативный промпт: {favicon_prompt[:50]}...")
             
             # Генерируем через Pollinations с вариативным промптом
-            return self._generate_image_via_pollinations(favicon_prompt, 'favicon', media_dir)
-            
-        except ImportError:
-            if not self.silent_mode:
-                print("⚠️ Вариативный генератор недоступен, используем базовый")
-            return self._generate_image_via_pollinations(f"{theme} icon symbol", 'favicon', media_dir)
+            result = self._generate_image_via_pollinations(favicon_prompt, 'favicon', media_dir)
+            if result:
+                if not self.silent_mode:
+                    print("✅ Фавиконка создана через вариативный генератор!")
+                return result
+                
         except Exception as e:
             if not self.silent_mode:
-                print(f"⚠️ Ошибка вариативного генератора фавиконок: {e}")
-            return self._generate_image_via_pollinations(f"{theme} icon symbol", 'favicon', media_dir)
+                print(f"⚠️ Вариативный генератор не сработал: {e}")
+        
+        # Метод 3: Базовый генератор (резервный)
+        try:
+            if not self.silent_mode:
+                print("🔄 Пробую базовый генератор фавиконок...")
+            
+            result = self._generate_image_via_pollinations(f"{theme} icon symbol", 'favicon', media_dir)
+            if result:
+                if not self.silent_mode:
+                    print("✅ Фавиконка создана через базовый генератор!")
+                return result
+        except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ Базовый генератор не сработал: {e}")
+        
+        # Если все методы не сработали
+        if not self.silent_mode:
+            print("❌ Не удалось создать фавиконку ни одним методом")
+        return None
     
     def _generate_image_via_pollinations(self, prompt, image_name, media_dir):
         """Генерирует изображение через современный API с разнообразием"""

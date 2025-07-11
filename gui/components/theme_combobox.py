@@ -20,25 +20,31 @@ class ThemeHistoryCombobox(ttk.Frame):
         self.setup_ui()
     
     def setup_ui(self):
-        """Создает интерфейс"""
-        # Основное поле ввода
-        self.entry = tk.Entry(
+        """Создает современный интерфейс"""
+        # Импортируем тему локально, чтобы избежать циклических импортов
+        from ..styles.modern_theme import ModernTheme
+        self.theme = ModernTheme()
+        
+        # Современное поле ввода
+        self.entry = self.theme.create_modern_entry(
             self, 
             textvariable=self.textvariable,
-            font=("Arial", 13),
+            font=self.theme.typography.body_lg(),
             width=70
         )
-        self.entry.pack(fill="x", ipady=3)
+        self.entry.pack(fill="x", ipady=8)
         
-        # Кнопка истории
-        self.history_btn = tk.Button(
+        # Современная кнопка истории
+        self.history_btn = self.theme.create_modern_button(
             self,
             text="📋",
             command=self.show_history,
-            width=3,
-            font=("Arial", 10)
+            style="secondary",
+            font=self.theme.typography.button_sm(),
+            padx=12,
+            pady=6
         )
-        self.history_btn.pack(side="right", padx=(5, 0))
+        self.history_btn.pack(side="right", padx=(8, 0))
     
     def set_history(self, history):
         """Устанавливает историю тематик"""
@@ -50,23 +56,51 @@ class ThemeHistoryCombobox(ttk.Frame):
             messagebox.showinfo("История", "История тематик пуста")
             return
         
-        # Создаем окно выбора
+        # Создаем современное окно выбора
         history_window = tk.Toplevel(self)
-        history_window.title("История тематик")
-        history_window.geometry("400x300")
+        history_window.title("📋 История тематик")
+        history_window.geometry("450x350")
         history_window.transient(self)
         history_window.grab_set()
+        history_window.configure(bg=self.theme.colors.BACKGROUND)
         
-        # Список истории
-        listbox = tk.Listbox(history_window, font=("Arial", 10))
+        # Заголовок
+        title_label = self.theme.create_modern_label(
+            history_window,
+            text="📋 Выберите тематику из истории",
+            style="heading_md",
+            bg=self.theme.colors.BACKGROUND
+        )
+        title_label.pack(pady=(15, 10))
+        
+        # Современный список истории
+        listbox_frame = self.theme.create_modern_frame(history_window)
+        listbox_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        
+        listbox = tk.Listbox(
+            listbox_frame, 
+            font=self.theme.typography.body_md(),
+            bg=self.theme.colors.CARD,
+            fg=self.theme.colors.TEXT_PRIMARY,
+            selectbackground=self.theme.colors.PRIMARY,
+            selectforeground=self.theme.colors.TEXT_PRIMARY,
+            relief="flat",
+            borderwidth=1,
+            highlightthickness=1,
+            highlightcolor=self.theme.colors.PRIMARY
+        )
         listbox.pack(fill="both", expand=True, padx=10, pady=10)
         
         for theme in self.history:
             listbox.insert(tk.END, theme)
         
-        # Кнопки
-        btn_frame = tk.Frame(history_window)
-        btn_frame.pack(fill="x", padx=10, pady=(0, 10))
+        # Современные кнопки
+        btn_frame = self.theme.create_modern_frame(
+            history_window,
+            bg=self.theme.colors.BACKGROUND,
+            highlightthickness=0
+        )
+        btn_frame.pack(fill="x", padx=15, pady=(0, 15))
         
         def select_theme():
             selection = listbox.curselection()
@@ -75,23 +109,19 @@ class ThemeHistoryCombobox(ttk.Frame):
                 self.textvariable.set(selected_theme)
                 history_window.destroy()
         
-        select_btn = tk.Button(
+        select_btn = self.theme.create_modern_button(
             btn_frame,
-            text="Выбрать",
+            text="✅ Выбрать",
             command=select_theme,
-            bg="#27ae60",
-            fg="white",
-            font=("Arial", 10, "bold")
+            style="success"
         )
-        select_btn.pack(side="right", padx=(5, 0))
+        select_btn.pack(side="right", padx=(8, 0))
         
-        close_btn = tk.Button(
+        close_btn = self.theme.create_modern_button(
             btn_frame,
-            text="Закрыть",
+            text="❌ Закрыть",
             command=history_window.destroy,
-            bg="#e74c3c",
-            fg="white",
-            font=("Arial", 10, "bold")
+            style="danger"
         )
         close_btn.pack(side="right")
         

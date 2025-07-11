@@ -2,15 +2,24 @@
 
 """
 Модуль для работы с Cursor AI
+Кроссплатформенная версия (Windows/Linux/macOS)
 """
 
 import os
 import subprocess
 import time
-import pyautogui
+import platform
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
+
+# Проверяем доступность pyautogui
+try:
+    import pyautogui
+    PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    PYAUTOGUI_AVAILABLE = False
+    print("⚠️ pyautogui недоступен, автовставка промптов отключена")
 
 # Импорт для генерации изображений
 try:
@@ -22,7 +31,7 @@ except ImportError as e:
 
 
 class CursorManager:
-    """Класс для управления Cursor AI"""
+    """Кроссплатформенный класс для управления Cursor AI"""
     
     def __init__(self):
         self.cursor_paths = [
@@ -30,10 +39,28 @@ class CursorManager:
             "code"
         ]
         self.cached_cursor_path = None  # Кэш найденного пути
+        self.os_type = platform.system().lower()
         
-        # Генерируем больше возможных путей
-        username = os.getenv('USERNAME')
-        self.search_paths = [
+        print(f"🖥️ Определена ОС: {self.os_type}")
+        
+        # Генерируем пути поиска в зависимости от ОС
+        self.search_paths = self._get_platform_search_paths()
+
+    def _get_platform_search_paths(self):
+        """Получает пути поиска Cursor для текущей ОС"""
+        if self.os_type == 'windows':
+            return self._get_windows_search_paths()
+        elif self.os_type == 'linux':
+            return self._get_linux_search_paths()
+        elif self.os_type == 'darwin':  # macOS
+            return self._get_macos_search_paths()
+        else:
+            return []
+
+    def _get_windows_search_paths(self):
+        """Возвращает пути поиска для Windows"""
+        username = os.getenv('USERNAME', os.getenv('USER', ''))
+        return [
             # Стандартные места установки
             fr"C:\Users\{username}\AppData\Local\Programs\cursor\Cursor.exe",
             r"C:\Program Files\Cursor\Cursor.exe", 
@@ -54,10 +81,100 @@ class CursorManager:
             fr"C:\Users\{username}\Downloads\Cursor.exe"
         ]
 
+    def _get_linux_search_paths(self):
+        """Возвращает пути поиска для Linux"""
+        username = os.getenv('USER', '')
+        home = Path.home()
+        
+        return [
+            # AppImage в домашней папке
+            str(home / "cursor.AppImage"),
+            str(home / "Cursor.AppImage"),
+            str(home / "Downloads/cursor.AppImage"),
+            str(home / "Downloads/Cursor.AppImage"),
+            str(home / "Applications/cursor.AppImage"),
+            str(home / "Applications/Cursor.AppImage"),
+            
+            # Snap установка
+            "/snap/cursor/current/cursor",
+            f"/home/{username}/snap/cursor/current/cursor",
+            
+            # Flatpak установка
+            "/var/lib/flatpak/app/com.cursor.Cursor/current/active/files/cursor",
+            f"/home/{username}/.local/share/flatpak/app/com.cursor.Cursor/current/active/files/cursor",
+            
+            # Традиционные Linux пути
+            "/usr/bin/cursor",
+            "/usr/local/bin/cursor",
+            "/opt/cursor/cursor",
+            "/opt/Cursor/cursor",
+            
+            # В домашней папке
+            str(home / ".local/bin/cursor"),
+            str(home / ".local/share/cursor/cursor"),
+            str(home / "bin/cursor"),
+            
+            # Deb пакет
+            "/usr/share/cursor/cursor",
+            
+            # Tar.gz архив
+            str(home / "cursor/cursor"),
+            str(home / "Cursor/cursor"),
+        ]
+
+    def _get_macos_search_paths(self):
+        """Возвращает пути поиска для macOS"""
+        username = os.getenv('USER', '')
+        home = Path.home()
+        
+        return [
+            # Стандартная установка приложения
+            "/Applications/Cursor.app/Contents/MacOS/Cursor",
+            f"/Users/{username}/Applications/Cursor.app/Contents/MacOS/Cursor",
+            
+            # Homebrew
+            "/usr/local/bin/cursor",
+            "/opt/homebrew/bin/cursor",
+            
+            # В домашней папке
+            str(home / "Applications/Cursor.app/Contents/MacOS/Cursor"),
+            str(home / "Downloads/Cursor.app/Contents/MacOS/Cursor"),
+        ]
+
     @staticmethod
     def get_desktop_path():
-        """Возвращает путь к рабочему столу пользователя"""
-        return str(Path.home() / "Desktop")
+        """Возвращает путь к рабочему столу пользователя кроссплатформенно"""
+        system = platform.system().lower()
+        home = Path.home()
+        
+        if system == 'windows':
+            # Для Windows
+            desktop_paths = [
+                home / "Desktop",
+                home / "Рабочий стол",  # Русская локализация
+            ]
+        elif system == 'linux':
+            # Для Linux
+            desktop_paths = [
+                home / "Desktop",
+                home / "Рабочий стол",  # Русская локализация
+                home / "Рабочий_стол",
+                home / ".local/share/desktop",  # Альтернативный путь
+            ]
+        elif system == 'darwin':  # macOS
+            desktop_paths = [
+                home / "Desktop",
+            ]
+        else:
+            desktop_paths = [home / "Desktop"]
+        
+        # Возвращаем первый существующий путь
+        for path in desktop_paths:
+            if path.exists():
+                return str(path)
+        
+        # Если ничего не найдено, возвращаем стандартный
+        return str(home / "Desktop")
 
     @staticmethod
     def check_directory_exists(base_path, dir_name):
@@ -76,21 +193,14 @@ class CursorManager:
     
     def find_cursor_in_directories(self):
         """
-        Глубокий поиск Cursor по основным директориям
+        Глубокий поиск Cursor по основным директориям (кроссплатформенный)
         
         Returns:
             str: Путь к Cursor AI или None если не найден
         """
-        search_dirs = [
-            r"C:\Program Files",
-            r"C:\Program Files (x86)", 
-            fr"C:\Users\{os.getenv('USERNAME')}\AppData\Local\Programs",
-            fr"C:\Users\{os.getenv('USERNAME')}\AppData\Roaming",
-            r"C:\ProgramData",
-            r"D:\Program Files" if os.path.exists("D:") else None
-        ]
+        search_dirs = self._get_search_directories()
         
-        # Убираем None значения
+        # Убираем None значения и проверяем существование
         search_dirs = [d for d in search_dirs if d and os.path.exists(d)]
         
         for search_dir in search_dirs:
@@ -101,7 +211,7 @@ class CursorManager:
                         continue
                         
                     for file in files:
-                        if file.lower() in ['cursor.exe', 'cursor']:
+                        if self._is_cursor_file(file):
                             full_path = os.path.join(root, file)
                             if self._test_cursor_executable(full_path):
                                 print(f"Найден Cursor AI: {full_path}")
@@ -109,6 +219,56 @@ class CursorManager:
             except (PermissionError, OSError):
                 continue
         return None
+    
+    def _get_search_directories(self):
+        """Возвращает директории для поиска в зависимости от ОС"""
+        if self.os_type == 'windows':
+            username = os.getenv('USERNAME', os.getenv('USER', ''))
+            return [
+                r"C:\Program Files",
+                r"C:\Program Files (x86)", 
+                fr"C:\Users\{username}\AppData\Local\Programs",
+                fr"C:\Users\{username}\AppData\Roaming",
+                r"C:\ProgramData",
+                r"D:\Program Files" if os.path.exists("D:") else None
+            ]
+        elif self.os_type == 'linux':
+            home = Path.home()
+            return [
+                "/usr/bin",
+                "/usr/local/bin", 
+                "/opt",
+                "/snap",
+                "/var/lib/flatpak",
+                str(home / ".local"),
+                str(home / "Applications"),
+                str(home / "Downloads"),
+                str(home),
+            ]
+        elif self.os_type == 'darwin':  # macOS
+            home = Path.home()
+            return [
+                "/Applications",
+                "/usr/local/bin",
+                "/opt/homebrew/bin",
+                str(home / "Applications"),
+                str(home / "Downloads"),
+            ]
+        else:
+            return []
+    
+    def _is_cursor_file(self, filename):
+        """Проверяет, является ли файл потенциально Cursor AI"""
+        filename_lower = filename.lower()
+        
+        if self.os_type == 'windows':
+            return filename_lower in ['cursor.exe', 'cursor']
+        elif self.os_type == 'linux':
+            return filename_lower in ['cursor', 'cursor.appimage'] or 'cursor' in filename_lower
+        elif self.os_type == 'darwin':  # macOS
+            return filename_lower in ['cursor'] or 'cursor' in filename_lower
+        else:
+            return 'cursor' in filename_lower
     
     def _test_cursor_executable(self, path):
         """
@@ -172,12 +332,13 @@ class CursorManager:
             except:
                 continue
         
-        # 3. Поиск через реестр Windows
-        print("Поиск в реестре Windows...")
-        registry_result = self.find_cursor_in_registry()
-        if registry_result:
-            self.cached_cursor_path = registry_result
-            return registry_result
+        # 3. Поиск через системно-специфичные методы
+        if self.os_type == 'windows':
+            print("Поиск в реестре Windows...")
+            registry_result = self.find_cursor_in_registry()
+            if registry_result:
+                self.cached_cursor_path = registry_result
+                return registry_result
         
         # 4. Глубокий поиск по системе
         print("Выполняется глубокий поиск по системе...")
@@ -186,12 +347,19 @@ class CursorManager:
             self.cached_cursor_path = deep_search_result
             return deep_search_result
         
-        # 5. Поиск в Start Menu
-        print("Поиск в Start Menu...")
-        start_menu_result = self.find_cursor_in_start_menu()
-        if start_menu_result:
-            self.cached_cursor_path = start_menu_result
-            return start_menu_result
+        # 5. Поиск в системно-специфичных местах
+        if self.os_type == 'windows':
+            print("Поиск в Start Menu...")
+            start_menu_result = self.find_cursor_in_start_menu()
+            if start_menu_result:
+                self.cached_cursor_path = start_menu_result
+                return start_menu_result
+        elif self.os_type == 'linux':
+            print("Поиск через which/whereis...")
+            linux_result = self.find_cursor_linux_commands()
+            if linux_result:
+                self.cached_cursor_path = linux_result
+                return linux_result
         
         print("Cursor AI не найден автоматически")
         return self.ask_for_cursor_path()
@@ -267,6 +435,40 @@ class CursorManager:
                 continue
         return None
     
+    def find_cursor_linux_commands(self):
+        """
+        Поиск Cursor через Linux команды which/whereis
+        
+        Returns:
+            str: Путь к Cursor AI или None
+        """
+        try:
+            # Пробуем команду which
+            result = subprocess.run(['which', 'cursor'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip():
+                cursor_path = result.stdout.strip()
+                print(f"Найден Cursor через which: {cursor_path}")
+                return cursor_path
+        except:
+            pass
+        
+        try:
+            # Пробуем команду whereis
+            result = subprocess.run(['whereis', 'cursor'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip():
+                # whereis возвращает несколько путей, берем первый исполняемый
+                paths = result.stdout.strip().split()[1:]  # Убираем "cursor:"
+                for path in paths:
+                    if os.path.exists(path) and self._test_cursor_executable(path):
+                        print(f"Найден Cursor через whereis: {path}")
+                        return path
+        except:
+            pass
+        
+        return None
+    
     def ask_for_cursor_path(self):
         """
         Просит пользователя указать путь к Cursor AI вручную
@@ -288,15 +490,37 @@ class CursorManager:
             )
             
             if result:
-                file_path = filedialog.askopenfilename(
-                    title="Выберите Cursor.exe",
-                    filetypes=[
+                # Адаптируем диалог под ОС
+                if self.os_type == 'windows':
+                    filetypes = [
                         ("Cursor executable", "Cursor.exe"),
                         ("Executable files", "*.exe"),
                         ("Link files", "*.lnk"),
                         ("All files", "*.*")
-                    ],
-                    initialdir="C:\\Program Files"
+                    ]
+                    initialdir = "C:\\Program Files"
+                elif self.os_type == 'linux':
+                    filetypes = [
+                        ("Cursor AppImage", "*.AppImage"),
+                        ("Cursor executable", "cursor"),
+                        ("All files", "*")
+                    ]
+                    initialdir = str(Path.home())
+                elif self.os_type == 'darwin':  # macOS
+                    filetypes = [
+                        ("Cursor app", "Cursor"),
+                        ("Application", "*.app"),
+                        ("All files", "*")
+                    ]
+                    initialdir = "/Applications"
+                else:
+                    filetypes = [("All files", "*")]
+                    initialdir = str(Path.home())
+                
+                file_path = filedialog.askopenfilename(
+                    title=f"Выберите Cursor ({self.os_type})",
+                    filetypes=filetypes,
+                    initialdir=initialdir
                 )
                 
                 if file_path and os.path.exists(file_path):
@@ -331,6 +555,23 @@ class CursorManager:
             return False
         
         try:
+            # Адаптируем команду запуска под ОС
+            if self.os_type == 'windows':
+                return self._launch_cursor_windows(cursor_exe, project_path)
+            elif self.os_type == 'linux':
+                return self._launch_cursor_linux(cursor_exe, project_path)
+            elif self.os_type == 'darwin':  # macOS
+                return self._launch_cursor_macos(cursor_exe, project_path)
+            else:
+                # Универсальный запуск
+                return self._launch_cursor_generic(cursor_exe, project_path)
+        except Exception as e:
+            print(f"Ошибка запуска Cursor: {e}")
+            return False
+    
+    def _launch_cursor_windows(self, cursor_exe, project_path):
+        """Запуск Cursor в Windows"""
+        try:
             if cursor_exe in ["cursor", "code"]:
                 # Команды в PATH
                 subprocess.Popen([cursor_exe, str(project_path)], shell=True)
@@ -341,10 +582,71 @@ class CursorManager:
                 # Прямой путь к .exe
                 subprocess.Popen([cursor_exe, str(project_path)])
             
-            print(f"Cursor AI запущен: {cursor_exe}")
+            print(f"Cursor AI запущен (Windows): {cursor_exe}")
             return True
         except Exception as e:
-            print(f"Ошибка запуска Cursor: {e}")
+            print(f"Ошибка запуска Cursor в Windows: {e}")
+            return False
+    
+    def _launch_cursor_linux(self, cursor_exe, project_path):
+        """Запуск Cursor в Linux"""
+        try:
+            if cursor_exe in ["cursor", "code"]:
+                # Команды в PATH
+                subprocess.Popen([cursor_exe, str(project_path)])
+            elif cursor_exe.endswith('.AppImage'):
+                # AppImage файлы
+                # Делаем AppImage исполняемым если нужно
+                os.chmod(cursor_exe, 0o755)
+                subprocess.Popen([cursor_exe, str(project_path)])
+            elif '/snap/' in cursor_exe:
+                # Snap пакет
+                subprocess.Popen([cursor_exe, str(project_path)])
+            elif '/flatpak/' in cursor_exe:
+                # Flatpak
+                subprocess.Popen(['flatpak', 'run', 'com.cursor.Cursor', str(project_path)])
+            else:
+                # Обычный исполняемый файл
+                # Делаем файл исполняемым если нужно
+                try:
+                    os.chmod(cursor_exe, 0o755)
+                except:
+                    pass
+                subprocess.Popen([cursor_exe, str(project_path)])
+            
+            print(f"Cursor AI запущен (Linux): {cursor_exe}")
+            return True
+        except Exception as e:
+            print(f"Ошибка запуска Cursor в Linux: {e}")
+            return False
+    
+    def _launch_cursor_macos(self, cursor_exe, project_path):
+        """Запуск Cursor в macOS"""
+        try:
+            if cursor_exe in ["cursor", "code"]:
+                # Команды в PATH
+                subprocess.Popen([cursor_exe, str(project_path)])
+            elif '.app' in cursor_exe:
+                # macOS приложение
+                subprocess.Popen(['open', '-a', cursor_exe, str(project_path)])
+            else:
+                # Обычный исполняемый файл
+                subprocess.Popen([cursor_exe, str(project_path)])
+            
+            print(f"Cursor AI запущен (macOS): {cursor_exe}")
+            return True
+        except Exception as e:
+            print(f"Ошибка запуска Cursor в macOS: {e}")
+            return False
+    
+    def _launch_cursor_generic(self, cursor_exe, project_path):
+        """Универсальный запуск Cursor"""
+        try:
+            subprocess.Popen([cursor_exe, str(project_path)])
+            print(f"Cursor AI запущен (generic): {cursor_exe}")
+            return True
+        except Exception as e:
+            print(f"Ошибка универсального запуска Cursor: {e}")
             return False
     
     def copy_to_clipboard(self, text, root_widget):
@@ -366,11 +668,14 @@ class CursorManager:
         Args:
             delay_seconds (int): Задержка перед вставкой
         """
-        try:
-            time.sleep(delay_seconds)
-            pyautogui.hotkey('ctrl', 'v')
-        except Exception as e:
-            print(f"Ошибка автовставки: {e}")
+        if PYAUTOGUI_AVAILABLE:
+            try:
+                time.sleep(delay_seconds)
+                pyautogui.hotkey('ctrl', 'v')
+            except Exception as e:
+                print(f"Ошибка автовставки: {e}")
+        else:
+            print("Автовставка промптов отключена из-за отсутствия pyautogui")
     
     def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None):
         """
@@ -415,8 +720,8 @@ class CursorManager:
                 if progress_callback:
                     progress_callback("🎨 Запуск генерации изображений...")
                 
-                # Создаем генератор в тихом режиме с поддержкой Icons8
-                image_generator = ImageGenerator(silent_mode=True, use_icons8_for_favicons=True)
+                # Создаем генератор в тихом режиме 
+                image_generator = ImageGenerator(silent_mode=True)
                 
                 # Генерируем изображения
                 results = image_generator.generate_thematic_set(

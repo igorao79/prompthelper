@@ -2,6 +2,7 @@
 
 """
 Главное окно приложения генератора лендингов
+Обновлено с современным дизайном 2024
 """
 
 import tkinter as tk
@@ -20,6 +21,7 @@ from generators.prompt_generator import create_landing_prompt
 
 from .components.country_combobox import CountrySearchCombobox
 from .components.theme_combobox import ThemeHistoryCombobox
+from .styles.modern_theme import ModernTheme
 
 
 class LandingPageGeneratorGUI:
@@ -27,9 +29,23 @@ class LandingPageGeneratorGUI:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Генератор Лендингов v2.0")
-        self.root.geometry("850x900")
+        self.root.title("✨ Генератор Лендингов v2.0 — Современный")
+        self.root.geometry("900x950")
         self.root.resizable(True, True)
+        
+        # Современная тема
+        self.theme = ModernTheme()
+        self.theme.apply_to_root(self.root)
+        
+        # Улучшенные настройки окна
+        self.root.minsize(800, 700)
+        
+        # Попытка установить иконку окна
+        try:
+            # Можно добавить ico файл позже
+            pass
+        except:
+            pass
         
         # Компоненты
         self.city_generator = CityGenerator()
@@ -75,18 +91,31 @@ class LandingPageGeneratorGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
     def setup_ui(self):
-        """Создает интерфейс приложения"""
+        """Создает современный интерфейс приложения"""
         try:
-            # Заголовок
-            header = tk.Label(
-                self.root, 
-                text="🚀 Генератор Лендингов v2.0 🚀", 
-                font=("Arial", 12, "bold"), 
-                bg="#2c3e50", 
-                fg="white",
-                pady=8
+            # Современный заголовок с градиентом (имитация)
+            header_frame = self.theme.create_modern_frame(self.root, bg=self.theme.colors.PRIMARY)
+            header_frame.pack(fill="x", padx=0, pady=0)
+            
+            header = self.theme.create_modern_label(
+                header_frame,
+                text="✨ Генератор Лендингов v2.0 — Современный",
+                style="heading_xl",
+                bg=self.theme.colors.PRIMARY,
+                fg=self.theme.colors.TEXT_PRIMARY,
+                pady=15
             )
-            header.pack(fill="x")
+            header.pack()
+            
+            # Подзаголовок
+            subtitle = self.theme.create_modern_label(
+                header_frame,
+                text="Создавайте профессиональные лендинги с искусственным интеллектом",
+                style="body",
+                bg=self.theme.colors.PRIMARY,
+                fg=self.theme.colors.TEXT_SECONDARY
+            )
+            subtitle.pack()
             
             # Создаем прокручиваемую область с канвасом и скроллбаром
             self.create_scrollable_frame()
@@ -122,17 +151,36 @@ class LandingPageGeneratorGUI:
             raise
         
     def create_scrollable_frame(self):
-        """Создает прокручиваемую область с канвасом и скроллбаром"""
-        # Основной контейнер
-        main_container = tk.Frame(self.root, bg="#f0f0f0")
-        main_container.pack(fill="both", expand=True)
+        """Создает современную прокручиваемую область с канвасом и скроллбаром"""
+        # Основной контейнер с современными стилями
+        main_container = self.theme.create_modern_frame(
+            self.root,
+            bg=self.theme.colors.BACKGROUND,
+            highlightthickness=0
+        )
+        main_container.pack(fill="both", expand=True, padx=10, pady=(10, 10))
         
-        # Создаем канвас и скроллбар
-        self.canvas = tk.Canvas(main_container, bg="#f0f0f0", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=self.canvas.yview)
+        # Создаем канвас и современный скроллбар
+        self.canvas = tk.Canvas(
+            main_container, 
+            bg=self.theme.colors.BACKGROUND, 
+            highlightthickness=0,
+            borderwidth=0
+        )
         
-        # Фрейм для содержимого
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#f0f0f0")
+        scrollbar = ttk.Scrollbar(
+            main_container, 
+            orient="vertical", 
+            command=self.canvas.yview,
+            style="Modern.Vertical.TScrollbar"
+        )
+        
+        # Фрейм для содержимого с современным стилем
+        self.scrollable_frame = self.theme.create_modern_frame(
+            self.canvas,
+            bg=self.theme.colors.BACKGROUND,
+            highlightthickness=0
+        )
         
         # Привязываем скроллбар к канвасу
         self.canvas.configure(yscrollcommand=scrollbar.set)
@@ -162,344 +210,396 @@ class LandingPageGeneratorGUI:
         # Привязываем скролл мыши к канвасу и всем дочерним элементам
         self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
-        # Добавляем отступы для содержимого
-        self.scrollable_frame.configure(padx=15, pady=10)
+        # Добавляем современные отступы для содержимого
+        self.scrollable_frame.configure(padx=20, pady=15)
     
     def create_save_path_section(self):
-        """Создает секцию выбора папки для сохранения"""
-        section = tk.LabelFrame(
+        """Создает современную секцию выбора папки для сохранения"""
+        section = self.theme.create_modern_labelframe(
             self.scrollable_frame, 
-            text="📁 Папка для создания проектов", 
-            font=("Arial", 9, "bold"),
-            padx=8, 
-            pady=5
+            text=f"{self.theme.get_icon('folder')} Папка для создания проектов",
+            padx=15, 
+            pady=12
         )
-        section.pack(fill="x", pady=(0, 8), ipady=2)
+        section.pack(fill="x", pady=(0, 15), ipady=8)
         
-        path_frame = tk.Frame(section)
-        path_frame.pack(fill="x")
+        path_frame = self.theme.create_modern_frame(
+            section,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
+        path_frame.pack(fill="x", pady=(5, 0))
         
-        # Поле пути
-        path_entry = tk.Entry(
+        # Современное поле пути
+        path_entry = self.theme.create_modern_entry(
             path_frame,
             textvariable=self.save_path_var,
-            font=("Arial", 12),
-            state="readonly"
+            state="readonly",
+            font=self.theme.typography.body_lg()
         )
-        path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=3)
+        path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10), ipady=8)
         
-        # Кнопка выбора папки
-        browse_btn = tk.Button(
+        # Современная кнопка выбора папки
+        browse_btn = self.theme.create_modern_button(
             path_frame,
-            text="📂 Выбрать",
+            text=f"{self.theme.get_icon('folder')} Выбрать",
             command=self.browse_save_path,
-            bg="#3498db",
-            fg="white",
-            font=("Arial", 8, "bold"),
-            padx=8,
-            pady=3
+            style="primary",
+            font=self.theme.typography.button_md()
         )
-        browse_btn.pack(side="right", padx=(0, 3))
+        browse_btn.pack(side="right", padx=(0, 8))
         
-        # Кнопка сброса на рабочий стол
-        reset_btn = tk.Button(
+        # Современная кнопка сброса на рабочий стол
+        reset_btn = self.theme.create_modern_button(
             path_frame,
-            text="🏠 Рабочий стол",
+            text=f"{self.theme.get_icon('home')} Рабочий стол",
             command=self.reset_to_desktop,
-            bg="#95a5a6",
-            fg="white",
-            font=("Arial", 12),
-            padx=5,
-            pady=3
+            style="secondary",
+            font=self.theme.typography.button_md()
         )
         reset_btn.pack(side="right")
     
     def create_theme_section(self):
-        """Создает секцию тематики"""
-        section = tk.LabelFrame(
+        """Создает современную секцию тематики"""
+        section = self.theme.create_modern_labelframe(
             self.scrollable_frame, 
-            text="🎯 Тематика лендинга", 
-            font=("Arial", 9, "bold"),
-            padx=8, 
-            pady=5
+            text=f"{self.theme.get_icon('target')} Тематика лендинга",
+            padx=15, 
+            pady=12
         )
-        section.pack(fill="x", pady=(0, 8), ipady=2)
+        section.pack(fill="x", pady=(0, 15), ipady=8)
         
-        # Комбобокс с историей
+        # Комбобокс с историей (обновляем стили)
         self.theme_combo = ThemeHistoryCombobox(section, self.theme_var)
-        self.theme_combo.pack(fill="x")
+        self.theme_combo.pack(fill="x", pady=(5, 0))
         self.theme_combo.set_history(self.settings_manager.get_theme_history())
         
-        # Подсказки
-        theme_hint = tk.Label(
+        # Современные подсказки
+        theme_hint = self.theme.create_modern_label(
             section,
-            text="Примеры: Продажа недвижимости, Строительство домов, Ремонт квартир",
-            font=("Arial", 12),
-            fg="#666",
-            wraplength=600
+            text="💡 Примеры: Продажа недвижимости, Строительство домов, Ремонт квартир",
+            style="caption",
+            bg=self.theme.colors.SURFACE,
+            wraplength=650
         )
-        theme_hint.pack(anchor="w", pady=(2, 0))
+        theme_hint.pack(anchor="w", pady=(8, 0))
     
     def create_country_section(self):
-        """Создает секцию выбора страны"""
-        section = tk.LabelFrame(
+        """Создает современную секцию выбора страны"""
+        section = self.theme.create_modern_labelframe(
             self.scrollable_frame, 
-            text="🌍 Страна и город", 
-            font=("Arial", 9, "bold"),
-            padx=8, 
-            pady=5
+            text=f"{self.theme.get_icon('globe')} Страна и город",
+            padx=15, 
+            pady=12
         )
-        section.pack(fill="x", pady=(0, 8), ipady=2)
+        section.pack(fill="x", pady=(0, 15), ipady=8)
         
-        # Комбобокс с поиском стран
+        # Комбобокс с поиском стран (обновляем стили)
         self.country_combo = CountrySearchCombobox(
             section,
             settings_manager=self.settings_manager,
             textvariable=self.selected_country,
             on_select=self.on_country_select
         )
-        self.country_combo.pack(fill="x")
+        self.country_combo.pack(fill="x", pady=(5, 0))
         
-        # Инструкция
-        instruction = tk.Label(
+        # Современная инструкция
+        instruction = self.theme.create_modern_label(
             section,
-            text="💡 Начните печатать для поиска. ⭐ для избранного.",
-            font=("Arial", 12),
-            fg="#666"
+            text=f"💡 Начните печатать для поиска. {self.theme.get_icon('star')} для избранного.",
+            style="caption",
+            bg=self.theme.colors.SURFACE
         )
-        instruction.pack(anchor="w", pady=(2, 0))
+        instruction.pack(anchor="w", pady=(8, 0))
     
     def create_info_section(self):
-        """Создает информационную секцию"""
-        section = tk.LabelFrame(
+        """Создает современную информационную секцию"""
+        section = self.theme.create_modern_labelframe(
             self.scrollable_frame, 
-            text="ℹ️ Информация", 
-            font=("Arial", 9, "bold"),
-            padx=8, 
-            pady=5
+            text=f"{self.theme.get_icon('info')} Информация",
+            padx=15, 
+            pady=12
         )
-        section.pack(fill="x", pady=(0, 8), ipady=2)
+        section.pack(fill="x", pady=(0, 15), ipady=8)
         
-        self.language_label = tk.Label(
-            section, 
-            text="Язык: не выбран", 
-            font=("Arial", 12), 
-            fg="#666"
+        # Контейнер для информации
+        info_container = self.theme.create_modern_frame(
+            section,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
         )
-        self.language_label.pack(anchor="w")
+        info_container.pack(fill="x", pady=(5, 0))
         
-        self.city_label = tk.Label(
-            section, 
-            text="Город: не выбран", 
-            font=("Arial", 12), 
-            fg="#666"
+        self.language_label = self.theme.create_modern_label(
+            info_container, 
+            text="🌐 Язык: не выбран", 
+            style="body",
+            bg=self.theme.colors.SURFACE
         )
-        self.city_label.pack(anchor="w")
+        self.language_label.pack(anchor="w", pady=2)
         
-        # Кнопка генерации города
-        city_btn = tk.Button(
-            section, 
+        self.city_label = self.theme.create_modern_label(
+            info_container, 
+            text="🏙️ Город: не выбран", 
+            style="body",
+            bg=self.theme.colors.SURFACE
+        )
+        self.city_label.pack(anchor="w", pady=2)
+        
+        # Современная кнопка генерации города
+        city_btn = self.theme.create_modern_button(
+            info_container, 
             text="🎲 Сгенерировать город", 
             command=self.generate_new_city,
-            bg="#f39c12", 
-            fg="white",
-            font=("Arial", 8, "bold"),
-            padx=5,
-            pady=2
+            style="secondary",
+            font=self.theme.typography.button_sm()
         )
-        city_btn.pack(anchor="w", pady=(3, 0))
+        city_btn.pack(anchor="w", pady=(8, 0))
     
     def create_domain_section(self):
-        """Создает секцию домена"""
-        section = tk.LabelFrame(
+        """Создает современную секцию домена"""
+        section = self.theme.create_modern_labelframe(
             self.scrollable_frame, 
-            text="🌐 Домен", 
-            font=("Arial", 9, "bold"),
-            padx=8, 
-            pady=5
+            text="🌐 Домен сайта",
+            padx=15, 
+            pady=12
         )
-        section.pack(fill="x", pady=(0, 8), ipady=2)
+        section.pack(fill="x", pady=(0, 15), ipady=8)
         
-        domain_entry = tk.Entry(
+        # Современное поле домена
+        domain_entry = self.theme.create_modern_entry(
             section, 
-            textvariable=self.domain_var, 
-            font=("Arial", 13),
+            textvariable=self.domain_var,
+            font=self.theme.typography.body_lg(),
             width=60
         )
-        domain_entry.pack(anchor="w", ipady=3)
+        domain_entry.pack(anchor="w", fill="x", pady=(5, 0), ipady=8)
+        
+        # Подсказка
+        domain_hint = self.theme.create_modern_label(
+            section,
+            text="💡 Введите название домена для вашего проекта (например: my-business)",
+            style="caption",
+            bg=self.theme.colors.SURFACE
+        )
+        domain_hint.pack(anchor="w", pady=(8, 0))
     
     def create_action_buttons(self):
-        """Создает кнопки действий"""
-        section = tk.Frame(self.scrollable_frame)
-        section.pack(fill="x", pady=10)
-        
-        # Фрейм для кнопок промпта
-        prompt_buttons_frame = tk.Frame(section)
-        prompt_buttons_frame.pack(pady=(0, 8))
-        
-        # Кнопка редактирования промпта
-        edit_btn = tk.Button(
-            prompt_buttons_frame,
-            text="✏️ Настроить промпт",
-            command=self.edit_prompt,
-            bg="#9b59b6",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            padx=15,
-            pady=5
+        """Создает современные кнопки действий"""
+        section = self.theme.create_modern_frame(
+            self.scrollable_frame,
+            bg=self.theme.colors.BACKGROUND,
+            highlightthickness=0
         )
-        edit_btn.pack(side="left", padx=(0, 5))
+        section.pack(fill="x", pady=20)
         
-        # Кнопка сброса промпта  
-        reset_btn = tk.Button(
+        # Современный фрейм для кнопок промпта
+        prompt_buttons_frame = self.theme.create_modern_frame(
+            section,
+            bg=self.theme.colors.BACKGROUND,
+            highlightthickness=0
+        )
+        prompt_buttons_frame.pack(pady=(0, 15))
+        
+        # Современная кнопка редактирования промпта
+        edit_btn = self.theme.create_modern_button(
             prompt_buttons_frame,
-            text="🔄 Сбросить",
+            text=f"{self.theme.get_icon('edit')} Настроить промпт",
+            command=self.edit_prompt,
+            style="secondary",
+            font=self.theme.typography.button_md()
+        )
+        edit_btn.pack(side="left", padx=(0, 10))
+        
+        # Современная кнопка сброса промпта  
+        reset_btn = self.theme.create_modern_button(
+            prompt_buttons_frame,
+            text=f"{self.theme.get_icon('reset')} Сбросить",
             command=self.reset_prompt,
-            bg="#95a5a6",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            padx=15,
-            pady=5
+            style="secondary",
+            font=self.theme.typography.button_md()
         )
         reset_btn.pack(side="left")
         
-        # ГЛАВНАЯ КНОПКА - СОЗДАТЬ ЛЕНДИНГ
-        create_button = tk.Button(
+        # Современная кнопка генерации изображений
+        generate_images_button = self.theme.create_modern_button(
             section,
-            text="🚀 СОЗДАТЬ ЛЕНДИНГ",
+            text=f"{self.theme.get_icon('image')} ГЕНЕРИРОВАТЬ ИЗОБРАЖЕНИЯ {self.theme.get_icon('magic')}",
+            command=self.generate_images_only,
+            style="secondary",
+            font=self.theme.typography.button_lg(),
+            padx=30,
+            pady=12
+        )
+        generate_images_button.pack(pady=(0, 10))
+        
+        # ГЛАВНАЯ СОВРЕМЕННАЯ КНОПКА - СОЗДАТЬ ЛЕНДИНГ
+        create_button = self.theme.create_modern_button(
+            section,
+            text=f"{self.theme.get_icon('rocket')} СОЗДАТЬ ЛЕНДИНГ {self.theme.get_icon('magic')}",
             command=self.create_landing,
-            bg="#e74c3c",
-            fg="white", 
-            font=("Arial", 12, "bold"),
-            padx=25,
-            pady=10,
-            relief="raised",
-            bd=3,
-            cursor="hand2"
+            style="primary",
+            font=self.theme.typography.button_lg(),
+            padx=40,
+            pady=15
         )
         create_button.pack()
+        
+        # Добавляем эффект тени к главной кнопке
+        self.theme.add_shadow_effect(create_button)
     
     def create_image_management_section(self):
-        """Создает секцию управления изображениями"""
-        # Основной фрейм секции
-        section = tk.LabelFrame(
+        """Создает современную секцию управления изображениями"""
+        # Современный фрейм секции
+        section = self.theme.create_modern_labelframe(
             self.scrollable_frame, 
-            text="🎨 Управление изображениями", 
-            font=("Arial", 10, "bold"),
-            padx=10,
-            pady=8
+            text=f"{self.theme.get_icon('image')} Управление изображениями",
+            padx=15, 
+            pady=12
         )
-        section.pack(fill="x", pady=10)
+        section.pack(fill="x", pady=(0, 15), ipady=8)
         
-        # Описание
-        description = tk.Label(
+        # Современное описание
+        description = self.theme.create_modern_label(
             section,
             text="Пересоздать отдельные изображения для существующего проекта",
-            font=("Arial", 9),
-            fg="#555555"
+            style="caption",
+            bg=self.theme.colors.SURFACE,
+            wraplength=650
         )
-        description.pack(pady=(0, 8))
+        description.pack(pady=(5, 8), anchor="w")
         
-        # Поле для выбора папки проекта
-        project_frame = tk.Frame(section)
+        # Современное поле для выбора папки проекта
+        project_frame = self.theme.create_modern_frame(
+            section,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
         project_frame.pack(fill="x", pady=(0, 8))
         
-        tk.Label(project_frame, text="Папка проекта:", font=("Arial", 9)).pack(anchor="w")
+        project_label = self.theme.create_modern_label(
+            project_frame, 
+            text="Папка проекта:", 
+            style="body",
+            bg=self.theme.colors.SURFACE
+        )
+        project_label.pack(anchor="w", pady=(0, 5))
         
-        path_frame = tk.Frame(project_frame)
-        path_frame.pack(fill="x", pady=(2, 0))
+        path_frame = self.theme.create_modern_frame(
+            project_frame,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
+        path_frame.pack(fill="x")
         
-        project_entry = tk.Entry(
+        # Современное поле ввода пути
+        project_entry = self.theme.create_modern_entry(
             path_frame, 
             textvariable=self.project_path_var,
-            font=("Arial", 10)
+            font=self.theme.typography.body_lg()
         )
-        project_entry.pack(side="left", fill="x", expand=True)
+        project_entry.pack(side="left", fill="x", expand=True, padx=(0, 10), ipady=8)
         
-        browse_project_btn = tk.Button(
+        # Современная кнопка выбора папки
+        browse_project_btn = self.theme.create_modern_button(
             path_frame,
-            text="📁",
+            text=f"{self.theme.get_icon('folder')} Выбрать",
             command=self.browse_project_path,
-            font=("Arial", 8),
-            padx=8
+            style="secondary",
+            font=self.theme.typography.button_md()
         )
-        browse_project_btn.pack(side="right", padx=(5, 0))
+        browse_project_btn.pack(side="right")
         
-        # Фрейм с кнопками для отдельных изображений
-        buttons_frame = tk.Frame(section)
+        # Современный фрейм с кнопками для отдельных изображений
+        buttons_frame = self.theme.create_modern_frame(
+            section,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
         buttons_frame.pack(fill="x", pady=(8, 0))
         
-        # Создаем кнопки в две строки
-        row1 = tk.Frame(buttons_frame)
-        row1.pack(fill="x", pady=(0, 4))
+        # Создаем современные кнопки в две строки
+        row1 = self.theme.create_modern_frame(
+            buttons_frame,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
+        row1.pack(fill="x", pady=(0, 8))
         
-        row2 = tk.Frame(buttons_frame)
+        row2 = self.theme.create_modern_frame(
+            buttons_frame,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
         row2.pack(fill="x")
         
-        # Первая строка кнопок
+        # Первая строка современных кнопок
         image_buttons_row1 = [
-            ("🖼️ Main", "main", "#e74c3c"),
-            ("📖 About1", "about1", "#3498db"),
-            ("📘 About2", "about2", "#3498db"),
-            ("📙 About3", "about3", "#3498db")
+            ("🖼️ Main", "main"),
+            ("📖 About1", "about1"),
+            ("📘 About2", "about2"),
+            ("📙 About3", "about3")
         ]
         
-        for text, image_name, color in image_buttons_row1:
-            btn = tk.Button(
+        for text, image_name in image_buttons_row1:
+            btn = self.theme.create_modern_button(
                 row1,
                 text=text,
                 command=lambda name=image_name: self.regenerate_single_image(name),
-                bg=color,
-                fg="white",
-                font=("Arial", 8, "bold"),
-                padx=10,
-                pady=3
+                style="primary",
+                font=self.theme.typography.button_md()
             )
             btn.pack(side="left", expand=True, fill="x", padx=2)
         
-        # Вторая строка кнопок
+        # Вторая строка современных кнопок
         image_buttons_row2 = [
-            ("⭐ Review1", "review1", "#f39c12"),
-            ("⭐ Review2", "review2", "#f39c12"),
-            ("⭐ Review3", "review3", "#f39c12"),
-            ("🎯 Favicon", "favicon", "#9b59b6")
+            ("⭐ Review1", "review1"),
+            ("⭐ Review2", "review2"),
+            ("⭐ Review3", "review3"),
+            ("🎯 Favicon", "favicon")
         ]
         
-        for text, image_name, color in image_buttons_row2:
-            btn = tk.Button(
+        for text, image_name in image_buttons_row2:
+            btn = self.theme.create_modern_button(
                 row2,
                 text=text,
                 command=lambda name=image_name: self.regenerate_single_image(name),
-                bg=color,
-                fg="white",
-                font=("Arial", 8, "bold"),
-                padx=10,
-                pady=3
+                style="secondary",
+                font=self.theme.typography.button_md()
             )
             btn.pack(side="left", expand=True, fill="x", padx=2)
         
-        # Кнопка для пересоздания всех изображений
-        regenerate_all_btn = tk.Button(
+        # Современная кнопка для пересоздания всех изображений
+        regenerate_all_btn = self.theme.create_modern_button(
             section,
-            text="🔄 Пересоздать ВСЕ изображения",
+            text=f"{self.theme.get_icon('reset')} Пересоздать ВСЕ изображения",
             command=self.regenerate_all_images,
-            bg="#34495e",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            padx=15,
-            pady=5
+            style="success",
+            font=self.theme.typography.button_lg(),
+            padx=20,
+            pady=8
         )
-        regenerate_all_btn.pack(pady=(8, 0))
+        regenerate_all_btn.pack(pady=(12, 0))
     
     def create_status_section(self):
-        """Создает секцию статуса"""
-        self.status_label = tk.Label(
-            self.scrollable_frame, 
-            text="✅ Готов к работе", 
-            font=("Arial", 12), 
-            fg="#27ae60"
+        """Создает современную секцию статуса"""
+        # Современный статусный контейнер
+        status_container = self.theme.create_modern_frame(
+            self.scrollable_frame,
+            bg=self.theme.colors.CARD,
+            highlightthickness=1,
+            highlightbackground=self.theme.colors.BORDER
         )
-        self.status_label.pack(pady=(8, 0))
+        status_container.pack(fill="x", pady=(15, 0), ipady=10)
+        
+        self.status_label = self.theme.create_modern_label(
+            status_container, 
+            text=f"{self.theme.get_icon('success')} Готов к работе", 
+            style="body",
+            bg=self.theme.colors.CARD,
+            fg=self.theme.colors.SUCCESS
+        )
+        self.status_label.pack(pady=5)
     
     def browse_save_path(self):
         """Выбор папки для сохранения"""
@@ -522,7 +622,10 @@ class LandingPageGeneratorGUI:
         country = self.selected_country.get()
         if country:
             language_display = get_language_display_name(country)
-            self.language_label.config(text=f"Язык: {language_display}", fg="#27ae60")
+            self.language_label.config(
+                text=f"🌐 Язык: {language_display}", 
+                fg=self.theme.colors.SUCCESS
+            )
             self.generate_new_city()
             
     def generate_new_city(self):
@@ -534,7 +637,10 @@ class LandingPageGeneratorGUI:
             
         new_city = self.city_generator.get_random_city(country)
         self.current_city = new_city
-        self.city_label.config(text=f"Город: {new_city}", fg="#27ae60")
+        self.city_label.config(
+            text=f"🏙️ Город: {new_city}", 
+            fg=self.theme.colors.SUCCESS
+        )
         # Сбрасываем промпт при изменении города
         self._reset_prompt_on_change()
     
@@ -630,6 +736,61 @@ class LandingPageGeneratorGUI:
             
         return True, ""
         
+    def generate_images_only(self):
+        """Генерирует только изображения"""
+        if not self.validate_form()[0]:
+            return
+            
+        theme = self.theme_var.get().strip()
+        
+        # Создаем папку для изображений
+        save_path = self.save_path_var.get()
+        media_folder = Path(save_path) / f"{theme}_images"
+        media_folder.mkdir(exist_ok=True)
+        
+        self.update_status("🎨 Генерация изображений...")
+        
+        # Запуск в отдельном потоке
+        threading.Thread(
+            target=self._generate_images_only_process,
+            args=(str(media_folder), theme),
+            daemon=True
+        ).start()
+    
+    def _generate_images_only_process(self, media_path, theme):
+        """Процесс генерации только изображений"""
+        try:
+            from generators.image_generator import ImageGenerator
+            
+            # Создаем генератор
+            image_generator = ImageGenerator(silent_mode=True)
+            
+            # Генерируем полный набор изображений
+            results = image_generator.generate_thematic_set(
+                theme_input=theme,
+                media_dir=media_path,
+                method="1",
+                progress_callback=self.update_status
+            )
+            
+            # Подсчитываем результаты
+            successful_count = results if isinstance(results, int) else 0
+            
+            self.update_status(f"✅ Сгенерировано {successful_count}/8 изображений")
+            
+            messagebox.showinfo(
+                "Готово",
+                f"Генерация изображений завершена!\n\n"
+                f"Успешно: {successful_count}/8 изображений\n"
+                f"Папка: {media_path}\n\n"
+                f"Изображения сохранены и готовы к использованию."
+            )
+            
+        except Exception as e:
+            error_msg = f"Ошибка генерации изображений: {str(e)}"
+            self.update_status(f"❌ {error_msg}")
+            messagebox.showerror("Ошибка", error_msg)
+
     def create_landing(self):
         """Основная функция создания лендинга"""
         # Валидация
@@ -759,8 +920,19 @@ class LandingPageGeneratorGUI:
             messagebox.showerror("Ошибка", error_msg)
     
     def update_status(self, text):
-        """Обновляет статус"""
-        self.status_label.config(text=text)
+        """Обновляет статус с современными цветами"""
+        # Определяем цвет по типу сообщения
+        color = self.theme.colors.TEXT_SECONDARY
+        if "✅" in text or "Готов" in text:
+            color = self.theme.colors.SUCCESS
+        elif "⚠️" in text or "Предупреждение" in text:
+            color = self.theme.colors.WARNING
+        elif "❌" in text or "Ошибка" in text:
+            color = self.theme.colors.DANGER
+        elif "🔄" in text or "Создание" in text or "Генерация" in text:
+            color = self.theme.colors.PRIMARY
+        
+        self.status_label.config(text=text, fg=color)
         self.root.update()
     
     def browse_project_path(self):
@@ -1041,9 +1213,15 @@ class LandingPageGeneratorGUI:
             self.selected_country.set("")
             self.current_city = ""
             
-            # Обновляем отображение
-            self.language_label.config(text="Язык: Не выбран", fg="#7f8c8d")
-            self.city_label.config(text="Город: Не сгенерирован", fg="#7f8c8d")
+            # Обновляем отображение с современными цветами
+            self.language_label.config(
+                text="🌐 Язык: не выбран", 
+                fg=self.theme.colors.TEXT_MUTED
+            )
+            self.city_label.config(
+                text="🏙️ Город: не выбран", 
+                fg=self.theme.colors.TEXT_MUTED
+            )
             
             # Очищаем поисковые поля в комбобоксах БЕЗОПАСНО через textvariable
             if hasattr(self.country_combo, 'search_var'):

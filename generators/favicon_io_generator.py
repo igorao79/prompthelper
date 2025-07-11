@@ -11,6 +11,7 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 import zipfile
 import tempfile
+import platform
 
 class FaviconIOGenerator:
     """Генератор фавиконок через favicon.io API"""
@@ -155,13 +156,31 @@ class FaviconIOGenerator:
             
             # Пытаемся загрузить красивый шрифт
             try:
-                # Пытаемся найти системные шрифты
+                # Кроссплатформенные пути к системным шрифтам
                 font_paths = [
+                    # Windows
                     "C:/Windows/Fonts/arial.ttf",
                     "C:/Windows/Fonts/calibri.ttf", 
                     "C:/Windows/Fonts/segoeui.ttf",
-                    "/System/Library/Fonts/Arial.ttf",  # macOS
-                    "/usr/share/fonts/truetype/arial.ttf"  # Linux
+                    
+                    # macOS
+                    "/System/Library/Fonts/Arial.ttf",
+                    "/System/Library/Fonts/Helvetica.ttc",
+                    
+                    # Linux - различные дистрибутивы
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                    "/usr/share/fonts/TTF/arial.ttf",
+                    "/usr/share/fonts/truetype/arial.ttf",
+                    "/usr/share/fonts/truetype/ubuntu/Ubuntu-Regular.ttf",
+                    "/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf",
+                    
+                    # Linux альтернативные пути
+                    "/usr/local/share/fonts/arial.ttf",
+                    "/opt/fonts/arial.ttf",
+                    str(Path.home() / ".fonts/arial.ttf"),
+                    str(Path.home() / ".local/share/fonts/arial.ttf"),
                 ]
                 
                 font = None
@@ -335,11 +354,24 @@ class FaviconIOGenerator:
             font_size = int(size * 0.8)  # 80% от размера
             
             try:
-                # Для Windows - используем Segoe UI Emoji
+                # Кроссплатформенные шрифты эмодзи
                 emoji_fonts = [
+                    # Windows
                     "C:/Windows/Fonts/seguiemj.ttf",  # Windows 10+
                     "C:/Windows/Fonts/segoe-ui-emoji.ttf",
-                    "/System/Library/Fonts/Apple Color Emoji.ttc",  # macOS
+                    
+                    # macOS
+                    "/System/Library/Fonts/Apple Color Emoji.ttc",
+                    
+                    # Linux - различные дистрибутивы
+                    "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf",
+                    "/usr/share/fonts/truetype/emoji/NotoColorEmoji.ttf",
+                    "/usr/share/fonts/emoji/NotoColorEmoji.ttf",
+                    "/usr/share/fonts/TTF/NotoColorEmoji.ttf",
+                    "/usr/share/fonts/opentype/noto/NotoColorEmoji.ttf",
+                    "/usr/local/share/fonts/NotoColorEmoji.ttf",
+                    str(Path.home() / ".fonts/NotoColorEmoji.ttf"),
+                    str(Path.home() / ".local/share/fonts/NotoColorEmoji.ttf"),
                 ]
                 
                 font = None
@@ -400,21 +432,20 @@ class FaviconIOGenerator:
             if not self.silent_mode:
                 print(f"🚀 Генерирую фавиконку для тематики: {theme}")
             
-            # НОВЫЙ ПОДХОД: Используем DiceBear API
+            # ПРИОРИТЕТНЫЙ МЕТОД: Простой тематический фавикон (НЕ АВАТАРЫ!)
             try:
-                from .dicebear_favicon import DiceBearFavicon
-                dicebear_gen = DiceBearFavicon(silent_mode=self.silent_mode)
-                result = dicebear_gen.generate_favicon(theme, output_path, size)
+                from .simple_thematic_favicon import SimpleThematicFavicon
+                simple_favicon = SimpleThematicFavicon(silent_mode=self.silent_mode)
                 
-                if result:
+                if simple_favicon.create_thematic_favicon(theme, output_path):
                     if not self.silent_mode:
-                        print(f"✅ Фавиконка создана методом: dicebear")
+                        print(f"✅ Фавиконка создана методом: тематическая иконка")
                     return True
             except Exception as e:
                 if not self.silent_mode:
-                    print(f"⚠️ DiceBear метод не сработал: {e}")
+                    print(f"⚠️ Тематический генератор не сработал: {e}")
             
-            # Fallback на старые методы
+            # Fallback методы
             methods = [
                 ('emoji', self.generate_emoji_favicon),
                 ('text', self.generate_text_favicon)
@@ -436,6 +467,20 @@ class FaviconIOGenerator:
                     if not self.silent_mode:
                         print(f"⚠️ Метод {method_name} не сработал: {e}")
                     continue
+            
+            # ПОСЛЕДНИЙ РЕЗЕРВ: DiceBear (только если все остальное не сработало)
+            try:
+                from .dicebear_favicon import DiceBearFavicon
+                dicebear_gen = DiceBearFavicon(silent_mode=self.silent_mode)
+                result = dicebear_gen.generate_favicon(theme, output_path, size)
+                
+                if result:
+                    if not self.silent_mode:
+                        print(f"✅ Фавиконка создана методом: dicebear (резерв)")
+                    return True
+            except Exception as e:
+                if not self.silent_mode:
+                    print(f"⚠️ DiceBear резервный метод не сработал: {e}")
             
             # Если ничего не сработало
             if not self.silent_mode:

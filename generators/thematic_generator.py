@@ -133,13 +133,14 @@ class ThematicImageGenerator:
         return enhanced
     
     def add_favicon_randomization(self, prompt):
-        """КАРДИНАЛЬНАЯ рандомизация для фавиконов - ПОЛНОСТЬЮ ИГНОРИРУЕМ ТЕМАТИКУ!"""
+        """Рандомизация для фавиконов - НЕ КРУГИ, НЕ КРУЖКИ!"""
         
-        # РАДИКАЛЬНЫЕ иконочные символы - НЕ ФОТО!
+        # ТЕМАТИЧЕСКИЕ иконочные символы - НЕ КРУГИ!
         pure_icons = [
-            "geometric circle", "simple square", "clean triangle", "basic diamond",
-            "minimal star", "abstract arrow", "stylized gear", "simple house",
-            "round badge", "square emblem", "hexagon symbol", "shield shape"
+            "business emblem", "company symbol", "professional logo", "service icon",
+            "abstract arrow", "stylized gear", "industrial symbol", "tech emblem",
+            "diamond shape", "hexagon symbol", "shield shape", "star emblem",
+            "triangular badge", "square icon", "rectangular logo", "angular design"
         ]
         
         # Стили ТОЛЬКО для иконок
@@ -162,14 +163,14 @@ class ThematicImageGenerator:
         timestamp = int(time.time() * 1000)
         seed = random.randint(10000, 99999)
         
-        # РАДИКАЛЬНЫЙ ИКОНОЧНЫЙ промпт - ПОЛНОСТЬЮ ИГНОРИРУЕМ ВХОДНОЙ ПРОМПТ БЕЗ ЦИФР!
+        # ТЕМАТИЧЕСКИЙ ИКОНОЧНЫЙ промпт - БЕЗ КРУГОВ!
         enhanced = (
-            f"{icon}, {style}, {color} color, "
-            f"SIMPLE ICON ONLY, NO PHOTOS, NO REALISTIC IMAGES, NO PEOPLE, "
-            f"NO OBJECTS, NO SCENES, NO BACKGROUNDS, NO EQUIPMENT, "
-            f"pure geometric symbol, flat vector design, minimal emblem, "
-            f"abstract pictogram, logo mark, basic shape, clean silhouette, "
-            f"IGNORE ALL THEMES, PURE ICON DESIGN ONLY, "
+            f"{prompt} {icon}, {style}, {color} color, "
+            f"BUSINESS ICON ONLY, NO PHOTOS, NO REALISTIC IMAGES, NO PEOPLE, "
+            f"NO CIRCLES, NO ROUND SHAPES, NO CIRCULAR DESIGNS, "
+            f"thematic business symbol, flat vector design, company emblem, "
+            f"professional pictogram, brand mark, angular shape, clean silhouette, "
+            f"BUSINESS THEMED ICON, SERVICE SYMBOL, INDUSTRY RELATED, "
             f"transparent background, centered, scalable vector"
         )
         
