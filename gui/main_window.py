@@ -1,0 +1,1102 @@
+# -*- coding: utf-8 -*-
+
+"""
+Главное окно приложения генератора лендингов
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import threading
+from pathlib import Path
+
+from shared.data import COUNTRIES_DATA, THEME_COLORS
+from shared.city_generator import CityGenerator
+from shared.settings_manager import SettingsManager, get_desktop_path
+from shared.helpers import (validate_domain, format_status_message, 
+                           get_language_by_country, get_language_display_name,
+                  open_text_editor, check_directory_exists)
+from core.cursor_manager import CursorManager
+from generators.prompt_generator import create_landing_prompt
+
+from .components.country_combobox import CountrySearchCombobox
+from .components.theme_combobox import ThemeHistoryCombobox
+
+
+class LandingPageGeneratorGUI:
+    """Основной класс GUI приложения"""
+    
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Генератор Лендингов v2.0")
+        self.root.geometry("850x900")
+        self.root.resizable(True, True)
+        
+        # Компоненты
+        self.city_generator = CityGenerator()
+        self.cursor_manager = CursorManager()
+        self.settings_manager = SettingsManager()
+        
+        # Переменные с ограничениями длины
+        self.selected_country = tk.StringVar()
+        
+        # Тематика с ограничением 50 символов
+        self.theme_var = tk.StringVar()
+        def limit_theme_length(*args):
+            value = self.theme_var.get()
+            if len(value) > 50:
+                self.theme_var.set(value[:50])
+        self.theme_var.trace_add("write", limit_theme_length)
+        
+        # Домен с ограничением 50 символов  
+        self.domain_var = tk.StringVar()
+        def limit_domain_length(*args):
+            value = self.domain_var.get()
+            if len(value) > 50:
+                self.domain_var.set(value[:50])
+        self.domain_var.trace_add("write", limit_domain_length)
+        self.save_path_var = tk.StringVar(value=self.settings_manager.get_save_path())
+        self.project_path_var = tk.StringVar()
+        self.last_created_project_path = None
+        
+        # Привязываем обработчики изменений для автосброса промпта
+        self.theme_var.trace('w', self._on_data_change)
+        self.selected_country.trace('w', self._on_data_change)
+        self.domain_var.trace('w', self._on_data_change)
+        self.current_city = ""
+        self.current_prompt = self.settings_manager.get_prompt()
+        
+        # Окна
+        self.prompt_window = None
+        
+        # Настройка интерфейса
+        self.setup_ui()
+        
+        # Обработчик закрытия окна
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+    def setup_ui(self):
+        """Создает интерфейс приложения"""
+        try:
+            # Заголовок
+            header = tk.Label(
+                self.root, 
+                text="🚀 Генератор Лендингов v2.0 🚀", 
+                font=("Arial", 12, "bold"), 
+                bg="#2c3e50", 
+                fg="white",
+                pady=8
+            )
+            header.pack(fill="x")
+            
+            # Создаем прокручиваемую область с канвасом и скроллбаром
+            self.create_scrollable_frame()
+            
+            # Блок выбора папки для сохранения
+            self.create_save_path_section()
+            
+            # Блок тематики
+            self.create_theme_section()
+            
+            # Блок выбора страны
+            self.create_country_section()
+            
+            # Информационный блок
+            self.create_info_section()
+            
+            # Блок домена
+            self.create_domain_section()
+            
+            # Кнопки действий
+            self.create_action_buttons()
+            
+            # Секция управления изображениями
+            self.create_image_management_section()
+            
+            # Статус
+            self.create_status_section()
+            
+        except Exception as e:
+            print(f"❌ Ошибка создания интерфейса: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+        
+    def create_scrollable_frame(self):
+        """Создает прокручиваемую область с канвасом и скроллбаром"""
+        # Основной контейнер
+        main_container = tk.Frame(self.root, bg="#f0f0f0")
+        main_container.pack(fill="both", expand=True)
+        
+        # Создаем канвас и скроллбар
+        self.canvas = tk.Canvas(main_container, bg="#f0f0f0", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=self.canvas.yview)
+        
+        # Фрейм для содержимого
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#f0f0f0")
+        
+        # Привязываем скроллбар к канвасу
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Размещаем элементы
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Добавляем фрейм в канвас
+        self.canvas_frame = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        
+        # Обработчики событий
+        def configure_scroll_region(event):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
+        def configure_canvas_width(event):
+            canvas_width = event.width
+            self.canvas.itemconfig(self.canvas_frame, width=canvas_width)
+        
+        def _on_mousewheel(event):
+            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Привязываем обработчики
+        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
+        self.canvas.bind("<Configure>", configure_canvas_width)
+        
+        # Привязываем скролл мыши к канвасу и всем дочерним элементам
+        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Добавляем отступы для содержимого
+        self.scrollable_frame.configure(padx=15, pady=10)
+    
+    def create_save_path_section(self):
+        """Создает секцию выбора папки для сохранения"""
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="📁 Папка для создания проектов", 
+            font=("Arial", 9, "bold"),
+            padx=8, 
+            pady=5
+        )
+        section.pack(fill="x", pady=(0, 8), ipady=2)
+        
+        path_frame = tk.Frame(section)
+        path_frame.pack(fill="x")
+        
+        # Поле пути
+        path_entry = tk.Entry(
+            path_frame,
+            textvariable=self.save_path_var,
+            font=("Arial", 12),
+            state="readonly"
+        )
+        path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=3)
+        
+        # Кнопка выбора папки
+        browse_btn = tk.Button(
+            path_frame,
+            text="📂 Выбрать",
+            command=self.browse_save_path,
+            bg="#3498db",
+            fg="white",
+            font=("Arial", 8, "bold"),
+            padx=8,
+            pady=3
+        )
+        browse_btn.pack(side="right", padx=(0, 3))
+        
+        # Кнопка сброса на рабочий стол
+        reset_btn = tk.Button(
+            path_frame,
+            text="🏠 Рабочий стол",
+            command=self.reset_to_desktop,
+            bg="#95a5a6",
+            fg="white",
+            font=("Arial", 12),
+            padx=5,
+            pady=3
+        )
+        reset_btn.pack(side="right")
+    
+    def create_theme_section(self):
+        """Создает секцию тематики"""
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="🎯 Тематика лендинга", 
+            font=("Arial", 9, "bold"),
+            padx=8, 
+            pady=5
+        )
+        section.pack(fill="x", pady=(0, 8), ipady=2)
+        
+        # Комбобокс с историей
+        self.theme_combo = ThemeHistoryCombobox(section, self.theme_var)
+        self.theme_combo.pack(fill="x")
+        self.theme_combo.set_history(self.settings_manager.get_theme_history())
+        
+        # Подсказки
+        theme_hint = tk.Label(
+            section,
+            text="Примеры: Продажа недвижимости, Строительство домов, Ремонт квартир",
+            font=("Arial", 12),
+            fg="#666",
+            wraplength=600
+        )
+        theme_hint.pack(anchor="w", pady=(2, 0))
+    
+    def create_country_section(self):
+        """Создает секцию выбора страны"""
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="🌍 Страна и город", 
+            font=("Arial", 9, "bold"),
+            padx=8, 
+            pady=5
+        )
+        section.pack(fill="x", pady=(0, 8), ipady=2)
+        
+        # Комбобокс с поиском стран
+        self.country_combo = CountrySearchCombobox(
+            section,
+            settings_manager=self.settings_manager,
+            textvariable=self.selected_country,
+            on_select=self.on_country_select
+        )
+        self.country_combo.pack(fill="x")
+        
+        # Инструкция
+        instruction = tk.Label(
+            section,
+            text="💡 Начните печатать для поиска. ⭐ для избранного.",
+            font=("Arial", 12),
+            fg="#666"
+        )
+        instruction.pack(anchor="w", pady=(2, 0))
+    
+    def create_info_section(self):
+        """Создает информационную секцию"""
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="ℹ️ Информация", 
+            font=("Arial", 9, "bold"),
+            padx=8, 
+            pady=5
+        )
+        section.pack(fill="x", pady=(0, 8), ipady=2)
+        
+        self.language_label = tk.Label(
+            section, 
+            text="Язык: не выбран", 
+            font=("Arial", 12), 
+            fg="#666"
+        )
+        self.language_label.pack(anchor="w")
+        
+        self.city_label = tk.Label(
+            section, 
+            text="Город: не выбран", 
+            font=("Arial", 12), 
+            fg="#666"
+        )
+        self.city_label.pack(anchor="w")
+        
+        # Кнопка генерации города
+        city_btn = tk.Button(
+            section, 
+            text="🎲 Сгенерировать город", 
+            command=self.generate_new_city,
+            bg="#f39c12", 
+            fg="white",
+            font=("Arial", 8, "bold"),
+            padx=5,
+            pady=2
+        )
+        city_btn.pack(anchor="w", pady=(3, 0))
+    
+    def create_domain_section(self):
+        """Создает секцию домена"""
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="🌐 Домен", 
+            font=("Arial", 9, "bold"),
+            padx=8, 
+            pady=5
+        )
+        section.pack(fill="x", pady=(0, 8), ipady=2)
+        
+        domain_entry = tk.Entry(
+            section, 
+            textvariable=self.domain_var, 
+            font=("Arial", 13),
+            width=60
+        )
+        domain_entry.pack(anchor="w", ipady=3)
+    
+    def create_action_buttons(self):
+        """Создает кнопки действий"""
+        section = tk.Frame(self.scrollable_frame)
+        section.pack(fill="x", pady=10)
+        
+        # Фрейм для кнопок промпта
+        prompt_buttons_frame = tk.Frame(section)
+        prompt_buttons_frame.pack(pady=(0, 8))
+        
+        # Кнопка редактирования промпта
+        edit_btn = tk.Button(
+            prompt_buttons_frame,
+            text="✏️ Настроить промпт",
+            command=self.edit_prompt,
+            bg="#9b59b6",
+            fg="white",
+            font=("Arial", 9, "bold"),
+            padx=15,
+            pady=5
+        )
+        edit_btn.pack(side="left", padx=(0, 5))
+        
+        # Кнопка сброса промпта  
+        reset_btn = tk.Button(
+            prompt_buttons_frame,
+            text="🔄 Сбросить",
+            command=self.reset_prompt,
+            bg="#95a5a6",
+            fg="white",
+            font=("Arial", 9, "bold"),
+            padx=15,
+            pady=5
+        )
+        reset_btn.pack(side="left")
+        
+        # ГЛАВНАЯ КНОПКА - СОЗДАТЬ ЛЕНДИНГ
+        create_button = tk.Button(
+            section,
+            text="🚀 СОЗДАТЬ ЛЕНДИНГ",
+            command=self.create_landing,
+            bg="#e74c3c",
+            fg="white", 
+            font=("Arial", 12, "bold"),
+            padx=25,
+            pady=10,
+            relief="raised",
+            bd=3,
+            cursor="hand2"
+        )
+        create_button.pack()
+    
+    def create_image_management_section(self):
+        """Создает секцию управления изображениями"""
+        # Основной фрейм секции
+        section = tk.LabelFrame(
+            self.scrollable_frame, 
+            text="🎨 Управление изображениями", 
+            font=("Arial", 10, "bold"),
+            padx=10,
+            pady=8
+        )
+        section.pack(fill="x", pady=10)
+        
+        # Описание
+        description = tk.Label(
+            section,
+            text="Пересоздать отдельные изображения для существующего проекта",
+            font=("Arial", 9),
+            fg="#555555"
+        )
+        description.pack(pady=(0, 8))
+        
+        # Поле для выбора папки проекта
+        project_frame = tk.Frame(section)
+        project_frame.pack(fill="x", pady=(0, 8))
+        
+        tk.Label(project_frame, text="Папка проекта:", font=("Arial", 9)).pack(anchor="w")
+        
+        path_frame = tk.Frame(project_frame)
+        path_frame.pack(fill="x", pady=(2, 0))
+        
+        project_entry = tk.Entry(
+            path_frame, 
+            textvariable=self.project_path_var,
+            font=("Arial", 10)
+        )
+        project_entry.pack(side="left", fill="x", expand=True)
+        
+        browse_project_btn = tk.Button(
+            path_frame,
+            text="📁",
+            command=self.browse_project_path,
+            font=("Arial", 8),
+            padx=8
+        )
+        browse_project_btn.pack(side="right", padx=(5, 0))
+        
+        # Фрейм с кнопками для отдельных изображений
+        buttons_frame = tk.Frame(section)
+        buttons_frame.pack(fill="x", pady=(8, 0))
+        
+        # Создаем кнопки в две строки
+        row1 = tk.Frame(buttons_frame)
+        row1.pack(fill="x", pady=(0, 4))
+        
+        row2 = tk.Frame(buttons_frame)
+        row2.pack(fill="x")
+        
+        # Первая строка кнопок
+        image_buttons_row1 = [
+            ("🖼️ Main", "main", "#e74c3c"),
+            ("📖 About1", "about1", "#3498db"),
+            ("📘 About2", "about2", "#3498db"),
+            ("📙 About3", "about3", "#3498db")
+        ]
+        
+        for text, image_name, color in image_buttons_row1:
+            btn = tk.Button(
+                row1,
+                text=text,
+                command=lambda name=image_name: self.regenerate_single_image(name),
+                bg=color,
+                fg="white",
+                font=("Arial", 8, "bold"),
+                padx=10,
+                pady=3
+            )
+            btn.pack(side="left", expand=True, fill="x", padx=2)
+        
+        # Вторая строка кнопок
+        image_buttons_row2 = [
+            ("⭐ Review1", "review1", "#f39c12"),
+            ("⭐ Review2", "review2", "#f39c12"),
+            ("⭐ Review3", "review3", "#f39c12"),
+            ("🎯 Favicon", "favicon", "#9b59b6")
+        ]
+        
+        for text, image_name, color in image_buttons_row2:
+            btn = tk.Button(
+                row2,
+                text=text,
+                command=lambda name=image_name: self.regenerate_single_image(name),
+                bg=color,
+                fg="white",
+                font=("Arial", 8, "bold"),
+                padx=10,
+                pady=3
+            )
+            btn.pack(side="left", expand=True, fill="x", padx=2)
+        
+        # Кнопка для пересоздания всех изображений
+        regenerate_all_btn = tk.Button(
+            section,
+            text="🔄 Пересоздать ВСЕ изображения",
+            command=self.regenerate_all_images,
+            bg="#34495e",
+            fg="white",
+            font=("Arial", 9, "bold"),
+            padx=15,
+            pady=5
+        )
+        regenerate_all_btn.pack(pady=(8, 0))
+    
+    def create_status_section(self):
+        """Создает секцию статуса"""
+        self.status_label = tk.Label(
+            self.scrollable_frame, 
+            text="✅ Готов к работе", 
+            font=("Arial", 12), 
+            fg="#27ae60"
+        )
+        self.status_label.pack(pady=(8, 0))
+    
+    def browse_save_path(self):
+        """Выбор папки для сохранения"""
+        folder = filedialog.askdirectory(
+            title="Выберите папку для создания проектов",
+            initialdir=self.save_path_var.get()
+        )
+        if folder:
+            self.save_path_var.set(folder)
+            self.settings_manager.set_save_path(folder)
+    
+    def reset_to_desktop(self):
+        """Сброс на рабочий стол"""
+        desktop = str(get_desktop_path())
+        self.save_path_var.set(desktop)
+        self.settings_manager.set_save_path(desktop)
+    
+    def on_country_select(self):
+        """Обработчик выбора страны"""
+        country = self.selected_country.get()
+        if country:
+            language_display = get_language_display_name(country)
+            self.language_label.config(text=f"Язык: {language_display}", fg="#27ae60")
+            self.generate_new_city()
+            
+    def generate_new_city(self):
+        """Генерирует новый город"""
+        country = self.selected_country.get()
+        if not country:
+            messagebox.showwarning("Предупреждение", "Сначала выберите страну!")
+            return
+            
+        new_city = self.city_generator.get_random_city(country)
+        self.current_city = new_city
+        self.city_label.config(text=f"Город: {new_city}", fg="#27ae60")
+        # Сбрасываем промпт при изменении города
+        self._reset_prompt_on_change()
+    
+    def _on_data_change(self, *args):
+        """Обработчик изменения основных данных"""
+        self._reset_prompt_on_change()
+    
+    def _reset_prompt_on_change(self):
+        """Сбрасывает сохраненный промпт при изменении данных"""
+        if self.current_prompt:
+            self.current_prompt = None
+            self.settings_manager.save_prompt("")
+    
+    def edit_prompt(self):
+        """Редактирование промпта"""
+        try:
+            # Получаем данные - проверяем заполненность
+            theme = self.theme_var.get().strip()
+            country = self.selected_country.get()
+            domain = self.domain_var.get().strip()
+            city = self.current_city
+            
+            # Проверяем заполненность обязательных полей
+            if not theme:
+                messagebox.showwarning("Предупреждение", "Введите тематику лендинга!")
+                return
+            if not country:
+                messagebox.showwarning("Предупреждение", "Выберите страну!")
+                return
+            if not domain:
+                messagebox.showwarning("Предупреждение", "Введите домен!")
+                return
+            if not city:
+                messagebox.showwarning("Предупреждение", "Сгенерируйте город!")
+                return
+            
+            # Всегда генерируем актуальный промпт с текущими значениями
+            language = get_language_by_country(country)
+            current_prompt = create_landing_prompt(country, city, language, domain, theme)
+            
+            # Открываем редактор
+            edited_prompt = open_text_editor(current_prompt)
+            if edited_prompt is not None:  # None означает отмену
+                self.current_prompt = edited_prompt
+                self.settings_manager.save_prompt(edited_prompt)
+                messagebox.showinfo("Готово", "Промпт сохранен успешно!")
+            
+        except Exception as e:
+            print(f"Ошибка редактирования промпта: {e}")
+            messagebox.showerror("Ошибка", f"Не удалось отредактировать промпт: {e}")
+    
+    def reset_prompt(self):
+        """Сбрасывает сохраненный промпт"""
+        try:
+            if self.current_prompt:
+                result = messagebox.askyesno(
+                    "Подтверждение",
+                    "Сбросить отредактированный промпт?\n\n"
+                    "При создании лендинга будет использован\n"
+                    "стандартный промпт с актуальными данными."
+                )
+                if result:
+                    self.current_prompt = None
+                    self.settings_manager.save_prompt("")
+                    messagebox.showinfo("Готово", "Промпт сброшен! Теперь будет использован стандартный промпт.")
+            else:
+                messagebox.showinfo("Информация", "Промпт уже использует стандартные настройки.")
+        except Exception as e:
+            print(f"Ошибка сброса промпта: {e}")
+            messagebox.showerror("Ошибка", f"Не удалось сбросить промпт: {e}")
+    
+    def validate_form(self):
+        """Проверяет заполненность формы"""
+        theme = self.theme_var.get().strip()
+        if not theme:
+            return False, "Введите тематику лендинга!"
+            
+        if not self.selected_country.get():
+            return False, "Выберите страну!"
+            
+        domain = self.domain_var.get().strip()
+        is_valid, error_msg = validate_domain(domain)
+        if not is_valid:
+            return False, error_msg
+            
+        if not self.current_city:
+            return False, "Сгенерируйте город!"
+        
+        # Проверяем существование папки
+        save_path = self.save_path_var.get()
+        if not Path(save_path).exists():
+            return False, f"Выбранная папка не существует: {save_path}"
+            
+        return True, ""
+        
+    def create_landing(self):
+        """Основная функция создания лендинга"""
+        # Валидация
+        is_valid, error_msg = self.validate_form()
+        if not is_valid:
+            messagebox.showerror("Ошибка", error_msg)
+            return
+        
+        # Сохраняем тематику в историю
+        theme = self.theme_var.get().strip()
+        self.settings_manager.add_theme_to_history(theme)
+        self.theme_combo.set_history(self.settings_manager.get_theme_history())
+        
+        # Подтверждение
+        country = self.selected_country.get()
+        domain = self.domain_var.get().strip()
+        save_path = self.save_path_var.get()
+        
+        # Проверяем существование папки проекта
+        exists, full_path = check_directory_exists(save_path, domain)
+        if exists:
+            result = messagebox.askyesno(
+                "Папка существует",
+                f"Папка '{domain}' уже существует в:\n{save_path}\n\n"
+                f"Хотите перезаписать содержимое?"
+            )
+            if not result:
+                return
+        
+        # Определяем тип промпта
+        prompt_type = "✏️ Отредактированный промпт" if self.current_prompt else "📋 Стандартный промпт"
+        
+        # Получаем человеко-читаемое название языка для диалога
+        language_display = get_language_display_name(country)
+        
+        result = messagebox.askyesno(
+            "Подтверждение", 
+            f"Создать лендинг:\n\n"
+            f"Тематика: {theme}\n"
+            f"Страна: {country}\n"
+            f"Город: {self.current_city}\n"
+            f"Язык: {language_display}\n"
+            f"Домен: {domain}\n"
+            f"Папка: {save_path}\n"
+            f"Промпт: {prompt_type}\n\n"
+            f"🎨 Дополнительно будет создано 8 тематических изображений:\n"
+            f"   • main, about1-3, review1-3, favicon\n"
+            f"   • Изображения будут соответствовать тематике '{theme}'\n\n"
+            f"Продолжить?"
+        )
+        if not result:
+            return
+            
+        # Запуск в отдельном потоке
+        threading.Thread(target=self._create_landing_process, daemon=True).start()
+    
+    def _create_landing_process(self):
+        """Процесс создания лендинга в отдельном потоке"""
+        try:
+            # Получение данных
+            theme = self.theme_var.get().strip()
+            country = self.selected_country.get()
+            language = get_language_by_country(country)
+            domain = self.domain_var.get().strip()
+            city = self.current_city
+            save_path = self.save_path_var.get()
+            
+            # Обновление статуса
+            self.update_status("🔄 Создание папок...")
+            
+            # Создание структуры проекта с генерацией изображений
+            project_path, media_path = self.cursor_manager.create_project_structure(
+                domain, save_path, theme, self.update_status
+            )
+            
+            # Сохраняем путь проекта для автоматического выбора при перегенерации
+            self.last_created_project_path = project_path
+            
+            self.update_status("📄 Подготовка промпта...")
+            
+            # Используем отредактированный промпт если есть, иначе генерируем новый с актуальными данными
+            if self.current_prompt:
+                full_prompt = self.current_prompt
+            else:
+                full_prompt = create_landing_prompt(country, city, language, domain, theme)
+            
+            self.update_status("🚀 Запуск Cursor AI...")
+            
+            # Запуск Cursor AI
+            success, message = self.cursor_manager.open_project_and_paste_prompt(
+                project_path, full_prompt, self.root, auto_paste=True, paste_delay=5
+            )
+            
+            if success:
+                self.update_status("✅ Готово! Cursor AI запущен")
+                messagebox.showinfo(
+                    "Успех!", 
+                    f"Проект создан успешно!\n\n"
+                    f"📁 Папка: {project_path}\n"
+                    f"🎨 Папка media: {media_path}\n"
+                    f"🚀 Cursor AI запущен с готовым промптом\n\n"
+                    f"🖼️ Тематические изображения созданы автоматически!\n"
+                    f"   Проверьте папку media в вашем проекте.\n\n"
+                    f"💡 Если промпт не вставился автоматически,\n"
+                    f"   нажмите Ctrl+V в Cursor AI"
+                )
+                # Сбрасываем форму для возможности создания нового лендинга
+                self.reset_form_after_creation()
+            else:
+                self.update_status("⚠️ Cursor не найден, промпт скопирован")
+                messagebox.showwarning(
+                    "Предупреждение",
+                    f"📁 Папка проекта создана: {project_path}\n"
+                    f"🎨 Папка media: {media_path}\n\n"
+                    f"🖼️ Тематические изображения созданы автоматически!\n"
+                    f"   Проверьте папку media в вашем проекте.\n\n"
+                    f"⚠️ Cursor AI не найден, но промпт скопирован в буфер обмена.\n"
+                    f"   Откройте проект в Cursor вручную и вставьте промпт."
+                )
+                # Сбрасываем форму для возможности создания нового лендинга
+                self.reset_form_after_creation()
+                
+        except Exception as e:
+            error_msg = f"Ошибка: {str(e)}"
+            print(error_msg)
+            self.update_status(f"❌ {error_msg}")
+            messagebox.showerror("Ошибка", error_msg)
+    
+    def update_status(self, text):
+        """Обновляет статус"""
+        self.status_label.config(text=text)
+        self.root.update()
+    
+    def browse_project_path(self):
+        """Выбор папки существующего проекта"""
+        try:
+            current_path = self.project_path_var.get()
+            initial_dir = current_path if current_path and Path(current_path).exists() else self.save_path_var.get()
+            
+            project_path = filedialog.askdirectory(
+                title="Выберите папку проекта с изображениями",
+                initialdir=initial_dir
+            )
+            
+            if project_path:
+                # Проверяем есть ли папка media
+                media_path = Path(project_path) / "media"
+                if not media_path.exists():
+                    result = messagebox.askyesno(
+                        "Папка media не найдена",
+                        f"В выбранной папке нет подпапки 'media'.\n\n"
+                        f"Создать папку media в:\n{project_path}?"
+                    )
+                    if result:
+                        media_path.mkdir(exist_ok=True)
+                        self.project_path_var.set(project_path)
+                else:
+                    self.project_path_var.set(project_path)
+                    # Проверяем сколько изображений уже есть
+                    existing_images = list(media_path.glob("*.png"))
+                    messagebox.showinfo("Проект выбран", f"Папка проекта:\n{project_path}\n\nПапка media найдена!\nИзображений в папке: {len(existing_images)}")
+                    
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось выбрать папку: {e}")
+    
+    def regenerate_single_image(self, image_name):
+        """Пересоздает одно конкретное изображение"""
+        if not self._validate_image_regeneration():
+            return
+            
+        try:
+            project_path = self.project_path_var.get()
+            media_path = Path(project_path) / "media"
+            theme = self.theme_var.get().strip()
+            
+            if not theme:
+                messagebox.showwarning("Предупреждение", "Введите тематику для генерации изображения!")
+                return
+            
+            # Подтверждение
+            result = messagebox.askyesno(
+                "Подтверждение пересоздания",
+                f"Пересоздать изображение '{image_name}'?\n\n"
+                f"Тематика: {theme}\n"
+                f"Папка: {media_path}\n\n"
+                f"Существующий файл будет заменен."
+            )
+            if not result:
+                return
+            
+            # Запуск в отдельном потоке
+            threading.Thread(
+                target=self._regenerate_image_process,
+                args=(image_name, str(media_path), theme),
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось пересоздать изображение: {e}")
+    
+    def regenerate_all_images(self):
+        """Пересоздает все изображения"""
+        if not self._validate_image_regeneration():
+            return
+            
+        try:
+            project_path = self.project_path_var.get()
+            media_path = Path(project_path) / "media"
+            theme = self.theme_var.get().strip()
+            
+            if not theme:
+                messagebox.showwarning("Предупреждение", "Введите тематику для генерации изображений!")
+                return
+            
+            # Подтверждение
+            result = messagebox.askyesno(
+                "Подтверждение пересоздания всех изображений",
+                f"Пересоздать ВСЕ изображения?\n\n"
+                f"Тематика: {theme}\n"
+                f"Папка: {media_path}\n\n"
+                f"Все существующие файлы будут заменены!\n"
+                f"Это займет несколько минут."
+            )
+            if not result:
+                return
+            
+            # Запуск в отдельном потоке
+            threading.Thread(
+                target=self._regenerate_all_images_process,
+                args=(str(media_path), theme),
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось пересоздать изображения: {e}")
+    
+    def _validate_image_regeneration(self):
+        """Проверяет возможность пересоздания изображений"""
+        project_path = self.project_path_var.get().strip()
+        if not project_path:
+            messagebox.showwarning("Предупреждение", "Выберите папку проекта!")
+            return False
+            
+        if not Path(project_path).exists():
+            messagebox.showerror("Ошибка", f"Папка проекта не существует:\n{project_path}")
+            return False
+            
+        media_path = Path(project_path) / "media"
+        if not media_path.exists():
+            messagebox.showerror("Ошибка", f"Папка media не найдена:\n{media_path}")
+            return False
+            
+        return True
+    
+    def _regenerate_image_process(self, image_name, media_path, theme):
+        """Процесс пересоздания одного изображения"""
+        try:
+            self.update_status(f"🎨 Пересоздание изображения {image_name}...")
+            
+            # Импортируем генератор
+            from generators.thematic_generator import ThematicImageGenerator
+            from generators.image_generator import ImageGenerator
+            
+            # Создаем генераторы БЕЗ Icons8
+            image_generator = ImageGenerator(silent_mode=True)
+            thematic_gen = ThematicImageGenerator(silent_mode=True)
+            
+            # Получаем промпты
+            prompts = thematic_gen.get_theme_prompts(theme)
+            
+            # КАРДИНАЛЬНО новый подход: разные промпты для разных типов
+            if image_name in ["review1", "review2", "review3"]:
+                # ДЛЯ ОТЗЫВОВ - ТОЛЬКО ЛЮДИ! Игнорируем тематику полностью
+                prompt = "happy customer portrait"
+            elif image_name == "favicon":
+                # ДЛЯ ФАВИКОНКИ - ТОЛЬКО ИКОНКА! Игнорируем тематику полностью  
+                prompt = "simple business icon"
+            else:
+                # Для остальных используем тематические промпты
+                if isinstance(prompts, list):
+                    prompt_dict = {
+                        'main': prompts[0] if len(prompts) > 0 else f"professional {theme} service",
+                        'about1': prompts[1] if len(prompts) > 1 else f"modern {theme} business",
+                        'about2': prompts[2] if len(prompts) > 2 else f"quality {theme} company",
+                        'about3': prompts[3] if len(prompts) > 3 else f"expert {theme} team"
+                    }
+                    prompt = prompt_dict.get(image_name, f"professional {theme} service")
+                else:
+                    # Если промпты уже в виде словаря
+                    prompt = prompts.get(image_name, f"professional {theme} service")
+            
+            # Применяем специальную рандомизацию
+            if image_name == "favicon":
+                # ДЛЯ ФАВИКОНКИ - РАДИКАЛЬНЫЙ ИКОНОЧНЫЙ ПРОМПТ БЕЗ ТЕМАТИКИ!
+                prompt = thematic_gen.add_favicon_randomization(prompt)
+            elif image_name in ["review1", "review2", "review3"]:
+                # ДЛЯ ОТЗЫВОВ - РАДИКАЛЬНЫЙ ЧЕЛОВЕЧЕСКИЙ ПРОМПТ БЕЗ ТЕМАТИКИ!
+                prompt = thematic_gen.add_review_randomization(prompt)
+            else:
+                prompt = thematic_gen.add_randomization(prompt)
+            
+            # Специальная обработка для фавиконки
+            if image_name == "favicon":
+                filename = Path(media_path) / f"{image_name}.jpg"
+                favicon_created = False
+                
+                # Метод 1: Простой тематический фавикон (ВСЕГДА используем наш)
+                from generators.simple_thematic_favicon import SimpleThematicFavicon
+                simple_favicon = SimpleThematicFavicon(silent_mode=True)
+                favicon_created = simple_favicon.create_thematic_favicon(theme, str(filename))
+                if favicon_created:
+                    self.update_status(f"✅ Вариативная фавиконка пересоздана!")
+                    messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (вариативная)!")
+                else:
+                    self.update_status(f"⚠️ Переключение на базовый AI генератор...")
+                    # Генерируем изображение через Pollinations
+                    image = self._generate_single_image_pollinations(prompt, image_generator)
+                    if image:
+                        from PIL import Image
+                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
+                        image = image_generator.make_favicon_transparent(image)
+                        
+                        # Используем сжатие для AI фавиконки (50кб)
+                        if image_generator._save_compressed_image(image, str(filename), target_size_kb=50):
+                            favicon_created = True
+                            self.update_status(f"✅ Базовая AI фавиконка пересоздана!")
+                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (базовый AI)")
+                
+                if not favicon_created:
+                    self.update_status(f"❌ Не удалось создать фавиконку")
+                    messagebox.showerror("Ошибка", f"Не удалось создать фавиконку '{image_name}'")
+            else:
+                # Обычная генерация для остальных изображений
+                # Генерируем изображение через Pollinations
+                image = self._generate_single_image_pollinations(prompt, image_generator)
+                
+                if image:
+                    # Унифицируем формат - все изображения в .jpg
+                    filename = Path(media_path) / f"{image_name}.jpg"
+                    
+                    # Для обычных изображений используем сжатие до 150кб
+                    if image_generator._save_compressed_image(image, str(filename), target_size_kb=150):
+                        self.update_status(f"✅ Изображение {image_name} пересоздано с сжатием!")
+                        messagebox.showinfo("Готово", f"Изображение '{image_name}' успешно пересоздано!")
+                    else:
+                        self.update_status(f"❌ Не удалось сохранить {image_name}")
+                        messagebox.showerror("Ошибка", f"Не удалось сохранить изображение '{image_name}'")
+                else:
+                    self.update_status(f"❌ Не удалось создать {image_name}")
+                    messagebox.showerror("Ошибка", f"Не удалось создать изображение '{image_name}'")
+                
+        except Exception as e:
+            error_msg = f"Ошибка пересоздания {image_name}: {str(e)}"
+            self.update_status(f"❌ {error_msg}")
+            messagebox.showerror("Ошибка", error_msg)
+    
+    def _regenerate_all_images_process(self, media_path, theme):
+        """Процесс пересоздания всех изображений"""
+        try:
+            self.update_status("🎨 Пересоздание всех изображений...")
+            
+            # Импортируем генератор
+            from generators.image_generator import ImageGenerator
+            
+            # Создаем генератор БЕЗ Icons8
+            image_generator = ImageGenerator(silent_mode=True)
+            
+            # Генерируем полный набор
+            results = image_generator.generate_thematic_set(
+                theme_input=theme,
+                media_dir=media_path,
+                method="1",
+                progress_callback=self.update_status
+            )
+            
+            # Подсчитываем результаты
+            successful_count = results if isinstance(results, int) else 0
+            
+            self.update_status(f"✅ Пересоздано {successful_count}/8 изображений")
+            
+            messagebox.showinfo(
+                "Готово",
+                f"Пересоздание завершено!\n\n"
+                f"Успешно: {successful_count}/8 изображений\n"
+                f"Папка: {media_path}\n\n"
+                f"Проверьте результат в папке media."
+            )
+            
+        except Exception as e:
+            error_msg = f"Ошибка пересоздания изображений: {str(e)}"
+            self.update_status(f"❌ {error_msg}")
+            messagebox.showerror("Ошибка", error_msg)
+    
+    def reset_form_after_creation(self):
+        """Сбрасывает форму после создания лендинга для возможности создания нового"""
+        try:
+            # Сохраняем данные для автоматического заполнения перегенерации
+            last_theme = self.theme_var.get().strip()
+            
+            # Автоматически устанавливаем папку последнего проекта для перегенерации
+            if hasattr(self, 'last_created_project_path') and self.last_created_project_path:
+                self.project_path_var.set(self.last_created_project_path)
+            else:
+                # Очищаем тематику только если нет сохраненного проекта
+                self.theme_var.set("")
+            
+            # Очищаем остальные поля формы  
+            self.domain_var.set("")
+            self.selected_country.set("")
+            self.current_city = ""
+            
+            # Обновляем отображение
+            self.language_label.config(text="Язык: Не выбран", fg="#7f8c8d")
+            self.city_label.config(text="Город: Не сгенерирован", fg="#7f8c8d")
+            
+            # Очищаем поисковые поля в комбобоксах БЕЗОПАСНО через textvariable
+            if hasattr(self.country_combo, 'search_var'):
+                self.country_combo.search_var.set("")
+            
+            # Очищаем текущий промпт
+            self.current_prompt = None
+            self.settings_manager.save_prompt("")
+            
+            # Обновляем статус с подсказкой
+            if hasattr(self, 'last_created_project_path') and self.last_created_project_path:
+                self.update_status("✅ Проект создан! Папка автоматически выбрана для перегенерации")
+            else:
+                self.update_status("✅ Готов к созданию нового лендинга")
+            
+        except Exception as e:
+            print(f"Ошибка сброса формы: {e}")
+    
+    def on_closing(self):
+        """Обработчик закрытия окна"""
+        self.settings_manager.save_settings()
+        self.root.destroy()
+        
+    def run(self):
+        """Запускает приложение"""
+        self.root.mainloop()
+
+    def _generate_single_image_pollinations(self, prompt, image_generator):
+        """Генерирует одно изображение через Pollinations API"""
+        try:
+            import requests
+            from urllib.parse import quote
+            from PIL import Image
+            from io import BytesIO
+            import random
+            
+            # Кодируем промпт для URL
+            encoded_prompt = quote(prompt)
+            
+            # Добавляем случайные параметры для уникальности
+            width = random.choice([1024, 1200, 1400])
+            height = random.choice([768, 900, 1050])
+            seed = random.randint(1, 999999)
+            
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&enhance=true&nologo=true"
+            
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            
+            # Возвращаем PIL изображение
+            image = Image.open(BytesIO(response.content))
+            return image
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации через Pollinations: {e}")
+            return None 
