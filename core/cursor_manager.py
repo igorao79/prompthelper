@@ -285,7 +285,8 @@ class CursorManager:
                 return False
             # Простая проверка - пытаемся запустить с --help
             result = subprocess.run([path, "--help"], 
-                                  capture_output=True, timeout=3)
+                                  capture_output=True, timeout=3,
+                                  encoding='utf-8', errors='ignore')
             return result.returncode in [0, 1]  # 0 или 1 может быть нормальным
         except:
             return False
@@ -308,7 +309,8 @@ class CursorManager:
         for cmd in self.cursor_paths:
             try:
                 result = subprocess.run([cmd, "--version"], 
-                                      capture_output=True, text=True, timeout=5)
+                                      capture_output=True, text=True, timeout=5,
+                                      encoding='utf-8', errors='ignore')
                 if result.returncode == 0:
                     print(f"Найден Cursor в PATH: {cmd}")
                     self.cached_cursor_path = cmd
@@ -445,7 +447,8 @@ class CursorManager:
         try:
             # Пробуем команду which
             result = subprocess.run(['which', 'cursor'], 
-                                  capture_output=True, text=True, timeout=5)
+                                  capture_output=True, text=True, timeout=5,
+                                  encoding='utf-8', errors='ignore')
             if result.returncode == 0 and result.stdout.strip():
                 cursor_path = result.stdout.strip()
                 print(f"Найден Cursor через which: {cursor_path}")
@@ -456,7 +459,8 @@ class CursorManager:
         try:
             # Пробуем команду whereis
             result = subprocess.run(['whereis', 'cursor'], 
-                                  capture_output=True, text=True, timeout=5)
+                                  capture_output=True, text=True, timeout=5,
+                                  encoding='utf-8', errors='ignore')
             if result.returncode == 0 and result.stdout.strip():
                 # whereis возвращает несколько путей, берем первый исполняемый
                 paths = result.stdout.strip().split()[1:]  # Убираем "cursor:"
@@ -579,13 +583,16 @@ class CursorManager:
         try:
             if cursor_exe in ["cursor", "code"]:
                 # Команды в PATH
-                subprocess.Popen([cursor_exe, str(project_path)], shell=True)
+                subprocess.Popen([cursor_exe, str(project_path)], shell=True,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif cursor_exe.endswith('.lnk'):
                 # Для .lnk файлов используем start
-                subprocess.Popen(['start', cursor_exe, str(project_path)], shell=True)
+                subprocess.Popen(['start', cursor_exe, str(project_path)], shell=True,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 # Прямой путь к .exe
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Cursor AI запущен (Windows): {cursor_exe}")
             return True
@@ -598,18 +605,22 @@ class CursorManager:
         try:
             if cursor_exe in ["cursor", "code"]:
                 # Команды в PATH
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif cursor_exe.endswith('.AppImage'):
                 # AppImage файлы
                 # Делаем AppImage исполняемым если нужно
                 os.chmod(cursor_exe, 0o755)
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif '/snap/' in cursor_exe:
                 # Snap пакет
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif '/flatpak/' in cursor_exe:
                 # Flatpak
-                subprocess.Popen(['flatpak', 'run', 'com.cursor.Cursor', str(project_path)])
+                subprocess.Popen(['flatpak', 'run', 'com.cursor.Cursor', str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 # Обычный исполняемый файл
                 # Делаем файл исполняемым если нужно
@@ -617,7 +628,8 @@ class CursorManager:
                     os.chmod(cursor_exe, 0o755)
                 except:
                     pass
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Cursor AI запущен (Linux): {cursor_exe}")
             return True
@@ -635,7 +647,8 @@ class CursorManager:
                 # Для Windows используем tasklist
                 try:
                     result = subprocess.run(['tasklist', '/FO', 'CSV'], 
-                                          capture_output=True, text=True, timeout=5)
+                                          capture_output=True, text=True, timeout=5,
+                                          encoding='utf-8', errors='ignore')
                     if result.returncode == 0:
                         lines = result.stdout.split('\n')
                         for line in lines:
@@ -644,7 +657,8 @@ class CursorManager:
                                 try:
                                     wmic_result = subprocess.run(['wmic', 'process', 'where', 
                                                                 f'name="Cursor.exe"', 'get', 'CommandLine'], 
-                                                               capture_output=True, text=True, timeout=3)
+                                                               capture_output=True, text=True, timeout=3,
+                                                               encoding='utf-8', errors='ignore')
                                     if project_name in wmic_result.stdout or project_full_path in wmic_result.stdout:
                                         print(f"Найден запущенный Cursor с проектом: {project_name}")
                                         return True
@@ -655,7 +669,8 @@ class CursorManager:
                     
             elif self.os_type == 'linux':
                 # Для Linux используем ps
-                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=5)
+                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=5,
+                                       encoding='utf-8', errors='ignore')
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
                     
@@ -674,7 +689,8 @@ class CursorManager:
                     # Дополнительная проверка через pgrep если доступен
                     try:
                         pgrep_result = subprocess.run(['pgrep', '-f', f'cursor.*{project_name}'], 
-                                                    capture_output=True, text=True, timeout=3)
+                                                    capture_output=True, text=True, timeout=3,
+                                                    encoding='utf-8', errors='ignore')
                         if pgrep_result.returncode == 0 and pgrep_result.stdout.strip():
                             print(f"pgrep нашел Cursor с проектом: {project_name}")
                             return True
@@ -683,7 +699,8 @@ class CursorManager:
                         
             elif self.os_type == 'darwin':  # macOS
                 # Для macOS используем ps
-                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=5)
+                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=5,
+                                       encoding='utf-8', errors='ignore')
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
                     for line in lines:
@@ -702,13 +719,16 @@ class CursorManager:
         try:
             if cursor_exe in ["cursor", "code"]:
                 # Команды в PATH
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif '.app' in cursor_exe:
                 # macOS приложение
-                subprocess.Popen(['open', '-a', cursor_exe, str(project_path)])
+                subprocess.Popen(['open', '-a', cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 # Обычный исполняемый файл
-                subprocess.Popen([cursor_exe, str(project_path)])
+                subprocess.Popen([cursor_exe, str(project_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Cursor AI запущен (macOS): {cursor_exe}")
             return True
@@ -719,7 +739,8 @@ class CursorManager:
     def _launch_cursor_generic(self, cursor_exe, project_path):
         """Универсальный запуск Cursor"""
         try:
-            subprocess.Popen([cursor_exe, str(project_path)])
+            subprocess.Popen([cursor_exe, str(project_path)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print(f"Cursor AI запущен (generic): {cursor_exe}")
             return True
         except Exception as e:

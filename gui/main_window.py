@@ -1112,31 +1112,22 @@ class LandingPageGeneratorGUI:
             # Специальная обработка для фавиконки
             if image_name == "favicon":
                 filename = Path(media_path) / f"{image_name}.jpg"
-                favicon_created = False
                 
-                # Метод 1: Простой тематический фавикон (ВСЕГДА используем наш)
-                from generators.simple_thematic_favicon import SimpleThematicFavicon
-                simple_favicon = SimpleThematicFavicon(silent_mode=True)
-                favicon_created = simple_favicon.create_thematic_favicon(theme, str(filename))
-                if favicon_created:
-                    self.update_status(f"✅ Вариативная фавиконка пересоздана!")
-                    messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (вариативная)!")
+                # Генерируем изображение через Pollinations
+                image = self._generate_single_image_pollinations(prompt, image_generator)
+                if image:
+                    from PIL import Image
+                    image = image.resize((512, 512), Image.Resampling.LANCZOS)
+                    image = image_generator._make_favicon_transparent(image)
+                    
+                    # Используем сжатие для AI фавиконки (50кб)
+                    if image_generator._save_compressed_image(image, str(filename), target_size_kb=50):
+                        self.update_status(f"✅ AI фавиконка пересоздана!")
+                        messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана!")
+                    else:
+                        self.update_status(f"❌ Не удалось создать фавиконку")
+                        messagebox.showerror("Ошибка", f"Не удалось создать фавиконку '{image_name}'")
                 else:
-                    self.update_status(f"⚠️ Переключение на базовый AI генератор...")
-                    # Генерируем изображение через Pollinations
-                    image = self._generate_single_image_pollinations(prompt, image_generator)
-                    if image:
-                        from PIL import Image
-                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
-                        image = image_generator._make_favicon_transparent(image)
-                        
-                        # Используем сжатие для AI фавиконки (50кб)
-                        if image_generator._save_compressed_image(image, str(filename), target_size_kb=50):
-                            favicon_created = True
-                            self.update_status(f"✅ Базовая AI фавиконка пересоздана!")
-                            messagebox.showinfo("Готово", f"Фавиконка '{image_name}' пересоздана (базовый AI)")
-                
-                if not favicon_created:
                     self.update_status(f"❌ Не удалось создать фавиконку")
                     messagebox.showerror("Ошибка", f"Не удалось создать фавиконку '{image_name}'")
             else:

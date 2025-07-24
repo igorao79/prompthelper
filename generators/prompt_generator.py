@@ -22,17 +22,105 @@ class SmartPromptGenerator:
         found_terms = []
         activity_type = 'service'
         
-        # Поиск ключевых слов в тематике
+        # Поиск ключевых слов в тематике (избегаем ложных срабатываний на подстроки)
+        theme_words = theme_lower.split()  # Разбиваем на отдельные слова
+        
         for ru_word, en_word in self.translations.items():
-            if ru_word in theme_lower:
+            # Проверяем точное совпадение со словами или вхождение как начало/конец слова
+            word_found = False
+            
+            for theme_word in theme_words:
+                # Точное совпадение
+                if ru_word == theme_word:
+                    word_found = True
+                    break
+                # Слово начинается с ключевого слова (например, "курсы" в "курсам")  
+                elif theme_word.startswith(ru_word) and len(ru_word) >= 4:
+                    word_found = True
+                    break
+                # Слово заканчивается ключевым словом (например, "автосервис" содержит "сервис")
+                elif theme_word.endswith(ru_word) and len(ru_word) >= 4:
+                    word_found = True
+                    break
+            
+            if word_found:
                 found_terms.append(en_word)
         
-        # Определение типа деятельности
-        for business_type, keywords in self.business_types.items():
-            for keyword in keywords:
-                if keyword in theme_lower:
-                    activity_type = business_type
+        # ПРИОРИТЕТНЫЕ проверки специализированных тематик
+        
+        # 1. Финансовые услуги - ВЫСШИЙ приоритет
+        financial_indicators = [
+            'финансовая', 'финансовый', 'инвестиц', 'кредит', 'банк', 'страхов',
+            'налог', 'аудит', 'планирование', 'управление', 'анализ', 'оценка',
+            'financial', 'investment', 'banking', 'consulting', 'consultant'
+        ]
+        
+        financial_detected = False
+        for indicator in financial_indicators:
+            for theme_word in theme_words:
+                if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                    financial_detected = True
                     break
+            if financial_detected:
+                break
+        
+        # Если найдены финансовые термины + консультация = financial
+        if financial_detected and ('консультация' in theme_lower or 'consultant' in found_terms):
+            activity_type = 'financial'
+        
+        # 2. Автомобильная тематика  
+        automotive_indicators = [
+            'автомобил', 'машин', 'авто', 'автосервис', 'автомойка', 'эвакуатор',
+            'тюнинг', 'шиномонтаж', 'автозапчасти', 'диагностика', 'cars', 'automotive'
+        ]
+        
+        if activity_type == 'service':  # Только если еще не определено
+            for indicator in automotive_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        activity_type = 'automotive'
+                        break
+                if activity_type == 'automotive':
+                    break
+        
+        # Только если НЕ автомобильная тема, проверяем остальные типы деятельности
+        if activity_type == 'service':
+            # Проверяем соответствие переведенных терминов категориям бизнеса
+            for business_type, keywords in self.business_types.items():
+                # Сначала проверяем точные совпадения с английскими терминами
+                for found_term in found_terms:
+                    if found_term in keywords:
+                        activity_type = business_type
+                        break
+                if activity_type != 'service':
+                    break
+            
+            # Если не нашли по английским терминам, проверяем по русским ключевым словам в теме
+            if activity_type == 'service':
+                for business_type, keywords in self.business_types.items():
+                    for keyword in keywords:
+                        # Используем ту же логику умного поиска
+                        keyword_found = False
+                        
+                        for theme_word in theme_words:
+                            # Точное совпадение
+                            if keyword == theme_word:
+                                keyword_found = True
+                                break
+                            # Слово начинается с ключевого слова  
+                            elif theme_word.startswith(keyword) and len(keyword) >= 4:
+                                keyword_found = True
+                                break
+                            # Слово заканчивается ключевым словом
+                            elif theme_word.endswith(keyword) and len(keyword) >= 4:
+                                keyword_found = True
+                                break
+                        
+                        if keyword_found:
+                            activity_type = business_type
+                            break
+                    if activity_type != 'service':
+                        break
         
         # Определяем основную тему
         main_topic = self._extract_main_topic(theme_lower, found_terms)
@@ -54,21 +142,34 @@ class SmartPromptGenerator:
         return context
     
     def _extract_main_topic(self, theme_lower, found_terms):
-        """Извлекает основную тему из найденных терминов"""
+        """Извлекает основную тему из найденных терминов по важности и специфичности"""
         if not found_terms:
             return theme_lower.split()[0] if theme_lower else 'business'
         
-        # Приоритет специфичным терминам
-        priority_terms = [
-            'car wash', 'car sales', 'car insurance', 'tow truck',
-            'investment', 'training', 'real estate', 'restaurant'
-        ]
+        # Для языковых курсов создаем составную тему
+        if 'training' in found_terms:
+            languages = ['english', 'french', 'german', 'spanish', 'italian', 'chinese', 'japanese']
+            found_language = None
+            
+            for lang in languages:
+                if lang in found_terms:
+                    found_language = lang
+                    break
+            
+            if found_language:
+                return f"{found_language} courses"
         
-        for term in found_terms:
-            if term in priority_terms:
+        # Ищем самый специфичный термин (составные фразы важнее одиночных слов)
+        # Сортируем по длине - более длинные термины обычно более специфичны
+        sorted_terms = sorted(found_terms, key=len, reverse=True)
+        
+        # Приоритет составным терминам (содержащим пробелы)
+        for term in sorted_terms:
+            if ' ' in term:  # составные термины типа "car service", "food delivery"
                 return term
         
-        return found_terms[0]
+        # Если составных нет, берем самый длинный одиночный термин
+        return sorted_terms[0]
     
     def generate_prompts(self, theme, silent_mode=False):
         """Генерирует набор промптов для тематики"""
@@ -106,63 +207,102 @@ class SmartPromptGenerator:
     def _get_specialized_prompts(self, activity_type, business_type):
         """Возвращает специализированные промпты по типу деятельности"""
         
-        # СПЕЦИАЛЬНАЯ ОБРАБОТКА для доставки еды
+        # Универсальные шаблоны промптов по типам деятельности
+        activity_templates = {
+            'automotive': [
+                f"professional automotive service garage with modern {business_type} equipment",
+                f"clean well-organized automotive workshop with professional tools",
+                f"experienced auto mechanic working on vehicle in modern garage",
+                f"comfortable customer waiting area in automotive service center",
+                f"high-tech diagnostic equipment for {business_type}",
+                f"professional automotive technician using modern tools",
+                f"modern vehicle service bay with professional equipment",
+                f"mobile {business_type} van with professional automotive tools"
+            ],
+            'investment': [
+                f"professional financial advisor explaining {business_type}",
+                f"modern office setting for {business_type} consultation",
+                f"charts and graphs showing {business_type} growth",
+                f"confident investor learning about {business_type}",
+                f"professional presentation about {business_type} strategies"
+            ],
+            'training': [
+                f"modern classroom with students learning {business_type}",
+                f"professional instructor teaching {business_type} lesson",
+                f"interactive {business_type} learning session",
+                f"students engaged in {business_type} conversation practice",
+                f"educational environment for {business_type} courses",
+                f"group study session for {business_type} learning",
+                f"modern language school classroom with {business_type} materials",
+                f"teacher explaining {business_type} grammar on whiteboard"
+            ],
+            'food': [
+                f"professional kitchen preparing {business_type}",
+                f"fresh ingredients for {business_type} dishes",
+                f"chef creating delicious {business_type} meal",
+                f"elegant restaurant serving {business_type}",
+                f"appetizing {business_type} presentation on plate"
+            ],
+            'healthcare': [
+                f"clean medical facility for {business_type}",
+                f"professional healthcare provider offering {business_type}",
+                f"modern medical equipment for {business_type}",
+                f"comfortable patient area in {business_type} clinic",
+                f"sterile medical environment for {business_type} procedures"
+            ],
+            'beauty': [
+                f"elegant salon interior for {business_type} services",
+                f"professional stylist providing {business_type}",
+                f"relaxing spa environment for {business_type}",
+                f"modern beauty equipment for {business_type}",
+                f"luxurious treatment room for {business_type} services"
+            ],
+            'construction': [
+                f"professional construction site with {business_type} work",
+                f"modern construction equipment for {business_type}",
+                f"skilled workers performing {business_type} tasks",
+                f"well-organized workshop for {business_type} projects",
+                f"high-quality materials for {business_type} construction"
+            ],
+            'retail': [
+                f"modern showroom displaying {business_type}",
+                f"well-organized store with {business_type} products",
+                f"professional sales environment for {business_type}",
+                f"attractive product display of {business_type}",
+                f"customer-friendly retail space for {business_type}"
+            ]
+        }
+        
+        # Специальная обработка для доставки еды
         if 'food delivery' in business_type.lower() or 'delivery' in business_type.lower():
             return [
                 "delicious hot pizza ready for delivery",
                 "fresh salad bowls and healthy meals",
                 "gourmet burger and fries meal",
                 "asian noodle dishes and sushi platters",
-                "homemade pasta and italian cuisine",
-                "fresh sandwich and healthy lunch options",
-                "hot soup and comfort food meals",
-                "dessert and sweet treats selection"
+                "professional food delivery packaging"
             ]
         
-        specialized_prompts = {
-            'automotive': [
-                f"modern car service garage with {business_type} equipment",
-                f"clean professional automotive workshop for {business_type}",
-                f"experienced mechanic working on car {business_type}",
-                f"customer waiting area in {business_type} facility"
-            ],
-            'investment': [
-                f"professional financial advisor explaining {business_type}",
-                f"modern office setting for {business_type} consultation",
-                f"charts and graphs showing investment growth",
-                f"confident investor learning about {business_type}"
-            ],
-            'training': [
-                f"modern classroom for {business_type} courses",
-                f"professional instructor teaching {business_type}",
-                f"students engaged in {business_type} learning",
-                f"practical training session for {business_type}"
-            ],
-            'food': [
-                f"professional kitchen preparing {business_type}",
-                f"fresh ingredients for {business_type} dishes",
-                f"chef creating delicious {business_type} meal",
-                f"elegant restaurant serving {business_type}"
-            ],
-            'healthcare': [
-                f"clean medical facility for {business_type}",
-                f"professional healthcare provider offering {business_type}",
-                f"modern medical equipment for {business_type}",
-                f"comfortable patient area in {business_type} clinic"
-            ],
-            'beauty': [
-                f"elegant salon interior for {business_type} services",
-                f"professional stylist providing {business_type}",
-                f"relaxing spa environment for {business_type}",
-                f"modern beauty equipment for {business_type}"
+        # Специальная обработка для языковых курсов
+        if 'courses' in business_type.lower() and activity_type == 'training':
+            return [
+                f"modern classroom with students learning {business_type}",
+                f"professional teacher explaining {business_type} lesson",
+                f"interactive {business_type} conversation practice",
+                f"students engaged in {business_type} group study",
+                f"language school classroom with {business_type} materials",
+                f"instructor teaching {business_type} grammar",
+                f"students practicing {business_type} speaking skills",
+                f"modern educational environment for {business_type}"
             ]
-        }
         
-        return specialized_prompts.get(activity_type, [
+        # Возвращаем шаблоны для типа деятельности или универсальные
+        return activity_templates.get(activity_type, [
             f"professional {business_type} service environment",
             f"modern {business_type} workplace setup",
             f"quality {business_type} service delivery",
-            f"trusted {business_type} business facility"
+            f"trusted {business_type} business facility",
+            f"expert team providing {business_type} services"
         ])
     
     def _select_best_prompts(self, prompts, count):
@@ -201,6 +341,256 @@ def create_thematic_prompts(theme_input):
     """Создает тематические промпты для изображений"""
     generator = SmartPromptGenerator()
     return generator.generate_prompts(theme_input, silent_mode=True)
+
+def create_human_focused_review_prompts():
+    """
+    Создает промпты для review изображений, которые ГАРАНТИРОВАННО показывают людей
+    """
+    # КРИТИЧНО: Только обычные люди-клиенты, НЕ РАБОТНИКИ!
+    person_types = [
+        "happy customer", "satisfied client", "pleased woman", "smiling man",
+        "grateful person", "content customer", "cheerful client", "positive person",
+        "thankful customer", "delighted client", "appreciative woman", "joyful man",
+        "happy female customer", "satisfied male client", "pleased young woman", 
+        "smiling young man", "grateful middle-aged person", "content elderly customer"
+    ]
+    
+    ages = [
+        "young adult", "middle-aged person", "mature adult", "30-40 years old",
+        "25-35 years old", "40-50 years old", "adult person", "20-30 years old",
+        "35-45 years old", "mature woman", "mature man"
+    ]
+    
+    expressions = [
+        "genuine smile", "happy expression", "satisfied look", "positive facial expression",
+        "authentic joy", "natural smile", "pleased appearance", "grateful expression",
+        "bright smile", "warm expression", "joyful face", "content expression"
+    ]
+    
+    backgrounds = [
+        "clean background", "neutral background", "simple background", "white background",
+        "professional background", "minimal background", "soft background"
+    ]
+    
+    # Генерируем 3 уникальных review промпта
+    review_prompts = []
+    for i in range(3):
+        person = random.choice(person_types)
+        age = random.choice(ages)
+        expression = random.choice(expressions)
+        background = random.choice(backgrounds)
+        
+        # РАДИКАЛЬНЫЙ промпт - ТОЛЬКО ЛЮДИ!
+        prompt = (
+            f"portrait photo of {person}, {age}, {expression}, "
+            f"HUMAN FACE ONLY, PERSON ONLY, NO OBJECTS VISIBLE, NO EQUIPMENT, "
+            f"NO BUSINESS ITEMS, NO WORK TOOLS, NO UNIFORMS, NO PROFESSIONAL GEAR, "
+            f"civilian clothes, casual clothing, regular person, everyday clothes, "
+            f"customer testimonial portrait, {background}, "
+            f"professional headshot style, natural lighting, "
+            f"close-up face shot, human portrait only, customer review photo"
+        )
+        
+        review_prompts.append(prompt)
+    
+    return review_prompts
+
+def create_complete_prompts_dict(theme_input):
+    """
+    Создает полный словарь промптов для всех типов изображений включая review с людьми
+    """
+    import random  # Для разнообразия main промптов
+    
+    generator = SmartPromptGenerator()
+    context = generator.analyze_theme(theme_input, silent_mode=True)
+    
+    business_type = context['business_type']
+    activity_type = context['activity_type']
+    
+    # УМНАЯ АДАПТИВНАЯ СПЕЦИФИЧНОСТЬ: 8.5+ баллов
+    
+    # Базовая консистентная структура
+    core_base = f"professional {business_type} {activity_type} service"
+    quality_base = f"modern high quality expert {business_type}"
+    
+    # Адаптивные детали по типу деятельности с РАЗНООБРАЗНЫМИ main промптами
+    
+    adaptive_details = {
+        'automotive': {
+            'main': random.choice([
+                'modern automotive service center exterior with professional signage and clean facility',
+                'skilled mechanic team working on vehicles in well-equipped garage',
+                'satisfied customers receiving keys to their serviced vehicles',
+                'professional automotive workshop showcasing expertise and quality service',
+                'clean organized automotive facility with modern equipment and branding'
+            ]),
+            'about1': 'specialized diagnostic equipment and professional automotive tools',
+            'about2': 'hands-on vehicle service process with technical expertise',
+            'about3': 'certified automotive workshop with quality assurance standards'
+        },
+        'training': {
+            'main': random.choice([
+                'professional instructor teaching engaged students in modern learning environment',
+                'successful graduates celebrating completion of professional training program',
+                'interactive educational session with expert knowledge sharing',
+                'modern educational facility exterior with professional branding and signage',
+                'diverse group of students actively participating in hands-on learning'
+            ]),
+            'about1': 'interactive learning equipment and educational technology tools',
+            'about2': 'engaging teaching process with student-instructor interaction',
+            'about3': 'accredited learning environment with educational quality standards'
+        },
+        'food': {
+            'main': random.choice([
+                'appetizing signature dishes beautifully presented on elegant dining table',
+                'professional chef team preparing gourmet meals in modern kitchen',
+                'welcoming restaurant exterior with attractive storefront and professional signage',
+                'satisfied customers enjoying delicious meals in comfortable dining environment',
+                'fresh high-quality ingredients artfully arranged for culinary preparation'
+            ]),
+            'about1': 'commercial kitchen equipment and professional culinary tools',
+            'about2': 'food preparation process with culinary expertise and hygiene',
+            'about3': 'certified food facility with health and safety standards'
+        },
+        'healthcare': {
+            'main': random.choice([
+                'compassionate healthcare professional providing excellent patient care',
+                'modern medical facility exterior with professional healthcare branding',
+                'successful patient recovery showcasing positive healthcare outcomes',
+                'advanced medical technology ensuring precise diagnosis and treatment',
+                'welcoming healthcare reception with comfortable patient environment'
+            ]),
+            'about1': 'advanced medical equipment and specialized healthcare tools',
+            'about2': 'patient care process with medical expertise and compassion',
+            'about3': 'sterile healthcare environment with medical quality standards'
+        },
+        'financial': {
+            'main': random.choice([
+                'professional financial advisor consulting with satisfied clients in modern office',
+                'expert financial consultant presenting investment strategies and portfolio analysis',
+                'successful financial planning meeting with wealth management specialist',
+                'prestigious financial services office with professional consulting environment',
+                'experienced financial advisor providing personalized investment guidance'
+            ]),
+            'about1': 'advanced financial analysis software and professional investment tools',
+            'about2': 'comprehensive financial planning process with expert market knowledge',
+            'about3': 'certified financial advisory office with regulatory compliance standards'
+        },
+        'legal': {
+            'main': random.choice([
+                'professional legal consultation with experienced attorney in law office',
+                'expert lawyer providing comprehensive legal advice to clients',
+                'prestigious law firm exterior with professional legal branding',
+                'successful legal team celebrating favorable case outcome',
+                'modern legal office with professional consultation environment'
+            ]),
+            'about1': 'comprehensive legal research tools and professional law library',
+            'about2': 'detailed legal consultation process with expert jurisprudence',
+            'about3': 'certified law practice with professional ethics standards'
+        },
+        'marketing': {
+            'main': random.choice([
+                'creative marketing team developing innovative advertising campaigns',
+                'successful brand promotion results showcasing marketing effectiveness',
+                'modern marketing agency with dynamic creative workspace',
+                'professional marketing consultant presenting strategic campaign plans',
+                'digital marketing specialists analyzing campaign performance metrics'
+            ]),
+            'about1': 'advanced marketing analytics tools and creative design software',
+            'about2': 'strategic marketing campaign development with creative expertise',
+            'about3': 'results-driven marketing agency with proven success records'
+        },
+        'it_services': {
+            'main': random.choice([
+                'skilled software developers creating innovative technology solutions',
+                'modern IT company office with advanced development infrastructure',
+                'successful software deployment celebrating technical achievement',
+                'professional IT consultants providing technology strategy guidance',
+                'expert programmers collaborating on cutting-edge software projects'
+            ]),
+            'about1': 'state-of-the-art development equipment and programming tools',
+            'about2': 'comprehensive software development process with technical expertise',
+            'about3': 'certified IT services company with quality assurance standards'
+        },
+        'real_estate': {
+            'main': random.choice([
+                'professional real estate agent showcasing premium property portfolio',
+                'successful property transaction with satisfied buyer and seller',
+                'luxury real estate office with prestigious property listings',
+                'expert property consultant providing market analysis and valuation',
+                'modern real estate showroom with high-end property presentations'
+            ]),
+            'about1': 'advanced property management software and market analysis tools',
+            'about2': 'comprehensive real estate transaction process with expert guidance',
+            'about3': 'licensed real estate agency with professional certification standards'
+        },
+        'logistics': {
+            'main': random.choice([
+                'efficient logistics operation with modern warehouse and delivery fleet',
+                'professional logistics team coordinating seamless supply chain management',
+                'advanced logistics facility with automated storage and distribution systems',
+                'successful cargo delivery showcasing reliable transportation services',
+                'expert logistics consultants optimizing supply chain efficiency'
+            ]),
+            'about1': 'state-of-the-art logistics equipment and tracking technology',
+            'about2': 'streamlined logistics process with precision delivery management',
+            'about3': 'certified logistics facility with quality assurance protocols'
+        },
+        'tourism': {
+            'main': random.choice([
+                'amazing travel destination showcasing unforgettable tourism experiences',
+                'professional tour guide leading engaging cultural exploration',
+                'luxury travel agency office with premium vacation packages',
+                'satisfied tourists enjoying expertly planned travel itinerary',
+                'beautiful hotel reception welcoming international guests'
+            ]),
+            'about1': 'comprehensive travel planning tools and destination expertise',
+            'about2': 'personalized tourism service with cultural immersion experience',
+            'about3': 'certified travel agency with quality tourism standards'
+        }
+    }
+    
+    # Получаем специфичные детали или используем разнообразные универсальные
+    details = adaptive_details.get(activity_type, {
+        'main': random.choice([
+            f'professional {business_type} team delivering excellent service to satisfied customers',
+            f'modern {business_type} facility exterior with professional branding and signage',
+            f'successful {business_type} results showcasing quality work and expertise',
+            f'expert specialists working with {business_type} using professional techniques',
+            f'premium {business_type} service environment with modern equipment and professional atmosphere'
+        ]),
+        'about1': 'specialized equipment and professional service tools',
+        'about2': 'efficient service process with expert knowledge and care',
+        'about3': 'organized facility with professional quality standards'
+    })
+    
+    # Генерируем умные адаптивные промпты с разнообразными main изображениями
+    main_prompts = {
+        'main': f"{core_base}, {quality_base} {details['main']}",
+        'about1': f"{core_base} equipment workspace, {quality_base} {details['about1']}", 
+        'about2': f"{core_base} active operations, {quality_base} {details['about2']}",
+        'about3': f"{core_base} facility environment, {quality_base} {details['about3']}"
+    }
+    
+    # Генерируем ЧЕЛОВЕЧЕСКИЕ review промпты
+    human_reviews = create_human_focused_review_prompts()
+    
+    # Генерируем фавиконку
+    favicon_prompt = f"{theme_input} icon symbol, simple minimalist logo, business emblem"
+    
+    # Собираем все вместе
+    complete_prompts = {
+        'main': main_prompts['main'],
+        'about1': main_prompts['about1'],
+        'about2': main_prompts['about2'], 
+        'about3': main_prompts['about3'],
+        'review1': human_reviews[0],
+        'review2': human_reviews[1],
+        'review3': human_reviews[2],
+        'favicon': favicon_prompt
+    }
+    
+    return complete_prompts
 
 def create_landing_prompt(country, city, language, domain, theme):
     """

@@ -330,14 +330,10 @@ class ImageGenerator:
     def _generate_prompts(self, theme_input):
         """Генерирует умные промпты для всех изображений"""
         try:
-            # Используем умный генератор промптов
-            from generators.smart_thematic_prompts import SmartThematicPrompts
+            # Используем новую функцию создания полных промптов с гарантированными людьми для review
+            from generators.prompt_generator import create_complete_prompts_dict
             
-            generator = SmartThematicPrompts()
-            prompts = generator.get_prompts_for_theme(theme_input)
-            
-            # Добавляем фавиконку
-            prompts['favicon'] = f'{theme_input} icon symbol, simple minimalist logo'
+            prompts = create_complete_prompts_dict(theme_input)
             
             # Возвращаем промпты и данные темы
             return prompts, {'theme': theme_input}
@@ -348,15 +344,27 @@ class ImageGenerator:
             return self._generate_fallback_prompts(theme_input), {'theme': theme_input}
     
     def _generate_fallback_prompts(self, theme_input):
-        """Резервная генерация промптов"""
+        """Резервная генерация промптов с гарантированными людьми для review"""
+        # Генерируем человеческие review промпты даже для fallback
+        try:
+            from generators.prompt_generator import create_human_focused_review_prompts
+            human_reviews = create_human_focused_review_prompts()
+        except:
+            # Экстренный fallback с прямыми human-промптами
+            human_reviews = [
+                "portrait photo of happy customer, smiling person, HUMAN FACE ONLY, civilian clothes, testimonial portrait",
+                "portrait photo of satisfied client, pleased woman, PERSON ONLY, natural smile, customer review photo", 
+                "portrait photo of grateful customer, joyful man, HUMAN ONLY, positive expression, headshot style"
+            ]
+        
         return {
             'main': f'professional {theme_input} service, modern website hero image',
             'about1': f'{theme_input} team at work, professional office environment',
             'about2': f'{theme_input} process, step by step workflow',
             'about3': f'{theme_input} results, success story visualization',
-            'review1': f'happy customer testimonial, {theme_input} success',
-            'review2': f'positive feedback, {theme_input} client satisfaction',
-            'review3': f'five star review, {theme_input} excellence',
+            'review1': human_reviews[0],
+            'review2': human_reviews[1],
+            'review3': human_reviews[2],
             'favicon': f'{theme_input} icon symbol, simple minimalist logo'
         }
 
@@ -375,15 +383,15 @@ class ThematicImageGenerator:
         return self.base_generator._generate_image_pollinations_aggressive(enhanced_prompt, image_name, output_dir)
     
     def get_theme_prompts(self, theme_input):
-        """Получает промпты для тематики"""
+        """Получает промпты для тематики с гарантированными людьми для review"""
         prompts, theme_data = self.base_generator._generate_prompts(theme_input)
         return [
             prompts.get('main', f'professional {theme_input} service'),
             prompts.get('about1', f'quality {theme_input} business'),
             prompts.get('about2', f'modern {theme_input} company'),
             prompts.get('about3', f'expert {theme_input} team'),
-            prompts.get('review1', f'happy {theme_input} customer'),
-            prompts.get('review2', f'satisfied {theme_input} client'),
-            prompts.get('review3', f'pleased {theme_input} customer'),
+            prompts.get('review1', 'portrait photo of happy customer, smiling person, HUMAN FACE ONLY, civilian clothes'),
+            prompts.get('review2', 'portrait photo of satisfied client, pleased woman, PERSON ONLY, natural smile'),
+            prompts.get('review3', 'portrait photo of grateful customer, joyful man, HUMAN ONLY, positive expression'),
             prompts.get('favicon', f'{theme_input} icon symbol')
         ] 
