@@ -735,9 +735,14 @@ class LandingPageGeneratorGUI:
             return False, "Выберите страну!"
             
         domain = self.domain_var.get().strip()
-        is_valid, error_msg = validate_domain(domain)
+        is_valid, error_msg, corrected_domain = validate_domain(domain)
         if not is_valid:
             return False, error_msg
+        
+        # Обновляем поле домена исправленным значением
+        if corrected_domain != domain:
+            self.domain_var.set(corrected_domain)
+            print(f"🔧 Домен исправлен: {domain} → {corrected_domain}")
             
         if not self.current_city:
             return False, "Сгенерируйте город!"
@@ -771,7 +776,7 @@ class LandingPageGeneratorGUI:
         ).start()
     
     def _generate_images_only_process(self, media_path, theme):
-        """Процесс генерации только изображений"""
+
         try:
             from generators.image_generator import ImageGenerator
             

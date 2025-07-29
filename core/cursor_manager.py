@@ -809,6 +809,7 @@ class CursorManager:
                     progress_callback("🎨 Запуск генерации изображений...")
                 
                 # Создаем генератор в тихом режиме 
+                from generators.image_generator import ImageGenerator
                 image_generator = ImageGenerator(silent_mode=True)
                 
                 # Генерируем изображения

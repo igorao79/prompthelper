@@ -64,17 +64,124 @@ class SmartPromptGenerator:
             if financial_detected:
                 break
         
-        # Если найдены финансовые термины + консультация = financial
-        if financial_detected and ('консультация' in theme_lower or 'consultant' in found_terms):
-            activity_type = 'financial'
-        
-        # 2. Автомобильная тематика  
-        automotive_indicators = [
-            'автомобил', 'машин', 'авто', 'автосервис', 'автомойка', 'эвакуатор',
-            'тюнинг', 'шиномонтаж', 'автозапчасти', 'диагностика', 'cars', 'automotive'
+        # 1. Кредитные услуги - ВЫСШИЙ приоритет
+        credit_indicators = [
+            'кредитоспособности', 'кредитоспособность', 'creditworthiness', 'кредит', 'credit'
         ]
         
+        credit_detected = False
+        for indicator in credit_indicators:
+            for theme_word in theme_words:
+                if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                    credit_detected = True
+                    break
+            if credit_detected:
+                break
+        
+        # Если найдены кредитные термины = credit_assessment
+        if credit_detected:
+            activity_type = 'credit_assessment'
+        
+        # 2. Юридические услуги
+        elif activity_type == 'service':
+            legal_indicators = [
+                'юридическое', 'юридические', 'юридических', 'правовое', 'правовые', 'legal',
+                'адвокат', 'нотариус', 'суд', 'договор', 'сопровождение', 'support'
+            ]
+            
+            legal_detected = False
+            for indicator in legal_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        legal_detected = True
+                        break
+                if legal_detected:
+                    break
+            
+            # Если найдены юридические термины = legal
+            if legal_detected:
+                activity_type = 'legal'
+        
+        # 2. Проверяем зарубежную недвижимость
+        elif activity_type == 'service':
+            foreign_real_estate_indicators = ['зарубежную', 'зарубежная', 'международная', 'foreign', 'international']
+            foreign_detected = False
+            
+            for indicator in foreign_real_estate_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        foreign_detected = True
+                        break
+                if foreign_detected:
+                    break
+            
+            # Если найдены зарубежная + недвижимость + инвестиции = foreign_real_estate
+            if foreign_detected and ('недвижим' in theme_lower or 'real estate' in ' '.join(found_terms)) and financial_detected:
+                activity_type = 'foreign_real_estate'
+        
+        # 3. Если найдены финансовые термины + консультация = financial
+        if activity_type == 'service' and financial_detected and ('консультация' in theme_lower or 'consultant' in found_terms):
+            activity_type = 'financial'
+        
+        # 2. СПЕЦИАЛИЗИРОВАННЫЕ АВТОМОБИЛЬНЫЕ ТЕМАТИКИ - ВЫСШИЙ приоритет
+        
+        # Импорт автомобилей
+        car_import_indicators = ['подбор', 'импорт', 'сша', 'корея', 'европа', 'usa', 'korea', 'europe', 'selection', 'import']
+        car_import_detected = False
+        
+        for indicator in car_import_indicators:
+            for theme_word in theme_words:
+                if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                    car_import_detected = True
+                    break
+            if car_import_detected:
+                break
+        
+        # Если найдены автомобили + импорт/подбор = car_import
+        if car_import_detected and ('авто' in theme_lower or 'машин' in theme_lower or 'cars' in found_terms):
+            activity_type = 'car_import'
+        
+        # Водительские услуги
+        elif activity_type == 'service':
+            chauffeur_indicators = ['водитель', 'водителем', 'шофер', 'driver', 'chauffeur', 'персональный', 'personal']
+            chauffeur_detected = False
+            
+            for indicator in chauffeur_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        chauffeur_detected = True
+                        break
+                if chauffeur_detected:
+                    break
+            
+            # Если найдены водитель + аренда/авто = chauffeur_service
+            if chauffeur_detected and ('аренда' in theme_lower or 'rental' in found_terms or 'авто' in theme_lower):
+                activity_type = 'chauffeur_service'
+        
+        # 3. Шинные услуги - СПЕЦИАЛИЗИРОВАННАЯ автомобильная тематика
+        if activity_type == 'service':
+            tire_indicators = ['шин', 'tire', 'сезонная', 'seasonal', 'замена', 'replacement', 'колес']
+            tire_detected = False
+            
+            for indicator in tire_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        tire_detected = True
+                        break
+                if tire_detected:
+                    break
+            
+            # Если найдены шины + продажа/замена = tire_service
+            if tire_detected and ('продажа' in theme_lower or 'замена' in theme_lower or 'sales' in found_terms):
+                activity_type = 'tire_service'
+        
+        # 4. Обычная автомобильная тематика  
         if activity_type == 'service':  # Только если еще не определено
+            automotive_indicators = [
+                'автомобил', 'машин', 'авто', 'автосервис', 'автомойка', 'эвакуатор',
+                'тюнинг', 'шиномонтаж', 'автозапчасти', 'диагностика', 'cars', 'automotive'
+            ]
+            
             for indicator in automotive_indicators:
                 for theme_word in theme_words:
                     if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
@@ -83,7 +190,52 @@ class SmartPromptGenerator:
                 if activity_type == 'automotive':
                     break
         
-        # Только если НЕ автомобильная тема, проверяем остальные типы деятельности
+        # 5. Недвижимость - СПЕЦИАЛИЗИРОВАННАЯ тематика
+        if activity_type == 'service':
+            real_estate_indicators = [
+                'квартир', 'участков', 'недвижим', 'аренда', 'продажа', 'apartments', 'plots', 
+                'real estate', 'rental', 'estate', 'дача', 'ферма', 'загородных'
+            ]
+            real_estate_detected = False
+            
+            for indicator in real_estate_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        real_estate_detected = True
+                        break
+                if real_estate_detected:
+                    break
+            
+            # Специфичные подтипы недвижимости
+            if real_estate_detected:
+                if 'студент' in theme_lower or 'student' in found_terms:
+                    activity_type = 'student_housing'
+                elif 'загородных' in theme_lower or 'участков' in theme_lower or 'дача' in theme_lower:
+                    activity_type = 'land_plots'
+                elif 'краткосрочная' in theme_lower or 'short' in found_terms:
+                    activity_type = 'short_rental'
+                else:
+                    activity_type = 'real_estate'
+        
+        # 6. Ландшафтные работы - СПЕЦИАЛИЗИРОВАННАЯ тематика  
+        if activity_type == 'service':
+            landscape_indicators = [
+                'ландшафт', 'landscape', 'садово', 'garden', 'благоустройство', 'озеленение'
+            ]
+            landscape_detected = False
+            
+            for indicator in landscape_indicators:
+                for theme_word in theme_words:
+                    if theme_word == indicator or theme_word.startswith(indicator) or theme_word.endswith(indicator):
+                        landscape_detected = True
+                        break
+                if landscape_detected:
+                    break
+            
+            if landscape_detected:
+                activity_type = 'landscape'
+        
+        # Только если НЕ специализированная тема, проверяем остальные типы деятельности
         if activity_type == 'service':
             # Проверяем соответствие переведенных терминов категориям бизнеса
             for business_type, keywords in self.business_types.items():
@@ -146,6 +298,32 @@ class SmartPromptGenerator:
         if not found_terms:
             return theme_lower.split()[0] if theme_lower else 'business'
         
+        # ПРИОРИТЕТНАЯ обработка специализированных тем
+        
+        # Кредитные услуги
+        if 'creditworthiness' in found_terms or 'assessment' in found_terms:
+            if 'client' in found_terms or 'business' in found_terms:
+                return 'credit assessment'
+            return 'creditworthiness'
+        
+        # Юридические услуги
+        if 'legal' in found_terms or 'support' in found_terms:
+            if 'transactions' in found_terms or 'investments' in found_terms:
+                return 'legal services'  # вместо transactions
+            return 'legal'
+        
+        # Импорт автомобилей  
+        if 'selection' in found_terms and 'cars' in found_terms:
+            return 'car import'
+        
+        # Зарубежная недвижимость
+        if 'foreign' in found_terms and 'real estate' in ' '.join(found_terms):
+            return 'foreign real estate'
+        
+        # Водительские услуги
+        if 'driver' in found_terms or 'chauffeur' in found_terms:
+            return 'chauffeur service'
+        
         # Для языковых курсов создаем составную тему
         if 'training' in found_terms:
             languages = ['english', 'french', 'german', 'spanish', 'italian', 'chinese', 'japanese']
@@ -178,6 +356,9 @@ class SmartPromptGenerator:
         business_type = context['business_type']
         activity_type = context['activity_type']
         
+        # Специализированные промпты по типу деятельности - ПРИОРИТЕТ!
+        specialized = self._get_specialized_prompts(activity_type, business_type)
+        
         # Базовые шаблоны промптов
         base_prompts = [
             f"professional {business_type} service office interior",
@@ -190,13 +371,10 @@ class SmartPromptGenerator:
             f"reliable {business_type} service delivery"
         ]
         
-        # Специализированные промпты по типу деятельности
-        specialized = self._get_specialized_prompts(activity_type, business_type)
+        # Комбинируем СПЕЦИАЛИЗИРОВАННЫЕ первыми, затем базовые
+        all_prompts = specialized + base_prompts
         
-        # Комбинируем базовые и специализированные
-        all_prompts = base_prompts + specialized
-        
-        # Выбираем 8 лучших промптов
+        # Выбираем 8 лучших промптов (специализированные будут в приоритете)
         selected_prompts = self._select_best_prompts(all_prompts, 8)
         
         if not silent_mode:
@@ -270,6 +448,41 @@ class SmartPromptGenerator:
                 f"professional sales environment for {business_type}",
                 f"attractive product display of {business_type}",
                 f"customer-friendly retail space for {business_type}"
+            ],
+            'tire_service': [
+                f"professional tire service facility with {business_type} expertise",
+                f"modern tire installation bay with professional {business_type} equipment",
+                f"experienced tire technician working with {business_type} tools",
+                f"comprehensive tire showroom with {business_type} selection",
+                f"quality tire service center with professional {business_type} standards"
+            ],
+            'student_housing': [
+                f"modern student accommodation with {business_type} facilities",
+                f"comfortable student apartment showcasing {business_type} amenities",
+                f"professional student housing office with {business_type} services",
+                f"student-friendly living space with {business_type} features",
+                f"quality student housing complex with {business_type} standards"
+            ],
+            'land_plots': [
+                f"beautiful rural property showcasing {business_type} potential",
+                f"scenic country land with {business_type} development opportunities",
+                f"professional real estate consultation for {business_type} investment",
+                f"expansive agricultural land with {business_type} possibilities",
+                f"country property office specializing in {business_type} sales"
+            ],
+            'short_rental': [
+                f"elegant vacation rental with {business_type} amenities",
+                f"professional short-term accommodation with {business_type} services",
+                f"luxurious rental property featuring {business_type} comfort",
+                f"modern vacation rental office with {business_type} booking",
+                f"quality short-term housing with {business_type} hospitality"
+            ],
+            'landscape': [
+                f"professional landscaping project with {business_type} design",
+                f"beautiful garden transformation using {business_type} expertise",
+                f"modern landscaping equipment for {business_type} work",
+                f"expert landscape design consultation for {business_type} projects",
+                f"quality outdoor space creation with {business_type} craftsmanship"
             ]
         }
         
@@ -294,6 +507,119 @@ class SmartPromptGenerator:
                 f"instructor teaching {business_type} grammar",
                 f"students practicing {business_type} speaking skills",
                 f"modern educational environment for {business_type}"
+            ]
+        
+        # СПЕЦИАЛЬНАЯ ОБРАБОТКА для новых специализированных тематик
+        
+        # Шинные услуги
+        if activity_type == 'tire_service':
+            return [
+                f"professional tire shop with modern wheel alignment equipment and seasonal tire storage",
+                f"expert tire technician installing new tires on vehicle in modern automotive service bay",
+                f"comprehensive tire showroom displaying premium tire brands and seasonal tire options",
+                f"professional tire replacement service with advanced tire mounting and balancing equipment",
+                f"modern tire service center with quality tire storage and professional installation tools",
+                f"experienced tire specialist providing tire consultation and seasonal tire change services",
+                f"well-organized tire warehouse with extensive tire inventory and professional service area",
+                f"professional automotive tire service with modern diagnostic equipment and tire expertise"
+            ]
+        
+        # Студенческая недвижимость
+        elif activity_type == 'student_housing':
+            return [
+                f"modern student apartment complex with comfortable living spaces and study areas",
+                f"professional student housing manager showing apartment to prospective student tenants",
+                f"well-furnished student apartment with modern amenities and study-friendly environment",
+                f"student housing office with professional rental consultation and lease agreement services",
+                f"comfortable student dormitory exterior with modern student housing facilities",
+                f"friendly student housing team providing rental assistance and housing solutions",
+                f"modern student apartment interior showcasing comfortable and affordable student living",
+                f"professional student housing consultation with rental options and housing guidance"
+            ]
+        
+        # Загородные участки  
+        elif activity_type == 'land_plots':
+            return [
+                f"beautiful rural land plots with scenic countryside views and development potential",
+                f"professional real estate agent showcasing premium agricultural land and country properties",
+                f"picturesque country property with farmhouse potential and agricultural land development",
+                f"expert land consultant providing guidance on rural property investment and land development",
+                f"expansive agricultural land with fertile soil perfect for farming and country living",
+                f"professional land sales office with rural property portfolios and development consultation",
+                f"scenic country property with beautiful landscape views and agricultural potential",
+                f"experienced real estate specialist presenting country land opportunities and rural investments"
+            ]
+        
+        # Краткосрочная аренда
+        elif activity_type == 'short_rental':
+            return [
+                f"elegant short-term rental apartment with modern furnishings and guest amenities",
+                f"professional short-term rental manager providing accommodation services and guest support",
+                f"luxurious vacation rental interior with comfortable furnishings and modern conveniences",
+                f"short-term rental office with professional booking services and guest accommodation",
+                f"beautiful vacation rental property exterior with attractive amenities and guest facilities"
+            ]
+        
+        # Ландшафтные работы
+        elif activity_type == 'landscape':
+            return [
+                f"professional landscape designer creating beautiful garden design with modern landscaping tools",
+                f"expert landscaping team transforming outdoor spaces with creative garden design and installation",
+                f"beautiful landscaping project showcasing professional garden design and quality workmanship",
+                f"modern landscaping equipment and tools for professional garden construction and maintenance",
+                f"experienced landscape architect planning outdoor space transformation with design expertise"
+            ]
+        
+        # Кредитные услуги
+        elif activity_type == 'credit_assessment':
+            return [
+                f"professional credit analyst reviewing client financial documents",
+                f"modern financial analysis office with credit assessment systems",
+                f"expert credit specialist conducting creditworthiness evaluation",
+                f"financial evaluation center with credit scoring technology",
+                f"experienced credit advisor providing assessment consultation",
+                f"professional banking office with credit analysis tools",
+                f"modern credit bureau with financial data analysis",
+                f"expert financial analyst evaluating business creditworthiness"
+            ]
+        
+        # Импорт автомобилей
+        elif activity_type == 'car_import':
+            return [
+                f"luxury imported cars from USA, Korea, and Europe in premium showroom",
+                f"professional car import specialist explaining vehicle documentation and specifications",
+                f"high-end imported vehicles displayed in modern automotive gallery with international certificates",
+                f"expert consultant showing imported car specifications and import documentation",
+                f"premium car selection service with international vehicle portfolio and expertise",
+                f"modern office with imported car catalogs and international automotive expertise",
+                f"professional car import consultation with vehicle history and legal documentation",
+                f"luxury automotive showroom featuring premium imported vehicles from overseas markets"
+            ]
+        
+        # Зарубежная недвижимость
+        if activity_type == 'foreign_real_estate':
+            return [
+                f"professional international real estate consultant with global property investment portfolio", 
+                f"modern office with world map showing foreign real estate opportunities and market analysis",
+                f"luxury international property presentations and investment documentation with global expertise",
+                f"expert advisor explaining foreign real estate investment strategies and overseas opportunities",
+                f"premium international real estate consultation with global market analysis and investment guidance",
+                f"professional meeting discussing overseas property investment opportunities with market experts",
+                f"modern real estate office with international property listings and global investment documentation",
+                f"experienced consultant presenting foreign real estate investment options with legal compliance"
+            ]
+        
+        # Водитель/шофер услуги 
+        if activity_type == 'chauffeur_service':
+            return [
+                f"professional chauffeur in elegant uniform standing beside luxury vehicle fleet",
+                f"premium car rental service with experienced professional driver in elegant attire",
+                f"luxury vehicle interior showcasing comfort and professional chauffeur service",
+                f"experienced driver providing personalized luxury transportation service with professional standards",
+                f"elegant chauffeur service office with luxury car fleet display and professional team",
+                f"professional driver consultation explaining premium transportation options and luxury services",
+                f"luxury car rental facility with professional chauffeur team and premium vehicle selection",
+                f"premium transportation service with skilled professional drivers and luxury vehicle fleet"
             ]
         
         # Возвращаем шаблоны для типа деятельности или универсальные
@@ -338,71 +664,126 @@ class SmartPromptGenerator:
 
 # Функция для совместимости с другими модулями
 def create_thematic_prompts(theme_input):
-    """Создает тематические промпты для изображений"""
-    generator = SmartPromptGenerator()
-    return generator.generate_prompts(theme_input, silent_mode=True)
+    """Создает тематические промпты для изображений - использует СУПЕР ИИ-генератор"""
+    # ПРИОРИТЕТ 1: СУПЕР ИИ-УСИЛИТЕЛЬ
+    try:
+        from .super_ai_enhancer import create_super_ai_prompts
+        super_prompts = create_super_ai_prompts(theme_input)
+        return [super_prompts['main'], super_prompts['about1'], super_prompts['about2'], super_prompts['about3']]
+    except Exception:
+        # ПРИОРИТЕТ 2: Локальный ИИ-генератор
+        try:
+            from .ai_prompt_generator import AIPromptGenerator
+            generator = AIPromptGenerator()
+            # Генерируем промпты через ИИ и извлекаем только основные
+            prompts = generator.generate_intelligent_prompts(theme_input)
+            return [prompts['main'], prompts['about1'], prompts['about2'], prompts['about3']]
+        except ImportError:
+            # Fallback на старую систему
+            generator = SmartPromptGenerator()
+            return generator.generate_prompts(theme_input, silent_mode=True)
 
 def create_human_focused_review_prompts():
     """
     Создает промпты для review изображений, которые ГАРАНТИРОВАННО показывают людей
+    Использует СУПЕР ИИ-генератор для максимального качества
     """
-    # КРИТИЧНО: Только обычные люди-клиенты, НЕ РАБОТНИКИ!
-    person_types = [
-        "happy customer", "satisfied client", "pleased woman", "smiling man",
-        "grateful person", "content customer", "cheerful client", "positive person",
-        "thankful customer", "delighted client", "appreciative woman", "joyful man",
-        "happy female customer", "satisfied male client", "pleased young woman", 
-        "smiling young man", "grateful middle-aged person", "content elderly customer"
-    ]
+    # ПРИОРИТЕТ 1: СУПЕР ИИ-УСИЛИТЕЛЬ для review промптов
+    try:
+        from .super_ai_enhancer import create_super_ai_prompts
+        super_prompts = create_super_ai_prompts("satisfied customer")
+        if 'review1' in super_prompts:
+            return [super_prompts['review1'], super_prompts['review2'], super_prompts['review3']]
+    except Exception:
+        pass
     
-    ages = [
-        "young adult", "middle-aged person", "mature adult", "30-40 years old",
-        "25-35 years old", "40-50 years old", "adult person", "20-30 years old",
-        "35-45 years old", "mature woman", "mature man"
-    ]
-    
-    expressions = [
-        "genuine smile", "happy expression", "satisfied look", "positive facial expression",
-        "authentic joy", "natural smile", "pleased appearance", "grateful expression",
-        "bright smile", "warm expression", "joyful face", "content expression"
-    ]
-    
-    backgrounds = [
-        "clean background", "neutral background", "simple background", "white background",
-        "professional background", "minimal background", "soft background"
-    ]
-    
-    # Генерируем 3 уникальных review промпта
-    review_prompts = []
-    for i in range(3):
-        person = random.choice(person_types)
-        age = random.choice(ages)
-        expression = random.choice(expressions)
-        background = random.choice(backgrounds)
+    # ПРИОРИТЕТ 2: Локальный ИИ-генератор
+    try:
+        from .ai_prompt_generator import AIPromptGenerator
+        generator = AIPromptGenerator()
+        # Генерируем 3 review промпта через ИИ
+        return [
+            generator._generate_review_prompt(),
+            generator._generate_review_prompt(),
+            generator._generate_review_prompt()
+        ]
+    except ImportError:
+        # Fallback на старую логику
+        import random
         
-        # РАДИКАЛЬНЫЙ промпт - ТОЛЬКО ЛЮДИ!
-        prompt = (
-            f"portrait photo of {person}, {age}, {expression}, "
-            f"HUMAN FACE ONLY, PERSON ONLY, NO OBJECTS VISIBLE, NO EQUIPMENT, "
-            f"NO BUSINESS ITEMS, NO WORK TOOLS, NO UNIFORMS, NO PROFESSIONAL GEAR, "
-            f"civilian clothes, casual clothing, regular person, everyday clothes, "
-            f"customer testimonial portrait, {background}, "
-            f"professional headshot style, natural lighting, "
-            f"close-up face shot, human portrait only, customer review photo"
-        )
+        person_types = [
+            "happy customer", "satisfied client", "pleased woman", "smiling man",
+            "grateful person", "content customer", "cheerful client", "positive person"
+        ]
         
-        review_prompts.append(prompt)
-    
-    return review_prompts
+        ages = [
+            "young adult", "middle-aged person", "mature adult", "30-40 years old",
+            "25-35 years old", "40-50 years old", "adult person"
+        ]
+        
+        expressions = [
+            "genuine smile", "happy expression", "satisfied look", "positive facial expression",
+            "natural smile", "pleased appearance", "grateful expression", "bright smile"
+        ]
+        
+        backgrounds = [
+            "clean background", "neutral background", "simple background", "professional background"
+        ]
+        
+        # Генерируем 3 уникальных review промпта
+        review_prompts = []
+        for i in range(3):
+            person = random.choice(person_types)
+            age = random.choice(ages)
+            expression = random.choice(expressions)
+            background = random.choice(backgrounds)
+            
+            prompt = (
+                f"portrait photo of {person}, {age}, {expression}, "
+                f"HUMAN FACE ONLY, NO OBJECTS, civilian clothes, "
+                f"{background}, professional headshot style"
+            )
+            
+            review_prompts.append(prompt)
+        
+        return review_prompts
 
 def create_complete_prompts_dict(theme_input):
     """
     Создает полный словарь промптов для всех типов изображений включая review с людьми
+    Использует СУПЕР ИИ-УСИЛИТЕЛЬ + fallback системы (БЕЗ OLLAMA)
     """
-    import random  # Для разнообразия main промптов
+    # ПРИОРИТЕТ 1: СУПЕР ИИ-УСИЛИТЕЛЬ (множественные ИИ источники)
+    try:
+        from .super_ai_enhancer import create_super_ai_prompts
+        super_prompts = create_super_ai_prompts(theme_input)
+        print(f"🌟 Использован СУПЕР ИИ-УСИЛИТЕЛЬ для тематики: {theme_input}")
+        return super_prompts
+    except Exception as e:
+        print(f"⚠️ Супер ИИ недоступен ({e}), переключаемся на обычный внешний ИИ")
     
-    generator = SmartPromptGenerator()
-    context = generator.analyze_theme(theme_input, silent_mode=True)
+    # ПРИОРИТЕТ 2: Обычный внешний ИИ-усилитель (Hugging Face)
+    try:
+        from .ai_enhancer import create_ai_enhanced_prompts
+        enhanced_prompts = create_ai_enhanced_prompts(theme_input)
+        print(f"🚀 Использован ВНЕШНИЙ ИИ-усилитель для тематики: {theme_input}")
+        return enhanced_prompts
+    except Exception as e:
+        print(f"⚠️ Внешний ИИ недоступен ({e}), переключаемся на локальный ИИ")
+    
+    # ПРИОРИТЕТ 3: Локальный ИИ-генератор  
+    try:
+        from .ai_prompt_generator import create_ai_prompts
+        local_prompts = create_ai_prompts(theme_input)
+        print(f"🤖 Использован локальный ИИ-генератор для тематики: {theme_input}")
+        return local_prompts
+    except ImportError:
+        print(f"⚠️ Локальный ИИ недоступен, используем fallback систему")
+        # Fallback на старую систему если ИИ-генератор недоступен
+        import random  # Для разнообразия main промптов
+        
+        generator = SmartPromptGenerator()
+        context = generator.analyze_theme(theme_input, silent_mode=True)
     
     business_type = context['business_type']
     activity_type = context['activity_type']
@@ -482,11 +863,33 @@ def create_complete_prompts_dict(theme_input):
                 'expert lawyer providing comprehensive legal advice to clients',
                 'prestigious law firm exterior with professional legal branding',
                 'successful legal team celebrating favorable case outcome',
-                'modern legal office with professional consultation environment'
+                'modern legal office with professional consultation environment',
+                'experienced attorney reviewing important legal documents and contracts',
+                'professional legal team discussing complex investment transaction case',
+                'elegant law firm conference room with legal consultation meeting',
+                'expert legal advisor explaining contract terms to business clients',
+                'sophisticated legal office with professional document management system',
+                'senior lawyer providing specialized legal support for business deals',
+                'modern law practice showcasing expertise in corporate legal matters'
             ]),
-            'about1': 'comprehensive legal research tools and professional law library',
-            'about2': 'detailed legal consultation process with expert jurisprudence',
-            'about3': 'certified law practice with professional ethics standards'
+            'about1': random.choice([
+                'comprehensive legal research tools and professional law library',
+                'advanced legal documentation systems and case management tools',
+                'specialized legal databases and professional research equipment',
+                'modern legal technology and document preparation systems'
+            ]),
+            'about2': random.choice([
+                'detailed legal consultation process with expert jurisprudence',
+                'thorough legal analysis and strategic case development process',
+                'comprehensive legal review and professional advisory services',
+                'expert legal guidance and systematic case management approach'
+            ]),
+            'about3': random.choice([
+                'certified law practice with professional ethics standards',
+                'licensed legal facility with regulatory compliance protocols',
+                'accredited law firm with professional quality assurance',
+                'established legal practice with industry certification standards'
+            ])
         },
         'marketing': {
             'main': random.choice([
@@ -547,6 +950,132 @@ def create_complete_prompts_dict(theme_input):
             'about1': 'comprehensive travel planning tools and destination expertise',
             'about2': 'personalized tourism service with cultural immersion experience',
             'about3': 'certified travel agency with quality tourism standards'
+        },
+        'car_import': {
+            'main': random.choice([
+                'luxury imported vehicles displayed in premium automotive showroom with international certifications',
+                'professional car import consultant reviewing documentation for overseas vehicle selection',
+                'elegant automotive gallery showcasing high-end imported cars from USA, Korea, and Europe',
+                'expert car selection specialist providing personalized import consultation services',
+                'premium car import facility with international vehicle portfolio and expert guidance'
+            ]),
+            'about1': 'specialized import documentation tools and international automotive certification systems',
+            'about2': 'comprehensive vehicle selection process with international sourcing expertise',
+            'about3': 'certified car import facility with quality assurance and legal compliance standards'
+        },
+        'foreign_real_estate': {
+            'main': random.choice([
+                'professional international real estate consultant with global property investment portfolio',
+                'modern investment office showcasing foreign real estate opportunities and market analysis',
+                'luxury international property consultation with world-class investment documentation',
+                'expert advisor presenting overseas real estate investment strategies and opportunities',
+                'premium international real estate facility with global market expertise and guidance'
+            ]),
+            'about1': 'advanced international property analysis tools and global market research systems',
+            'about2': 'comprehensive foreign real estate investment process with expert international guidance',
+            'about3': 'certified international investment facility with legal compliance and market expertise'
+        },
+        'chauffeur_service': {
+            'main': random.choice([
+                'professional chauffeur in elegant uniform standing beside luxury vehicle fleet',
+                'premium car rental service with experienced professional drivers and luxury vehicles',
+                'elegant transportation facility showcasing luxury vehicle fleet and professional chauffeur team',
+                'expert chauffeur service providing personalized luxury transportation with professional drivers',
+                'luxury car rental office with premium vehicle selection and professional driver consultation'
+            ]),
+            'about1': 'professional driver training facilities and luxury vehicle maintenance systems',
+            'about2': 'personalized chauffeur service process with luxury transportation expertise',
+            'about3': 'certified transportation facility with professional driver standards and luxury vehicle fleet'
+        },
+        'credit_assessment': {
+            'main': random.choice([
+                'professional credit analyst reviewing client documents',
+                'modern financial analysis office with assessment systems',
+                'expert credit specialist conducting creditworthiness evaluation',
+                'financial evaluation center with credit scoring technology',
+                'experienced credit advisor providing assessment consultation',
+                'professional banking office with credit analysis tools',
+                'modern credit bureau with financial data analysis',
+                'expert financial analyst evaluating business creditworthiness'
+            ]),
+            'about1': random.choice([
+                'credit analysis software and assessment tools',
+                'credit scoring systems and verification technology',
+                'financial data analysis and reporting equipment',
+                'credit evaluation tools and risk assessment systems'
+            ]),
+            'about2': random.choice([
+                'credit assessment process with financial analysis',
+                'creditworthiness evaluation with professional expertise',
+                'financial review process with scoring methodology',
+                'credit analysis approach with risk evaluation'
+            ]),
+            'about3': random.choice([
+                'credit assessment facility with compliance standards',
+                'financial analysis center with certification protocols', 
+                'credit bureau with professional quality assurance',
+                'financial evaluation practice with banking standards'
+            ])
+        },
+        'tire_service': {
+            'main': random.choice([
+                'professional tire shop with modern wheel alignment equipment and seasonal tire storage',
+                'expert tire technician installing new tires on vehicle in modern automotive service bay',
+                'comprehensive tire showroom displaying premium tire brands and seasonal tire options',
+                'professional tire replacement service with advanced tire mounting and balancing equipment',
+                'modern tire service center with quality tire storage and professional installation tools'
+            ]),
+            'about1': 'specialized tire installation equipment and wheel alignment tools',
+            'about2': 'professional tire service process with expert mounting and balancing',
+            'about3': 'certified tire service facility with quality assurance and safety standards'
+        },
+        'student_housing': {
+            'main': random.choice([
+                'modern student apartment complex with comfortable living spaces and study areas',
+                'professional student housing manager showing apartment to prospective student tenants',
+                'well-furnished student apartment with modern amenities and study-friendly environment',
+                'student housing office with professional rental consultation and lease agreement services',
+                'comfortable student dormitory exterior with modern student housing facilities'
+            ]),
+            'about1': 'modern student apartment furnishings and study equipment',
+            'about2': 'professional student housing rental process with lease consultation',
+            'about3': 'certified student accommodation facility with quality housing standards'
+        },
+        'land_plots': {
+            'main': random.choice([
+                'beautiful rural land plots with scenic countryside views and development potential',
+                'professional real estate agent showcasing premium agricultural land and country properties',
+                'picturesque country property with farmhouse potential and agricultural land development',
+                'expert land consultant providing guidance on rural property investment and land development',
+                'expansive agricultural land with fertile soil perfect for farming and country living'
+            ]),
+            'about1': 'professional land surveying equipment and property development tools',
+            'about2': 'comprehensive land evaluation process with development consultation',
+            'about3': 'certified real estate facility with agricultural property expertise'
+        },
+        'short_rental': {
+            'main': random.choice([
+                'elegant short-term rental apartment with modern furnishings and guest amenities',
+                'professional short-term rental manager providing accommodation services and guest support',
+                'luxurious vacation rental interior with comfortable furnishings and modern conveniences',
+                'short-term rental office with professional booking services and guest accommodation',
+                'beautiful vacation rental property exterior with attractive amenities and guest facilities'
+            ]),
+            'about1': 'modern vacation rental furnishings and guest service amenities',
+            'about2': 'professional short-term rental booking process with guest services',
+            'about3': 'certified vacation rental facility with hospitality quality standards'
+        },
+        'landscape': {
+            'main': random.choice([
+                'professional landscape designer creating beautiful garden design with modern landscaping tools',
+                'expert landscaping team transforming outdoor spaces with creative garden design and installation',
+                'beautiful landscaping project showcasing professional garden design and quality workmanship',
+                'modern landscaping equipment and tools for professional garden construction and maintenance',
+                'experienced landscape architect planning outdoor space transformation with design expertise'
+            ]),
+            'about1': 'professional landscaping equipment and garden design tools',
+            'about2': 'expert landscaping process with creative design and installation',
+            'about3': 'certified landscaping facility with quality craftsmanship standards'
         }
     }
     
@@ -564,12 +1093,15 @@ def create_complete_prompts_dict(theme_input):
         'about3': 'organized facility with professional quality standards'
     })
     
-    # Генерируем умные адаптивные промпты с разнообразными main изображениями
+    # Генерируем РАЗНООБРАЗНЫЕ промпты для лучшей уникальности
+    about_prefixes = ['professional', 'modern', 'expert', 'advanced', 'quality', 'specialized']
+    about_styles = ['workspace', 'environment', 'facility', 'office', 'center', 'operation']
+    
     main_prompts = {
-        'main': f"{core_base}, {quality_base} {details['main']}",
-        'about1': f"{core_base} equipment workspace, {quality_base} {details['about1']}", 
-        'about2': f"{core_base} active operations, {quality_base} {details['about2']}",
-        'about3': f"{core_base} facility environment, {quality_base} {details['about3']}"
+        'main': f"{details['main']}",
+        'about1': f"{random.choice(about_prefixes)} {business_type} {details['about1']}", 
+        'about2': f"{random.choice(about_prefixes)} {business_type} {details['about2']} {random.choice(about_styles)}",
+        'about3': f"{random.choice(about_prefixes)} {business_type} {details['about3']} {random.choice(about_styles)}"
     }
     
     # Генерируем ЧЕЛОВЕЧЕСКИЕ review промпты
@@ -590,7 +1122,34 @@ def create_complete_prompts_dict(theme_input):
         'favicon': favicon_prompt
     }
     
-    return complete_prompts
+    # КРИТИЧНО: Используем универсальную систему оптимизации промптов
+    try:
+        from .prompt_optimizer import optimize_prompts_for_api
+        complete_prompts = optimize_prompts_for_api(complete_prompts)
+    except ImportError:
+        # Fallback система, если оптимизатор недоступен
+        max_lengths = {
+            'main': 100, 'about1': 90, 'about2': 90, 'about3': 90,
+            'review1': 110, 'review2': 110, 'review3': 110, 'favicon': 70
+        }
+        
+        for key, prompt in complete_prompts.items():
+            max_len = max_lengths.get(key, 90)
+            if len(prompt) > max_len:
+                words = prompt.split()
+                truncated = []
+                current_length = 0
+                
+                for word in words:
+                    if current_length + len(word) + 1 <= max_len:
+                        truncated.append(word)
+                        current_length += len(word) + 1
+                    else:
+                        break
+                
+                complete_prompts[key] = ' '.join(truncated)
+        
+        return complete_prompts
 
 def create_landing_prompt(country, city, language, domain, theme):
     """

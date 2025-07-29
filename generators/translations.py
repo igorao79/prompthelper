@@ -9,6 +9,8 @@ TRANSLATIONS = {
     'продажа': 'sales', 'продаж': 'sales', 'продаем': 'sales', 'торговля': 'retail',
     'покупка': 'purchase', 'покупаем': 'purchase',
     'аренда': 'rental', 'арендуем': 'rental', 'сдаем': 'rental',
+    'подбор': 'selection', 'подбираем': 'selection', 'поиск': 'search',
+    'импорт': 'import', 'импортируем': 'import', 'ввоз': 'import',
     'производство': 'manufacturing', 'производим': 'manufacturing',
     'изготовление': 'manufacturing', 'изготавливаем': 'manufacturing',
     'ремонт': 'repair', 'ремонтируем': 'repair', 'починка': 'repair',
@@ -16,6 +18,9 @@ TRANSLATIONS = {
     'монтаж': 'installation', 'монтируем': 'installation',
     'строительство': 'construction', 'строим': 'construction',
     'консультация': 'consulting', 'консультируем': 'consulting',
+    'юридическое': 'legal', 'юридические': 'legal', 'юридических': 'legal',
+    'сопровождение': 'support', 'сопровожден': 'support', 'сопровождаем': 'support',
+    'сделок': 'transactions', 'сделка': 'transaction', 'сделки': 'transactions',
     'обучение': 'training', 'обучаем': 'training', 'курсы': 'training',
     'английского': 'english', 'английский': 'english', 'английском': 'english',
     'французского': 'french', 'французский': 'french',
@@ -46,6 +51,9 @@ TRANSLATIONS = {
     'консультант': 'consultant', 'консультанта': 'consultant', 'консультантов': 'consultants',
     'инвестиц': 'investment', 'инвестор': 'investor', 'инвестиции': 'investments',
     'кредит': 'credit', 'кредиты': 'loans', 'займ': 'loan', 'займы': 'loans',
+    'кредитоспособности': 'creditworthiness', 'кредитоспособность': 'creditworthiness',
+    'оценка': 'assessment', 'оценки': 'evaluation', 'оценки': 'assessment',
+    'клиента': 'client', 'клиент': 'client', 'клиентов': 'clients',
     'банк': 'banking', 'банков': 'banking', 'банковск': 'banking',
     'страхов': 'insurance', 'страхование': 'insurance',
     'налог': 'tax', 'налоги': 'taxes', 'налогов': 'taxation',
@@ -56,6 +64,22 @@ TRANSLATIONS = {
     'оценка': 'valuation', 'оценк': 'assessment',
     'пенсион': 'pension', 'пенсии': 'retirement',
     'ипотек': 'mortgage', 'недвижим': 'real estate',
+    
+    # Географические и международные термины
+    'зарубежную': 'foreign', 'зарубежная': 'foreign', 'зарубежное': 'foreign',
+    'международная': 'international', 'международное': 'international', 'международные': 'international',
+    'сша': 'usa', 'америк': 'american', 'штат': 'states',
+    'корея': 'korea', 'корейск': 'korean', 'южная': 'south',
+    'европа': 'europe', 'европейск': 'european', 'евро': 'euro',
+    'германия': 'germany', 'немецк': 'german', 'франция': 'france',
+    'англия': 'england', 'британия': 'britain', 'италия': 'italy',
+    'япония': 'japan', 'японск': 'japanese', 'китай': 'china',
+    
+    # Водители и транспортные услуги  
+    'водитель': 'driver', 'водителем': 'driver', 'водители': 'drivers',
+    'шофер': 'chauffeur', 'шофером': 'chauffeur', 'чауффер': 'chauffeur',
+    'персональный': 'personal', 'личный': 'personal', 'индивидуальный': 'individual',
+    'трансфер': 'transfer', 'такси': 'taxi', 'убер': 'uber',
     
     # Предметы и товары
     'лестниц': 'stairs', 'лестницы': 'stairs', 'лестница': 'stairs',
@@ -539,6 +563,13 @@ BUSINESS_TYPES = {
     'tourism': ['туризм', 'путешестви', 'экскурси', 'отдых', 'гостиниц', 'отель', 'санатори'],
     'security': ['охран', 'безопасност', 'видеонаблюдени', 'сигнализаци', 'защит'],
     'agriculture': ['сельск', 'агро', 'ферм', 'растениевод', 'животновод', 'урожа'],
-    'veterinary': ['ветеринар', 'животн', 'питомц', 'кот', 'собак', 'птиц', 'лечение животных']
+    'veterinary': ['ветеринар', 'животн', 'питомц', 'кот', 'собак', 'птиц', 'лечение животных'],
+    
+    # НОВЫЕ СПЕЦИАЛИЗИРОВАННЫЕ КАТЕГОРИИ
+    'car_import': ['подбор', 'импорт', 'сша', 'корея', 'европа', 'selection', 'import', 'usa', 'korea', 'europe'],
+    'foreign_real_estate': ['зарубежную', 'foreign', 'international', 'недвижим', 'real estate'],
+    'chauffeur_service': ['водитель', 'водителем', 'шофер', 'driver', 'chauffeur', 'персональный', 'personal'],
+    'luxury_rental': ['премиум', 'люкс', 'эксклюзив', 'элит', 'luxury', 'premium', 'exclusive', 'elite', 'аренда', 'rental'],
+    'credit_assessment': ['кредитоспособности', 'кредитоспособность', 'creditworthiness', 'оценка', 'assessment', 'клиента', 'client', 'evaluation']
 } 
 

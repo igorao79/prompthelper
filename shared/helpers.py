@@ -22,30 +22,50 @@ def get_current_year():
 
 def validate_domain(domain):
     """
-    Проверяет корректность доменного имени
+    Проверяет корректность доменного имени и исправляет кириллические символы
     
     Args:
         domain (str): Доменное имя для проверки
         
     Returns:
-        tuple: (bool, str) - (валидность, сообщение об ошибке)
+        tuple: (bool, str, str) - (валидность, сообщение об ошибке, исправленный домен)
     """
     if not domain:
-        return False, "Доменное имя не может быть пустым"
+        return False, "Доменное имя не может быть пустым", domain
     
     if len(domain) < 3:
-        return False, "Доменное имя слишком короткое (минимум 3 символа)"
+        return False, "Доменное имя слишком короткое (минимум 3 символа)", domain
     
     if len(domain) > 253:
-        return False, "Доменное имя слишком длинное (максимум 253 символа)"
+        return False, "Доменное имя слишком длинное (максимум 253 символа)", domain
+    
+    # Автоматическая замена похожих кириллических символов на латинские
+    cyrillic_to_latin = {
+        'а': 'a', 'А': 'A',
+        'е': 'e', 'Е': 'E', 
+        'о': 'o', 'О': 'O',
+        'р': 'p', 'Р': 'P',
+        'с': 'c', 'С': 'C',
+        'у': 'u', 'У': 'U',
+        'х': 'x', 'Х': 'X',
+        'м': 'm', 'М': 'M',
+        'н': 'n', 'Н': 'N',
+        'к': 'k', 'К': 'K',
+        'т': 't', 'Т': 'T'
+    }
+    
+    # Заменяем кириллические символы на латинские
+    corrected_domain = domain
+    for cyrillic, latin in cyrillic_to_latin.items():
+        corrected_domain = corrected_domain.replace(cyrillic, latin)
     
     # Проверяем формат домена
     domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
     
-    if not re.match(domain_pattern, domain):
-        return False, "Некорректный формат доменного имени"
+    if not re.match(domain_pattern, corrected_domain):
+        return False, "Некорректный формат доменного имени", corrected_domain
     
-    return True, ""
+    return True, "", corrected_domain
 
 def check_directory_exists(path, domain):
     """
