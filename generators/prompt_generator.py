@@ -66,11 +66,298 @@ class SmartPromptGenerator:
         }
     
     def analyze_theme(self, theme, silent_mode=False):
-        """Анализирует тематику и возвращает контекст для генерации промптов"""
+        """ИНТЕЛЛЕКТУАЛЬНЫЙ анализ тематики - читает всю фразу целиком и понимает контекст"""
         if not silent_mode:
-            print(f"🧠 Анализ тематики: {theme}")
+            print(f"🧠 Интеллектуальный анализ тематики: {theme}")
         
-        theme_lower = theme.lower()
+        theme_lower = theme.lower().strip()
+        theme_words = theme_lower.split()
+        
+        # НОВАЯ ИНТЕЛЛЕКТУАЛЬНАЯ СИСТЕМА: анализ всей фразы целиком
+        context_result = self._intelligent_theme_analysis(theme_lower, theme_words, silent_mode)
+        
+        if context_result:
+            return context_result
+            
+        # Fallback к старой системе если новая не дала результата
+        return self._legacy_theme_analysis(theme_lower, theme_words, silent_mode)
+    
+    def _intelligent_theme_analysis(self, theme_lower, theme_words, silent_mode=False):
+        """
+        НОВАЯ ИНТЕЛЛЕКТУАЛЬНАЯ СИСТЕМА анализа тематики
+        Анализирует всю фразу целиком, понимает контекст и семантические связи
+        """
+        
+        # УМНЫЕ СЕМАНТИЧЕСКИЕ ШАБЛОНЫ - анализируем всю фразу целиком
+        semantic_patterns = {
+            # ОБРАЗОВАТЕЛЬНЫЕ ТЕМАТИКИ (высший приоритет для комбинаций)
+            'investment_education': {
+                'patterns': [
+                    # Прямые упоминания
+                    'курсы по инвестициям', 'курсы инвестиций', 'инвестиционные курсы',
+                    'обучение инвестициям', 'обучение инвестиционным', 'школа инвестиций',
+                    'тренинги по инвестициям', 'семинары по инвестициям',
+                    'investment courses', 'investment training', 'investment education',
+                    # Контекстные комбинации
+                    'курсы трейдинг', 'обучение трейдингу', 'школа трейдинга',
+                    'курсы финансов', 'финансовое образование', 'финансовая грамотность'
+                ],
+                'activity_type': 'investment',
+                'business_type': 'investment courses',
+                'confidence': 0.95,
+                'keywords': ['investment', 'education', 'training']
+            },
+            
+            'language_education': {
+                'patterns': [
+                    'курсы английского', 'обучение английскому', 'английский язык',
+                    'курсы французского', 'обучение французскому', 'французский язык', 
+                    'курсы немецкого', 'обучение немецкому', 'немецкий язык',
+                    'курсы испанского', 'курсы итальянского', 'курсы китайского',
+                    'языковые курсы', 'изучение языков', 'школа языков',
+                    'english courses', 'language school', 'language learning'
+                ],
+                'activity_type': 'training',
+                'business_type': lambda theme: self._extract_language_from_theme(theme) + ' courses',
+                'confidence': 0.95,
+                'keywords': ['training', 'education', 'language']
+            },
+            
+            # АВТОМОБИЛЬНЫЕ СПЕЦИАЛИЗАЦИИ (контекстный анализ)
+            'luxury_car_import': {
+                'patterns': [
+                    'подбор автомобилей из сша', 'импорт авто из америки', 'машины из кореи',
+                    'автомобили из европы', 'подбор машин из-за рубежа',
+                    'car import from usa', 'luxury car selection', 'premium car import',
+                    'элитные автомобили', 'премиум авто', 'люксовые машины'
+                ],
+                'activity_type': 'car_import', 
+                'business_type': 'luxury car import',
+                'confidence': 0.9,
+                'keywords': ['cars', 'import', 'luxury']
+            },
+            
+            'chauffeur_premium': {
+                'patterns': [
+                    'услуги водителя', 'персональный водитель', 'водитель с автомобилем',
+                    'аренда авто с водителем', 'шофер услуги', 'personal driver',
+                    'chauffeur service', 'driver rental', 'luxury transportation'
+                ],
+                'activity_type': 'chauffeur_service',
+                'business_type': 'chauffeur service', 
+                'confidence': 0.9,
+                'keywords': ['driver', 'rental', 'service']
+            },
+            
+            # ФИНАНСОВЫЕ УСЛУГИ (комплексный анализ)
+            'credit_analysis': {
+                'patterns': [
+                    'оценка кредитоспособности', 'анализ кредитоспособности',
+                    'кредитоспособность клиента', 'кредитоспособность бизнеса',
+                    'creditworthiness assessment', 'credit evaluation', 'credit analysis'
+                ],
+                'activity_type': 'credit_assessment',
+                'business_type': 'credit assessment',
+                'confidence': 0.95,
+                'keywords': ['credit', 'assessment', 'analysis']
+            },
+            
+            'financial_consulting': {
+                'patterns': [
+                    'финансовое консультирование', 'финансовые консультации', 
+                    'консультации по инвестициям', 'инвестиционное консультирование',
+                    'financial consulting', 'investment consulting', 'financial advisory'
+                ],
+                'activity_type': 'financial',
+                'business_type': 'financial consulting',
+                'confidence': 0.9,
+                'keywords': ['financial', 'consulting', 'advisory']
+            },
+            
+            # НЕДВИЖИМОСТЬ (географический контекст)
+            'foreign_real_estate': {
+                'patterns': [
+                    'зарубежная недвижимость', 'недвижимость за рубежом',
+                    'международная недвижимость', 'инвестиции в недвижимость',
+                    'foreign real estate', 'international property', 'overseas real estate'
+                ],
+                'activity_type': 'foreign_real_estate',
+                'business_type': 'foreign real estate',
+                'confidence': 0.9,
+                'keywords': ['real estate', 'foreign', 'investment']
+            },
+            
+            'student_housing': {
+                'patterns': [
+                    'студенческая недвижимость', 'жилье для студентов', 
+                    'аренда студентам', 'студенческие квартиры',
+                    'student housing', 'student accommodation', 'student rental'
+                ],
+                'activity_type': 'student_housing',
+                'business_type': 'student housing',
+                'confidence': 0.9,
+                'keywords': ['housing', 'student', 'rental']
+            },
+            
+            # СПЕЦИАЛИЗИРОВАННЫЕ УСЛУГИ
+            'tire_service': {
+                'patterns': [
+                    'шиномонтаж', 'замена шин', 'сезонная замена шин',
+                    'продажа шин', 'tire service', 'tire replacement', 'tire sales'
+                ],
+                'activity_type': 'tire_service',
+                'business_type': 'tire service',
+                'confidence': 0.9,
+                'keywords': ['tire', 'service', 'replacement']
+            },
+            
+            'landscape_design': {
+                'patterns': [
+                    'ландшафтный дизайн', 'благоустройство территории',
+                    'озеленение участка', 'садово-парковые работы',
+                    'landscape design', 'landscaping services', 'garden design'
+                ],
+                'activity_type': 'landscape',
+                'business_type': 'landscape design',
+                'confidence': 0.9,
+                'keywords': ['landscape', 'design', 'garden']
+            },
+            
+            # ОБЩИЕ ТЕМАТИКИ (низкий приоритет)
+            'automotive_general': {
+                'patterns': [
+                    'автосервис', 'ремонт автомобилей', 'техническое обслуживание',
+                    'автомойка', 'car service', 'auto repair', 'car wash'
+                ],
+                'activity_type': 'automotive',
+                'business_type': 'automotive service',
+                'confidence': 0.7,
+                'keywords': ['automotive', 'service', 'repair']
+            },
+            
+            'healthcare_general': {
+                'patterns': [
+                    'медицинские услуги', 'лечение', 'медицинский центр',
+                    'healthcare services', 'medical treatment', 'medical center'
+                ],
+                'activity_type': 'healthcare',
+                'business_type': 'healthcare',
+                'confidence': 0.7,
+                'keywords': ['healthcare', 'medical', 'treatment']
+            }
+        }
+        
+        if not silent_mode:
+            print(f"🔍 Анализирую семантические шаблоны для: '{theme_lower}'")
+        
+        # Ищем наиболее подходящий семантический шаблон
+        best_match = None
+        highest_confidence = 0
+        
+        for pattern_name, pattern_data in semantic_patterns.items():
+            for pattern in pattern_data['patterns']:
+                # Проверяем точное вхождение или семантическое сходство
+                if self._semantic_match(theme_lower, pattern):
+                    confidence = pattern_data['confidence']
+                    
+                    # Бонус за точность совпадения
+                    if pattern.lower() == theme_lower:
+                        confidence += 0.05  # Точное совпадение
+                    elif pattern.lower() in theme_lower:
+                        confidence += 0.02  # Частичное вхождение
+                    
+                    if confidence > highest_confidence:
+                        highest_confidence = confidence
+                        best_match = {
+                            'pattern_name': pattern_name,
+                            'matched_pattern': pattern,
+                            'confidence': confidence,
+                            **pattern_data
+                        }
+                        
+                        if not silent_mode:
+                            print(f"   🎯 Найден шаблон: {pattern_name} (совпадение: '{pattern}', уверенность: {confidence:.2f})")
+        
+        if best_match and highest_confidence >= 0.7:
+            # Обрабатываем динамические business_type
+            business_type = best_match['business_type']
+            if callable(business_type):
+                business_type = business_type(theme_lower)
+            
+            context = {
+                'category': 'intelligent_analysis',
+                'business_type': business_type,
+                'activity_type': best_match['activity_type'],
+                'english_terms': best_match['keywords'],
+                'confidence': best_match['confidence'],
+                'keywords': best_match['keywords'][:3],
+                'environment': f"professional {business_type} {best_match['activity_type']}",
+                'matched_pattern': best_match['matched_pattern'],
+                'analysis_method': 'semantic_pattern_matching'
+            }
+            
+            if not silent_mode:
+                print(f"✅ ИНТЕЛЛЕКТУАЛЬНЫЙ АНАЛИЗ УСПЕШЕН:")
+                print(f"   🎯 Тип деятельности: {best_match['activity_type']}")
+                print(f"   🏢 Бизнес-тип: {business_type}")  
+                print(f"   📊 Уверенность: {best_match['confidence']:.2f}")
+                print(f"   🔗 Совпавший шаблон: '{best_match['matched_pattern']}'")
+            
+            return context
+        
+        if not silent_mode:
+            print("❌ Семантические шаблоны не дали результата, переход к legacy анализу")
+        
+        return None
+    
+    def _semantic_match(self, theme, pattern):
+        """Проверяет семантическое совпадение между темой и шаблоном"""
+        theme = theme.lower().strip()
+        pattern = pattern.lower().strip()
+        
+        # Точное совпадение
+        if pattern == theme:
+            return True
+            
+        # Полное вхождение шаблона в тему
+        if pattern in theme:
+            return True
+            
+        # Частичное совпадение по ключевым словам (минимум 70% слов)
+        theme_words = set(theme.split())
+        pattern_words = set(pattern.split())
+        
+        if len(pattern_words) == 0:
+            return False
+            
+        intersection = theme_words.intersection(pattern_words)
+        similarity = len(intersection) / len(pattern_words)
+        
+        return similarity >= 0.7
+    
+    def _extract_language_from_theme(self, theme):
+        """Извлекает конкретный язык из темы для языковых курсов"""
+        language_map = {
+            'английск': 'english', 'english': 'english',
+            'французск': 'french', 'french': 'french', 
+            'немецк': 'german', 'german': 'german',
+            'испанск': 'spanish', 'spanish': 'spanish',
+            'итальянск': 'italian', 'italian': 'italian',
+            'китайск': 'chinese', 'chinese': 'chinese',
+            'японск': 'japanese', 'japanese': 'japanese'
+        }
+        
+        for lang_part, lang_full in language_map.items():
+            if lang_part in theme:
+                return lang_full
+                
+        return 'language'  # fallback
+    
+    def _legacy_theme_analysis(self, theme_lower, theme_words, silent_mode=False):
+        """Старая система анализа как fallback"""
+        if not silent_mode:
+            print("🔄 Используем legacy анализ как fallback")
+            
         found_terms = []
         activity_type = 'service'
         
@@ -289,42 +576,61 @@ class SmartPromptGenerator:
         
         # Только если НЕ специализированная тема, проверяем остальные типы деятельности
         if activity_type == 'service':
-            # Проверяем соответствие переведенных терминов категориям бизнеса
-            for business_type, keywords in self.business_types.items():
-                # Сначала проверяем точные совпадения с английскими терминами
-                for found_term in found_terms:
-                    if found_term in keywords:
-                        activity_type = business_type
-                        break
-                if activity_type != 'service':
-                    break
+            # УЛУЧШЕННАЯ ЛОГИКА: приоритет специфичным/комбинированным терминам
             
-            # Если не нашли по английским терминам, проверяем по русским ключевым словам в теме
-            if activity_type == 'service':
+            # Сначала ищем точные фразы в самой теме (более специфично)
+            theme_phrase = theme_lower.strip()
+            priority_matches = []
+            
+            for business_type, keywords in self.business_types.items():
+                for keyword in keywords:
+                    # Проверяем точное вхождение фразы в тему
+                    if keyword in theme_phrase:
+                        priority_matches.append((business_type, len(keyword), keyword))
+            
+            # Если найдены приоритетные совпадения, выбираем самое длинное (более специфично)
+            if priority_matches:
+                # Сортируем по длине ключевого слова (более длинные = более специфичные)
+                priority_matches.sort(key=lambda x: x[1], reverse=True)
+                activity_type = priority_matches[0][0]
+                print(f"�� Приоритетное совпадение: {priority_matches[0][2]} → {activity_type}")
+            else:
+                # Проверяем соответствие переведенных терминов категориям бизнеса
                 for business_type, keywords in self.business_types.items():
-                    for keyword in keywords:
-                        # Используем ту же логику умного поиска
-                        keyword_found = False
-                        
-                        for theme_word in theme_words:
-                            # Точное совпадение
-                            if keyword == theme_word:
-                                keyword_found = True
-                                break
-                            # Слово начинается с ключевого слова  
-                            elif theme_word.startswith(keyword) and len(keyword) >= 4:
-                                keyword_found = True
-                                break
-                            # Слово заканчивается ключевым словом
-                            elif theme_word.endswith(keyword) and len(keyword) >= 4:
-                                keyword_found = True
-                                break
-                        
-                        if keyword_found:
+                    # Сначала проверяем точные совпадения с английскими терминами
+                    for found_term in found_terms:
+                        if found_term in keywords:
                             activity_type = business_type
                             break
                     if activity_type != 'service':
                         break
+                
+                # Если не нашли по английским терминам, проверяем по русским ключевым словам в теме
+                if activity_type == 'service':
+                    for business_type, keywords in self.business_types.items():
+                        for keyword in keywords:
+                            # Используем ту же логику умного поиска
+                            keyword_found = False
+                            
+                            for theme_word in theme_words:
+                                # Точное совпадение
+                                if keyword == theme_word:
+                                    keyword_found = True
+                                    break
+                                # Слово начинается с ключевого слова  
+                                elif theme_word.startswith(keyword) and len(keyword) >= 4:
+                                    keyword_found = True
+                                    break
+                                # Слово заканчивается ключевым словом
+                                elif theme_word.endswith(keyword) and len(keyword) >= 4:
+                                    keyword_found = True
+                                    break
+                            
+                            if keyword_found:
+                                activity_type = business_type
+                                break
+                        if activity_type != 'service':
+                            break
         
         # Определяем основную тему
         main_topic = self._extract_main_topic(theme_lower, found_terms)
@@ -375,6 +681,10 @@ class SmartPromptGenerator:
         # Водительские услуги
         if 'driver' in found_terms or 'chauffeur' in found_terms:
             return 'chauffeur service'
+        
+        # Для инвестиционных курсов создаем специальную тему
+        if 'investment' in found_terms and 'training' in found_terms:
+            return 'investment courses'
         
         # Для языковых курсов создаем составную тему
         if 'training' in found_terms:
@@ -450,11 +760,14 @@ class SmartPromptGenerator:
                 f"mobile {business_type} van with professional automotive tools"
             ],
             'investment': [
-                f"professional financial advisor explaining {business_type}",
-                f"modern office setting for {business_type} consultation",
-                f"charts and graphs showing {business_type} growth",
-                f"confident investor learning about {business_type}",
-                f"professional presentation about {business_type} strategies"
+                f"professional financial consultant explaining {business_type} strategies in modern office environment",
+                f"expert investment advisor presenting market analysis and portfolio management solutions",
+                f"modern financial consultation office with charts, graphs and {business_type} documentation",
+                f"confident financial specialist providing personalized {business_type} guidance and expertise",
+                f"professional investment presentation showcasing growth opportunities and financial strategies",
+                f"experienced financial advisor explaining {business_type} principles with detailed market analysis",
+                f"modern investment consultation setting with professional financial planning resources",
+                f"expert investment counselor providing comprehensive {business_type} education and guidance"
             ],
             'training': [
                 f"modern classroom with students learning {business_type}",
@@ -546,6 +859,19 @@ class SmartPromptGenerator:
                 "gourmet burger and fries meal",
                 "asian noodle dishes and sushi platters",
                 "professional food delivery packaging"
+            ]
+        
+        # Специальная обработка для инвестиционных курсов
+        if activity_type == 'investment' and ('курсы' in business_type.lower() or 'courses' in business_type.lower()):
+            return [
+                f"professional investment education classroom with financial analysis on screens and whiteboards",
+                f"experienced investment instructor explaining market strategies to engaged students",
+                f"modern financial education center with charts, graphs and investment learning materials",
+                f"interactive investment course with students analyzing portfolio management and market trends",
+                f"professional investment training environment with financial software and educational resources",
+                f"expert financial educator teaching investment principles in well-equipped classroom",
+                f"students practicing investment analysis with professional trading simulation software",
+                f"comprehensive investment education facility with market data displays and learning tools"
             ]
         
         # Специальная обработка для языковых курсов
@@ -803,6 +1129,61 @@ class SmartPromptGenerator:
         # Добавляем небольшую уникальность
         timestamp = str(int(time.time() * 1000))[-3:]
         return f"{selected}, variant_{timestamp}"
+    
+    def _create_clean_about_prompt(self, base_content, prefixes, prompt_num):
+        """Создает чистый about промпт без повторений и странных комбинаций"""
+        
+        # Умные суффиксы по номеру промпта
+        smart_suffixes = {
+            1: ["", "and tools", "for professionals", "with expertise"],  # Короткие, технические
+            2: ["in action", "with precision", "and quality", "ensuring results"],  # Процессы  
+            3: ["and environment", "with standards", "ensuring excellence", "and reliability"]  # Места/стандарты
+        }
+        
+        # Выбираем префикс
+        prefix = self.rng.choice(prefixes)
+        
+        # Проверяем, есть ли уже такое слово в base_content
+        base_words = set(base_content.lower().split())
+        
+        # Если префикс уже есть в содержимом, берем другой
+        attempts = 0
+        while prefix.lower() in base_words and attempts < 5:
+            prefix = self.rng.choice(prefixes)
+            attempts += 1
+        
+        # Если все равно конфликт, используем нейтральный префикс
+        if prefix.lower() in base_words:
+            prefix = "high-quality"
+        
+        # Выбираем подходящий суффикс
+        suffix = self.rng.choice(smart_suffixes.get(prompt_num, smart_suffixes[1]))
+        
+        # Собираем промпт
+        if suffix:
+            prompt = f"{prefix} {base_content} {suffix}"
+        else:
+            prompt = f"{prefix} {base_content}"
+        
+        # Финальная проверка на дубли слов и исправление
+        prompt = self._remove_word_duplicates(prompt)
+        
+        return prompt
+    
+    def _remove_word_duplicates(self, text):
+        """Убирает повторяющиеся слова из текста, сохраняя естественность"""
+        words = text.split()
+        seen = set()
+        result = []
+        
+        for word in words:
+            word_clean = word.lower().strip('.,!?;:')
+            if word_clean not in seen:
+                seen.add(word_clean)
+                result.append(word)
+            # Если слово уже было, просто пропускаем его
+        
+        return ' '.join(result)
 
 # Функция для совместимости с другими модулями
 def create_thematic_prompts(theme_input):
@@ -1389,6 +1770,139 @@ def create_complete_prompts_dict(theme_input):
                 'about2': 'patient care process with medical expertise and compassion',
                 'about3': 'sterile healthcare environment with medical quality standards'
             },
+            # НОВЫЕ СПЕЦИФИЧНЫЕ ДЕТАЛИ для интеллектуальной системы
+            'investment': {
+                'main': session_rng.choice([
+                    'professional investment education classroom with students analyzing market charts',
+                    'expert financial instructor explaining investment strategies to engaged learners',
+                    'modern financial training center with investment analysis equipment',
+                    'interactive investment seminar with real market data and professional guidance',
+                    'comprehensive investment education facility with financial software and learning resources'
+                ]),
+                'about1': 'advanced financial analysis software and investment tracking systems',
+                'about2': 'interactive investment education process with market simulation tools',
+                'about3': 'professional investment learning environment with real-time market data'
+            },
+            'training': {
+                'main': session_rng.choice([
+                    'modern classroom environment with engaged students and professional instructor',
+                    'interactive learning session with educational materials and teaching technology',
+                    'professional training center with comprehensive educational resources',
+                    'dynamic educational environment with students practicing new skills',
+                    'well-equipped learning facility with modern teaching equipment'
+                ]),
+                'about1': 'modern educational technology and interactive learning tools',
+                'about2': 'hands-on training process with practical skill development',
+                'about3': 'professional learning environment with comprehensive educational resources'
+            },
+            'chauffeur_service': {
+                'main': session_rng.choice([
+                    'professional chauffeur in elegant uniform beside luxury vehicle fleet',
+                    'premium transportation service with experienced drivers and luxury cars',
+                    'elegant chauffeur service office with luxury vehicle display',
+                    'professional driver consultation with premium transportation options',
+                    'luxury car rental facility with professional chauffeur team'
+                ]),
+                'about1': 'luxury vehicle fleet and professional chauffeur equipment',
+                'about2': 'premium transportation service process with professional standards',
+                'about3': 'elegant chauffeur service facility with luxury vehicle maintenance'
+            },
+            'car_import': {
+                'main': session_rng.choice([
+                    'luxury imported cars from USA, Korea and Europe in premium showroom',
+                    'professional car import specialist with international vehicle documentation',
+                    'premium automotive gallery featuring high-end imported vehicles',
+                    'expert car selection consultant with global vehicle portfolio',
+                    'modern car import facility with international automotive expertise'
+                ]),
+                'about1': 'international vehicle documentation and import certification systems',
+                'about2': 'professional car selection process with global automotive expertise',
+                'about3': 'premium car import facility with international vehicle inspection standards'
+            },
+            'credit_assessment': {
+                'main': session_rng.choice([
+                    'professional credit analyst reviewing client financial documents',
+                    'modern financial analysis office with credit assessment systems',
+                    'expert credit specialist conducting creditworthiness evaluation',
+                    'comprehensive credit evaluation center with financial analysis tools',
+                    'professional banking office with credit scoring technology'
+                ]),
+                'about1': 'advanced credit analysis software and financial assessment tools',
+                'about2': 'thorough creditworthiness evaluation process with expert analysis',
+                'about3': 'professional credit assessment facility with secure financial data systems'
+            },
+            'foreign_real_estate': {
+                'main': session_rng.choice([
+                    'professional international real estate consultant with global property portfolio',
+                    'modern office with world map showing foreign property opportunities',
+                    'luxury international property presentations and investment documentation',
+                    'expert advisor explaining overseas real estate investment strategies',
+                    'premium international real estate facility with global market expertise'
+                ]),
+                'about1': 'international property documentation and global market analysis tools',
+                'about2': 'comprehensive foreign real estate investment process with expert guidance',
+                'about3': 'professional international property facility with global investment resources'
+            },
+            'tire_service': {
+                'main': session_rng.choice([
+                    'professional tire service facility with modern wheel alignment equipment',
+                    'expert tire technician installing new tires in modern service bay',
+                    'comprehensive tire showroom displaying premium tire brands',
+                    'professional tire replacement service with advanced mounting equipment',
+                    'modern tire service center with quality tire storage systems'
+                ]),
+                'about1': 'professional tire installation equipment and wheel alignment systems',
+                'about2': 'comprehensive tire service process with quality tire brands',
+                'about3': 'modern tire service facility with seasonal tire storage solutions'
+            },
+            'landscape': {
+                'main': session_rng.choice([
+                    'professional landscape designer creating beautiful garden design',
+                    'expert landscaping team transforming outdoor spaces with modern tools',
+                    'beautiful landscaping project showcasing professional garden design',
+                    'modern landscaping equipment for professional garden construction',
+                    'experienced landscape architect planning outdoor space transformation'
+                ]),
+                'about1': 'professional landscaping tools and garden design equipment',
+                'about2': 'comprehensive landscape design process with creative garden planning',
+                'about3': 'modern landscaping facility with outdoor design and construction resources'
+            },
+            'financial': {
+                'main': session_rng.choice([
+                    'professional financial consultant providing expert financial advice',
+                    'modern financial advisory office with investment analysis tools',
+                    'expert financial advisor explaining wealth management strategies',
+                    'comprehensive financial planning consultation with market analysis',
+                    'professional financial services office with investment planning resources'
+                ]),
+                'about1': 'advanced financial planning software and investment analysis tools',
+                'about2': 'comprehensive financial consultation process with expert advisory services',
+                'about3': 'professional financial advisory facility with market research resources'
+            },
+            'student_housing': {
+                'main': session_rng.choice([
+                    'modern student apartment complex with comfortable living spaces',
+                    'professional student housing manager showing apartment facilities',
+                    'well-furnished student accommodation with study-friendly environment',
+                    'student housing office with rental consultation services',
+                    'comfortable student dormitory with modern housing amenities'
+                ]),
+                'about1': 'modern student housing amenities and comfortable living facilities',
+                'about2': 'professional student accommodation process with rental guidance',
+                'about3': 'student-friendly housing facility with study and living support services'
+            },
+            'legal': {
+                'main': session_rng.choice([
+                    'professional law office with experienced legal practitioners',
+                    'modern legal consultation room with comprehensive legal resources',
+                    'expert legal advisor providing professional legal guidance',
+                    'professional legal services office with case documentation systems',
+                    'comprehensive legal facility with court preparation resources'
+                ]),
+                'about1': 'professional legal documentation systems and case management tools',
+                'about2': 'comprehensive legal consultation process with expert legal guidance',
+                'about3': 'professional law office with legal research and case preparation resources'
+            },
             'service': {
                 'main': session_rng.choice([
                     f'professional {business_type} team delivering excellent service to satisfied customers',
@@ -1419,18 +1933,9 @@ def create_complete_prompts_dict(theme_input):
         # Создаем уникальные промпты с добавлением уникальности
         main_prompts = {
             'main': generator._add_uniqueness_to_prompt(details['main'], 'main', business_type),
-            'about1': generator._add_uniqueness_to_prompt(
-                f"{session_rng.choice(about_prefixes)} {business_type} {details['about1']}", 
-                'about1', business_type
-            ),
-            'about2': generator._add_uniqueness_to_prompt(
-                f"{session_rng.choice(about_prefixes)} {business_type} {details['about2']} {session_rng.choice(about_styles)}", 
-                'about2', business_type
-            ),
-            'about3': generator._add_uniqueness_to_prompt(
-                f"{session_rng.choice(about_prefixes)} {business_type} {details['about3']} {session_rng.choice(about_styles)}", 
-                'about3', business_type
-            )
+            'about1': generator._create_clean_about_prompt(details['about1'], about_prefixes, 1),
+            'about2': generator._create_clean_about_prompt(details['about2'], about_prefixes, 2),
+            'about3': generator._create_clean_about_prompt(details['about3'], about_prefixes, 3)
         }
         
         print("🎭 Генерируем ЧЕЛОВЕЧЕСКИЕ review промпты...")
@@ -1466,7 +1971,17 @@ def create_complete_prompts_dict(theme_input):
         print(f"✅ Сгенерированы промпты: {list(complete_prompts.keys())}")
         
         # Дополнительно обеспечиваем уникальность всех промптов в наборе
-        complete_prompts = generator._ensure_prompt_uniqueness(complete_prompts)
+        # НО НЕ для about промптов - они уже чистые
+        prompts_to_enhance = {k: v for k, v in complete_prompts.items() 
+                             if not k.startswith('about')}
+        enhanced_prompts = generator._ensure_prompt_uniqueness(prompts_to_enhance)
+        
+        # Объединяем чистые about промпты с обработанными остальными
+        for key in complete_prompts:
+            if key.startswith('about'):
+                enhanced_prompts[key] = complete_prompts[key]
+        
+        complete_prompts = enhanced_prompts
         
         # КРИТИЧНО: Используем универсальную систему оптимизации промптов
         try:
