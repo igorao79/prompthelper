@@ -63,7 +63,8 @@ class SettingsManager:
             "theme_history": [],
             "default_save_path": str(get_desktop_path()),
             "last_save_path": str(get_desktop_path()),
-            "custom_prompt": ""
+            "custom_prompt": "",
+            "last_selected_country": ""
         }
         
         print(f"🔍 Загрузка настроек из: {self.settings_file}")
@@ -143,4 +144,14 @@ class SettingsManager:
         
     def get_prompt(self):
         """Возвращает сохраненный промпт"""
-        return self.settings.get("custom_prompt", "") 
+        return self.settings.get("custom_prompt", "")
+    
+    def set_last_selected_country(self, country):
+        """Сохраняет последнюю выбранную страну"""
+        self.settings["last_selected_country"] = country
+        self.save_settings()
+        print(f"💾 Сохранена последняя выбранная страна: {country}")
+    
+    def get_last_selected_country(self):
+        """Возвращает последнюю выбранную страну"""
+        return self.settings.get("last_selected_country", "") 

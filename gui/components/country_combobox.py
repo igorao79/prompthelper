@@ -21,6 +21,7 @@ class CountrySearchCombobox(ttk.Frame):
         self.all_countries = list(COUNTRIES_DATA.keys())
         self.filtered_countries = self.all_countries.copy()
         self.favorites = self.settings_manager.get_favorite_countries()
+        self.last_selected = self.settings_manager.get_last_selected_country()
         
         # Переменные
         self.search_var = tk.StringVar()
@@ -159,46 +160,94 @@ class CountrySearchCombobox(ttk.Frame):
         style.configure("Favorite.TLabel", padding=4, font=("Arial", 9, "bold"))
         
     def update_dropdown_items(self):
-        """Обновляет список стран"""
+        """Обновляет список стран с приоритетом для последней выбранной"""
         # Очищаем старые элементы
         for widget in self.items_frame.winfo_children():
             widget.destroy()
+        
+        items_added = []
+        
+        # ПРИОРИТЕТ 1: Последняя выбранная страна (ЖЕЛТОЕ выделение)
+        if (self.last_selected and 
+            self._matches_search(self.last_selected) and 
+            self.last_selected in self.all_countries):
+            self.create_country_item(self.last_selected, False, is_last_selected=True)
+            items_added.append(self.last_selected)
             
-        # Сначала избранные
+            # Разделитель после последней выбранной
+            if (self.favorites or 
+                any(self._matches_search(c) for c in self.filtered_countries if c != self.last_selected)):
+                separator = ttk.Separator(self.items_frame)
+                separator.pack(fill="x", pady=3)
+        
+        # ПРИОРИТЕТ 2: Избранные страны
         if self.favorites:
             for country in self.favorites:
-                if self._matches_search(country):
+                if self._matches_search(country) and country not in items_added:
                     self.create_country_item(country, True)
+                    items_added.append(country)
             
-            # Разделитель
-            if any(self._matches_search(c) for c in self.filtered_countries if c not in self.favorites):
-                ttk.Separator(self.items_frame).pack(fill="x", pady=2)
+            # Разделитель после избранных
+            if any(self._matches_search(c) for c in self.filtered_countries if c not in items_added):
+                separator = ttk.Separator(self.items_frame)
+                separator.pack(fill="x", pady=2)
         
-        # Остальные страны
+        # ПРИОРИТЕТ 3: Остальные страны
         for country in self.filtered_countries:
-            if country not in self.favorites and self._matches_search(country):
+            if country not in items_added and self._matches_search(country):
                 self.create_country_item(country, False)
     
-    def create_country_item(self, country, is_favorite):
-        """Создает элемент страны"""
+    def create_country_item(self, country, is_favorite, is_last_selected=False):
+        """Создает элемент страны с возможностью выделения последней выбранной"""
         frame = ttk.Frame(self.items_frame)
         frame.pack(fill="x")
         
-        # Стиль метки
-        style = "Favorite.TLabel" if is_favorite else "Country.TLabel"
+        # Определяем стиль и цвета
+        if is_last_selected:
+            # ЖЕЛТОЕ выделение для последней выбранной страны
+            style = "LastSelected.TLabel"
+            bg_color = "#FFE135"  # Ярко-желтый
+            fg_color = "#000000"  # Черный текст
+            prefix = "🕒 "  # Иконка часов для последней выбранной
+        elif is_favorite:
+            style = "Favorite.TLabel"
+            bg_color = None
+            fg_color = None
+            prefix = ""
+        else:
+            style = "Country.TLabel"
+            bg_color = None
+            fg_color = None
+            prefix = ""
+        
+        # Настраиваем стиль для последней выбранной
+        if is_last_selected:
+            ttk.Style().configure("LastSelected.TLabel", 
+                                background=bg_color, 
+                                foreground=fg_color,
+                                padding=6,
+                                font=("Arial", 9, "bold"))
         
         # Метка страны
         label = ttk.Label(
             frame, 
-            text=country,
+            text=f"{prefix}{country}",
             style=style
         )
         label.pack(side="left", fill="x", expand=True)
         
-        # Звездочка
+        # Звездочка и дополнительные иконки
+        icon_text = ""
+        if is_last_selected:
+            icon_text = "🕒"  # Часы для последней выбранной
+        elif is_favorite:
+            icon_text = "★"  # Звезда для избранных
+        else:
+            icon_text = "☆"  # Пустая звезда для обычных
+        
         star = ttk.Label(
             frame,
-            text="★" if is_favorite else "☆",
+            text=icon_text,
             style=style,
             cursor="hand2"
         )
@@ -255,10 +304,15 @@ class CountrySearchCombobox(ttk.Frame):
         return not search or search in country.lower()
     
     def _select_country(self, country):
-        """Выбирает страну"""
+        """Выбирает страну и сохраняет её как последнюю выбранную"""
         self.textvariable.set(country)
         self.entry.delete(0, tk.END)
         self.entry.insert(0, country)
+        
+        # Сохраняем как последнюю выбранную страну
+        self.settings_manager.set_last_selected_country(country)
+        self.last_selected = country
+        
         if self.popup_window:
             self.popup_window.destroy()
         if self.on_select:
@@ -274,6 +328,9 @@ class CountrySearchCombobox(ttk.Frame):
         else:
             self.settings_manager.add_favorite_country(country)
             self.favorites = self.settings_manager.get_favorite_countries()
+        
+        # Обновляем последнюю выбранную страну
+        self.last_selected = self.settings_manager.get_last_selected_country()
         
         self.update_dropdown_items()
     
