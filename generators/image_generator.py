@@ -19,15 +19,20 @@ warnings.filterwarnings('ignore', category=requests.packages.urllib3.exceptions.
 class ImageGenerator:
     """Класс для генерации полного набора тематических изображений ТОЛЬКО через Pollinations API"""
     
-    def __init__(self, silent_mode=False, simple_mode=True, use_real_images=False):
+    def __init__(self, silent_mode=False, simple_mode=True, use_real_images=False, fast_mode=True, max_workers=3):
         self.silent_mode = silent_mode
         self.simple_mode = simple_mode  # По умолчанию простой режим
         self.use_real_images = use_real_images  # Новая опция: поиск реальных изображений
+        self.fast_mode = fast_mode  # Быстрый режим Pollinations (меньше попыток/размер)
+        self.max_workers = max(1, int(max_workers))
+        self._retry_total = 3 if fast_mode else 5
+        self._backoff_factor = 0.5 if fast_mode else 1
         
         if not self.silent_mode:
             mode_text = "ПРОСТОЙ РЕЖИМ" if simple_mode else "СЛОЖНЫЙ РЕЖИМ"
             source_text = "ПОИСК РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ГЕНЕРАЦИЯ"
-            print(f"🎨 ImageGenerator - {mode_text}, {source_text}, ТОЛЬКО Pollinations API!")
+            speed_text = "БЫСТРЫЙ" if fast_mode else "СТАНДАРТ"
+            print(f"🎨 ImageGenerator - {mode_text}, {source_text}, {speed_text}, ТОЛЬКО Pollinations API!")
     
     def set_simple_mode(self, simple_mode=True):
         """
@@ -112,6 +117,13 @@ class ImageGenerator:
             return 0
         
         image_names = ['main', 'about1', 'about2', 'about3', 'review1', 'review2', 'review3', 'favicon']
+        # Позволяем ограничить набор изображений через переменную окружения для бенчмарка
+        try:
+            img_limit = int(os.getenv('IMG_LIMIT', '0') or '0')
+            if img_limit > 0:
+                image_names = image_names[:img_limit]
+        except Exception:
+            pass
         generated_count = 0
         
         # Получаем тематические промпты только для основных изображений  
@@ -123,59 +135,70 @@ class ImageGenerator:
         else:
             tematic_prompts, theme_data = self._generate_prompts(theme_input)
         
-        for i, image_name in enumerate(image_names):
-            if progress_callback:
-                progress_callback(f"🎨 Генерация {image_name} ({i+1}/8)...")
-            
-            if not self.silent_mode:
-                print(f"🔄 Генерация {image_name} ({i+1}/8) - КАРДИНАЛЬНО НОВЫЙ ПОДХОД...")
-            
-            # КАРДИНАЛЬНО новый подход: разные промпты для разных типов (как в перегенерации)
+        # Параллельная генерация для ускорения (ограниченное число потоков)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def build_prompt_for_image(image_name):
             if image_name in ["review1", "review2", "review3"]:
-                # ДЛЯ ОТЗЫВОВ - СЛОЖНАЯ СИСТЕМА РАЗНООБРАЗИЯ ЛИЦ! 
                 if not self.silent_mode:
-                    print(f"🔥 {image_name}: Активируем ЭКСТРЕМАЛЬНУЮ систему разнообразия лиц!")
-                
+                    print(f"🔥 {image_name}: Активируем систему разнообразия лиц")
                 try:
                     from generators.prompt_generator import create_human_focused_review_prompts
                     human_reviews = create_human_focused_review_prompts()
-                    
-                    # Выбираем соответствующий промпт
-                    review_index = int(image_name[-1]) - 1  # review1 -> 0, review2 -> 1, review3 -> 2
+                    review_index = int(image_name[-1]) - 1
                     base_prompt = human_reviews[review_index]
-                    
-                    if not self.silent_mode:
-                        print(f"✅ {image_name}: Получен сложный промпт ({len(base_prompt)} символов)")
-                        print(f"🎭 Тип лица: {['Западный/Европейский', 'Азиатский/Восточный', 'Африканский/Латиноамериканский'][review_index]}")
+                except Exception:
+                    base_prompt = "happy customer portrait"
+            elif image_name == "favicon":
+                base_prompt = f"{theme_input} simple icon logo, minimalist business symbol"
+            else:
+                base_prompt = tematic_prompts.get(image_name, f'professional {theme_input} service')
+            # Рандомизация (короткая в быстром режиме)
+            if self.fast_mode:
+                return self._add_simple_randomization(base_prompt, image_name)
+            return self._add_randomization(base_prompt, image_name)
+
+        def generate_one(image_name, index):
+            from time import perf_counter
+            start_ts = perf_counter()
+            if progress_callback:
+                progress_callback(f"🎨 Генерация {image_name} ({index}/8)...")
+            if not self.silent_mode:
+                print(f"🔄 Генерация {image_name} ({index}/8)...")
+            prompt = build_prompt_for_image(image_name)
+            if self.fast_mode:
+                result = self._generate_image_pollinations_simple(prompt, image_name, media_dir)
+            else:
+                result = self._generate_image_pollinations_aggressive(prompt, image_name, media_dir)
+            elapsed = perf_counter() - start_ts
+            if not self.silent_mode:
+                print(f"⏱️ {image_name}: {elapsed:.2f}s")
+            return (image_name, result, elapsed)
+
+        with ThreadPoolExecutor(max_workers=self.max_workers if not self.use_real_images else 1) as executor:
+            futures = {executor.submit(generate_one, name, i+1): name for i, name in enumerate(image_names)}
+            completed = 0
+            total_elapsed = 0.0
+            for future in as_completed(futures):
+                image_name = futures[future]
+                try:
+                    name, result, elapsed = future.result()
+                    total_elapsed += (elapsed or 0)
+                    if result:
+                        generated_count += 1
+                        if not self.silent_mode:
+                            print(f"✅ {name}: готово за {elapsed:.2f}s")
+                    else:
+                        if not self.silent_mode:
+                            print(f"❌ {name}: не удалось создать")
                 except Exception as e:
                     if not self.silent_mode:
-                        print(f"⚠️ {image_name}: Ошибка сложной системы ({e}), используем fallback")
-                    base_prompt = "happy customer portrait"
-                    
-            elif image_name == "favicon":
-                # ДЛЯ ФАВИКОНКИ - ТЕМАТИЧЕСКАЯ ПРОСТАЯ ИКОНКА! 
-                base_prompt = f"{theme_input} simple icon logo, minimalist business symbol"
-                if not self.silent_mode:
-                    print(f"🏷️ {image_name}: Используем тематический промпт для иконки: {theme_input}")
-            else:
-                # Для остальных используем тематические промпты
-                base_prompt = tematic_prompts.get(image_name, f'professional {theme_input} service')
-                if not self.silent_mode:
-                    print(f"🎯 {image_name}: Используем тематический промпт")
-            
-            # Применяем рандомизацию как в перегенерации
-            enhanced_prompt = self._add_randomization(base_prompt, image_name)
-            
-            # Используем СРАЗУ агрессивный метод (как в перегенерации, без simple fallback)
-            result = self._generate_image_pollinations_aggressive(enhanced_prompt, image_name, media_dir)
-                
-            if result:
-                generated_count += 1
-                if not self.silent_mode:
-                    print(f"✅ {image_name}: Успешно создано через агрессивный метод!")
-            else:
-                if not self.silent_mode:
-                    print(f"❌ {image_name}: Агрессивный метод не сработал")
+                        print(f"⚠️ Ошибка при создании {image_name}: {e}")
+                completed += 1
+                if progress_callback:
+                    progress_callback(f"📈 Готово {completed}/8 изображений")
+            if not self.silent_mode:
+                print(f"⏱️ Суммарное время потоков (без учёта параллелизма): {total_elapsed:.2f}s")
         
         if not self.silent_mode:
             source_text = "РЕАЛЬНЫХ изображений" if self.use_real_images else "AI-изображений"
@@ -192,12 +215,14 @@ class ImageGenerator:
         if image_name == 'favicon':
             target_size_kb = 50
             output_path = Path(media_dir) / f"{image_name}.png"
-            # ОПТИМИЗИРОВАННЫЕ ПАРАМЕТРЫ ДЛЯ ИКОНОК: без enhance, квадратный формат
             api_params = "?width=512&height=512&model=flux&enhance=false&nologo=true"
         else:
-            target_size_kb = 150
+            target_size_kb = 150 if not self.fast_mode else 120
             output_path = Path(media_dir) / f"{image_name}.jpg"
-            api_params = "?width=1024&height=768&model=flux&enhance=true&nologo=true"
+            if self.fast_mode:
+                api_params = "?width=832&height=512&model=flux&enhance=false&nologo=true"
+            else:
+                api_params = "?width=1024&height=768&model=flux&enhance=true&nologo=true"
         
         # Pollinations API URL
         api_url = f"https://image.pollinations.ai/prompt/{quote(enhanced_prompt)}{api_params}"
@@ -209,13 +234,15 @@ class ImageGenerator:
         session = self._create_aggressive_session()
         
         # Пробуем несколько раз с разными настройками
-        for attempt in range(3):
+        attempts = 2 if self.fast_mode else 3
+        for attempt in range(attempts):
             if not self.silent_mode:
                 print(f"🔄 Попытка {attempt + 1}/3...")
             
             try:
                 # Агрессивные таймауты
-                response = session.get(api_url, timeout=(15, 60), stream=True)
+                timeout_cfg = (10, 30) if self.fast_mode else (15, 60)
+                response = session.get(api_url, timeout=timeout_cfg, stream=True)
                 
                 if not self.silent_mode:
                     print(f"📊 Pollinations API: код {response.status_code}")
@@ -247,8 +274,8 @@ class ImageGenerator:
                 
                 elif response.status_code == 429:
                     if not self.silent_mode:
-                        print(f"⏰ Pollinations API: Лимит запросов, пауза 10 сек...")
-                    time.sleep(10)
+                        print(f"⏰ Pollinations API: Лимит запросов, короткая пауза...")
+                    time.sleep(4 if self.fast_mode else 10)
                     continue
                 
                 elif response.status_code == 500:
@@ -372,14 +399,14 @@ class ImageGenerator:
         
         # Агрессивная retry стратегия
         retry_strategy = Retry(
-            total=5,
-            backoff_factor=1,
+            total=self._retry_total,
+            backoff_factor=self._backoff_factor,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS"],
             raise_on_status=False
         )
         
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=20, pool_maxsize=20)
         session.mount("https://", adapter)
         session.mount("http://", adapter)
         
@@ -532,14 +559,19 @@ class ImageGenerator:
                 image.save(filepath, format=format_type, optimize=True)
             else:
                 format_type = 'JPEG'
-                # Для JPEG подбираем качество
-                for q in [85, 75, 65, 55, 45]:
+                if getattr(self, 'fast_mode', False):
+                    # Быстрый однопроходный сейв
+                    q = 70
                     image.save(filepath, format=format_type, quality=q, optimize=True)
-                    
-                    # Проверяем размер файла
-                    file_size_kb = os.path.getsize(filepath) / 1024
-                    if file_size_kb <= target_size_kb:
-                        break
+                else:
+                    # Для JPEG подбираем качество
+                    for q in [85, 75, 65, 55, 45]:
+                        image.save(filepath, format=format_type, quality=q, optimize=True)
+                        
+                        # Проверяем размер файла
+                        file_size_kb = os.path.getsize(filepath) / 1024
+                        if file_size_kb <= target_size_kb:
+                            break
             
             return True
                 

@@ -4,6 +4,8 @@
 """
 
 import datetime
+import zipfile
+from .settings_manager import get_desktop_path
 import os
 import re
 import subprocess
@@ -204,6 +206,79 @@ def sanitize_filename(filename):
         filename = filename[:200]
     
     return filename
+
+def get_country_short_code(country):
+    """
+    Возвращает краткий код страны (2-3 кириллических символа) для имени ZIP.
+    Если страна неизвестна — возвращает первые две согласные в верхнем регистре,
+    либо первые две буквы.
+    """
+    mapping = {
+        "Россия": "РФ",
+        "Украина": "УК",
+        "Беларусь": "БЛ",
+        "Казахстан": "КЗ",
+        "США": "СШ",
+        "Великобритания": "ВБ",
+        "Германия": "ГЕ",
+        "Франция": "ФР",
+        "Италия": "ИТ",
+        "Испания": "ИС",
+        "Польша": "ПЛ",
+        "Перу": "ПР",
+        "Чехия": "ЧХ",
+        "Чили": "ЧЛ",
+        "Турция": "ТР",
+        "Китай": "КТ",
+        "Япония": "ЯП",
+        "Корея": "КР",
+        "Индия": "ИН",
+        "Бразилия": "БР",
+        "Мексика": "МК",
+        "Канада": "КА",
+        "Филиппины": "ФЛ",
+    }
+    if country in mapping:
+        return mapping[country]
+    # Автоматическое правило для неизвестных: первые две согласные/буквы
+    vowels = set("аеёиоуыэюяAEIOUYaeiouy")
+    letters = [ch for ch in country if ch.isalpha()]
+    consonants = [ch for ch in letters if ch not in vowels]
+    base = (consonants[:2] or letters[:2] or [country[:1]])
+    return "".join(base).upper()
+
+def ensure_empty_zip_for_landing(save_dir, country, theme):
+    """
+    Создает ПУСТОЙ ZIP-файл в выбранной папке (или на рабочем столе),
+    именем: <КодСтраны>_<Тематика>_<ДД.ММ.ГГГГ>.zip
+    Важно: если уже существует ZIP для этой страны и тематики (любая дата), новый не создается.
+
+    Returns:
+        Path | None: Путь к созданному ZIP или None, если создание не требовалось/невозможно.
+    """
+    try:
+        base_dir = Path(save_dir) if save_dir else get_desktop_path()
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        country_code = get_country_short_code(country)
+        # Проверка существования любого ZIP с этой страной и тематикой
+        safe_theme = sanitize_filename(theme)
+        pattern = f"{country_code}_{safe_theme}_*.zip"
+        existing = list(base_dir.glob(pattern))
+        if existing:
+            return None
+
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        zip_name = f"{country_code}_{safe_theme}_{today}.zip"
+        zip_path = base_dir / zip_name
+
+        # Создаем пустой ZIP
+        with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            pass
+        return zip_path
+    except Exception as e:
+        print(f"Ошибка создания ZIP: {e}")
+        return None
 
 def create_project_info(country, city, language, domain, theme):
     """

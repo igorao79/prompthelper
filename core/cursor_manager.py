@@ -775,7 +775,7 @@ class CursorManager:
         else:
             print("Автовставка промптов отключена из-за отсутствия pyautogui")
     
-    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False):
+    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False, use_real_images=False):
         """
         Создает структуру папок проекта и генерирует тематические изображения
         
@@ -811,7 +811,8 @@ class CursorManager:
                 
                 # Создаем генератор в тихом режиме 
                 from generators.image_generator import ImageGenerator
-                image_generator = ImageGenerator(silent_mode=True)
+                # Источник выбирается на уровне GUI; пробрасываем сюда. Включаем fast_mode.
+                image_generator = ImageGenerator(silent_mode=True, use_real_images=use_real_images, fast_mode=True, max_workers=3)
                 
                 # Генерируем изображения
                 results = image_generator.generate_thematic_set(

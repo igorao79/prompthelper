@@ -15,7 +15,7 @@ from shared.city_generator import CityGenerator
 from shared.settings_manager import SettingsManager, get_desktop_path
 from shared.helpers import (validate_domain, format_status_message, 
                            get_language_by_country, get_language_display_name,
-                  open_text_editor, check_directory_exists)
+                  open_text_editor, check_directory_exists, ensure_empty_zip_for_landing)
 from core.cursor_manager import CursorManager
 from generators.prompt_generator import create_landing_prompt
 
@@ -963,7 +963,8 @@ class LandingPageGeneratorGUI:
             f"Домен: {domain}\n"
             f"Папка: {save_path}\n"
             f"Промпт: {prompt_type}\n\n"
-            f"Будет создан проект с папкой media. Изображения сейчас НЕ генерируются.\n\n"
+            f"Будет создан проект с папкой media. "
+            f"{'Изображения будут сгенерированы автоматически.' if self.image_source_var.get() != 'no_generation' else 'Изображения сейчас НЕ генерируются.'}\n\n"
             f"Продолжить?"
         )
         if not result:
@@ -994,14 +995,26 @@ class LandingPageGeneratorGUI:
             print(f"  • Город: {city}")
             print(f"  • Папка: {save_path}")
             
+            # Пустой ZIP по правилу: <КодСтраны>_<Тематика>_<ДД.ММ.ГГГГ>.zip
+            try:
+                zip_path = ensure_empty_zip_for_landing(save_path, country, theme)
+                if zip_path:
+                    print(f"📦 Создан пустой ZIP: {zip_path}")
+                else:
+                    print("ℹ️ ZIP не создан (уже существует для этой страны и тематики)")
+            except Exception as _e:
+                print(f"⚠️ Не удалось создать ZIP: {_e}")
+            
             # Обновление статуса
             self.update_status("🔄 Создание папок...")
             print("🔄 Шаг 1: Создание папок...")
             
-            # Создание структуры проекта с генерацией изображений
+            # Создание структуры проекта, опциональная генерация изображений
             print("🔄 Шаг 2: Создание структуры проекта...")
+            should_generate_images = (self.image_source_var.get() != "no_generation")
+            use_real_images = (self.image_source_var.get() == "real_search")
             project_path, media_path = self.cursor_manager.create_project_structure(
-                domain, save_path, theme, self.update_status, generate_images=False
+                domain, save_path, theme, self.update_status, generate_images=should_generate_images, use_real_images=use_real_images
             )
             print(f"✅ Структура проекта создана: {project_path}")
             print(f"✅ Папка media создана: {media_path}")
