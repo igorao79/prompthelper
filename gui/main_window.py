@@ -30,7 +30,7 @@ class LandingPageGeneratorGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("✨ Генератор Лендингов v2.0 — Современный")
-        self.root.geometry("900x950")
+        self.root.geometry("1000x800")
         self.root.resizable(True, True)
         
         # Современная тема
@@ -38,7 +38,7 @@ class LandingPageGeneratorGUI:
         self.theme.apply_to_root(self.root)
         
         # Улучшенные настройки окна
-        self.root.minsize(800, 700)
+        self.root.minsize(900, 720)
         
         # Попытка установить иконку окна
         try:
@@ -71,11 +71,9 @@ class LandingPageGeneratorGUI:
                 self.domain_var.set(value[:50])
         self.domain_var.trace_add("write", limit_domain_length)
         self.save_path_var = tk.StringVar(value=self.settings_manager.get_save_path())
-        self.project_path_var = tk.StringVar()
         self.last_created_project_path = None
         
-        # НОВАЯ ПЕРЕМЕННАЯ: Выбор типа изображений (AI или реальные фото)
-        self.image_source_var = tk.StringVar(value="no_generation")  # По умолчанию без генерации
+        # Источник изображений удален — всегда AI-генерация
         
         # Привязываем обработчики изменений для автосброса промпта
         self.theme_var.trace('w', self._on_data_change)
@@ -119,33 +117,65 @@ class LandingPageGeneratorGUI:
                 fg=self.theme.colors.TEXT_SECONDARY
             )
             subtitle.pack()
+
+            # ВЕРХНЯЯ ПАНЕЛЬ ДЕЙСТВИЙ
+            toolbar = self.theme.create_modern_frame(header_frame, bg=self.theme.colors.PRIMARY, highlightthickness=0)
+            toolbar.pack(fill="x", pady=(8, 12))
+
+            inner = self.theme.create_modern_frame(toolbar, bg=self.theme.colors.PRIMARY, highlightthickness=0)
+            inner.pack(fill="x", padx=10)
+
+            # Кнопки слева: редактировать/сбросить промпт
+            left = self.theme.create_modern_frame(inner, bg=self.theme.colors.PRIMARY, highlightthickness=0)
+            left.pack(side="left")
+            edit_btn = self.theme.create_modern_button(
+                left,
+                text=f"{self.theme.get_icon('edit')} Настроить промпт",
+                command=self.edit_prompt,
+                style="secondary",
+                padx=16,
+                pady=8
+            )
+            edit_btn.pack(side="left", padx=(0, 8))
+            reset_btn = self.theme.create_modern_button(
+                left,
+                text=f"{self.theme.get_icon('reset')} Сбросить",
+                command=self.reset_prompt,
+                style="secondary",
+                padx=16,
+                pady=8
+            )
+            reset_btn.pack(side="left")
+
+            # Главная кнопка справа
+            right = self.theme.create_modern_frame(inner, bg=self.theme.colors.PRIMARY, highlightthickness=0)
+            right.pack(side="right")
+            create_button = self.theme.create_modern_button(
+                right,
+                text=f"{self.theme.get_icon('rocket')} СОЗДАТЬ ЛЕНДИНГ {self.theme.get_icon('magic')}",
+                command=self.create_landing,
+                style="primary",
+                padx=28,
+                pady=12
+            )
+            create_button.pack(side="right")
+            self.theme.add_shadow_effect(create_button)
+
+            # Верхняя панель уже добавлена выше
             
             # Создаем прокручиваемую область с канвасом и скроллбаром
             self.create_scrollable_frame()
-            
-            # Блок выбора папки для сохранения
+
+            # Компактная одноколоночная раскладка для стабильности
             self.create_save_path_section()
-            
-            # Блок тематики
             self.create_theme_section()
-            
-            # Блок выбора страны
             self.create_country_section()
-            
-            # Информационный блок
             self.create_info_section()
-            
-            # Блок домена
             self.create_domain_section()
-            
-            # Кнопки действий
-            self.create_action_buttons()
-            
-            # Секция управления изображениями
             self.create_image_management_section()
             
             # Статус
-            self.create_status_section()
+            self.create_status_section(parent=self.scrollable_frame)
             
         except Exception as e:
             print(f"❌ Ошибка создания интерфейса: {e}")
@@ -229,10 +259,11 @@ class LandingPageGeneratorGUI:
         # Добавляем современные отступы для содержимого
         self.scrollable_frame.configure(padx=20, pady=15)
     
-    def create_save_path_section(self):
+    def create_save_path_section(self, parent=None):
         """Создает современную секцию выбора папки для сохранения"""
+        container = parent if parent is not None else self.scrollable_frame
         section = self.theme.create_modern_labelframe(
-            self.scrollable_frame, 
+            container, 
             text=f"{self.theme.get_icon('folder')} Папка для создания проектов",
             padx=15, 
             pady=12
@@ -275,10 +306,11 @@ class LandingPageGeneratorGUI:
         )
         reset_btn.pack(side="right")
     
-    def create_theme_section(self):
+    def create_theme_section(self, parent=None):
         """Создает современную секцию тематики"""
+        container = parent if parent is not None else self.scrollable_frame
         section = self.theme.create_modern_labelframe(
-            self.scrollable_frame, 
+            container, 
             text=f"{self.theme.get_icon('target')} Тематика лендинга",
             padx=15, 
             pady=12
@@ -300,10 +332,11 @@ class LandingPageGeneratorGUI:
         )
         theme_hint.pack(anchor="w", pady=(8, 0))
     
-    def create_country_section(self):
+    def create_country_section(self, parent=None):
         """Создает современную секцию выбора страны"""
+        container = parent if parent is not None else self.scrollable_frame
         section = self.theme.create_modern_labelframe(
-            self.scrollable_frame, 
+            container, 
             text=f"{self.theme.get_icon('globe')} Страна и город",
             padx=15, 
             pady=12
@@ -328,10 +361,11 @@ class LandingPageGeneratorGUI:
         )
         instruction.pack(anchor="w", pady=(8, 0))
     
-    def create_info_section(self):
+    def create_info_section(self, parent=None):
         """Создает современную информационную секцию"""
+        container = parent if parent is not None else self.scrollable_frame
         section = self.theme.create_modern_labelframe(
-            self.scrollable_frame, 
+            container, 
             text=f"{self.theme.get_icon('info')} Информация",
             padx=15, 
             pady=12
@@ -372,10 +406,11 @@ class LandingPageGeneratorGUI:
         )
         city_btn.pack(anchor="w", pady=(8, 0))
     
-    def create_domain_section(self):
+    def create_domain_section(self, parent=None):
         """Создает современную секцию домена"""
+        container = parent if parent is not None else self.scrollable_frame
         section = self.theme.create_modern_labelframe(
-            self.scrollable_frame, 
+            container, 
             text="🌐 Домен сайта",
             padx=15, 
             pady=12
@@ -402,12 +437,9 @@ class LandingPageGeneratorGUI:
     
     def create_action_buttons(self):
         """Создает современные кнопки действий"""
-        section = self.theme.create_modern_frame(
-            self.scrollable_frame,
-            bg=self.theme.colors.BACKGROUND,
-            highlightthickness=0
-        )
-        section.pack(fill="x", pady=20)
+        section = self.theme.create_modern_frame(self.scrollable_frame, bg=self.theme.colors.BACKGROUND, highlightthickness=0)
+        # В компактной раскладке панель действий вынесена наверх — скрываем секцию
+        section.pack_forget()
         
         # Современный фрейм для кнопок промпта
         prompt_buttons_frame = self.theme.create_modern_frame(
@@ -437,255 +469,73 @@ class LandingPageGeneratorGUI:
         )
         reset_btn.pack(side="left")
         
-        # Современная кнопка генерации изображений
-        generate_images_button = self.theme.create_modern_button(
-            section,
-            text=f"{self.theme.get_icon('image')} ГЕНЕРИРОВАТЬ ИЗОБРАЖЕНИЯ {self.theme.get_icon('magic')}",
-            command=self.generate_images_only,
-            style="secondary",
-            font=self.theme.typography.button_lg(),
-            padx=30,
-            pady=12
-        )
-        generate_images_button.pack(pady=(0, 10))
+        # Кнопка генерации изображений удалена
         
-        # ГЛАВНАЯ СОВРЕМЕННАЯ КНОПКА - СОЗДАТЬ ЛЕНДИНГ
-        create_button = self.theme.create_modern_button(
-            section,
-            text=f"{self.theme.get_icon('rocket')} СОЗДАТЬ ЛЕНДИНГ {self.theme.get_icon('magic')}",
-            command=self.create_landing,
-            style="primary",
-            font=self.theme.typography.button_lg(),
-            padx=40,
-            pady=15
-        )
-        create_button.pack()
-        
-        # Добавляем эффект тени к главной кнопке
-        self.theme.add_shadow_effect(create_button)
+        # Кнопка "Создать" перенесена в верхнюю панель
     
-    def create_image_management_section(self):
-        """Создает современную секцию управления изображениями"""
-        # Современный фрейм секции
+    def create_image_management_section(self, parent=None):
+        """Компактная плашка перегенерации изображений"""
+        container = parent if parent is not None else self.scrollable_frame
         section = self.theme.create_modern_labelframe(
-            self.scrollable_frame, 
-            text=f"{self.theme.get_icon('image')} Управление изображениями",
-            padx=15, 
-            pady=12
+            container,
+            text=f"{self.theme.get_icon('image')} Перегенерация изображений",
+            padx=12,
+            pady=10
         )
-        section.pack(fill="x", pady=(0, 15), ipady=8)
-        
-        # Современное описание
-        description = self.theme.create_modern_label(
-            section,
-            text="Выберите источник изображений и пересоздайте изображения для проекта",
-            style="caption",
-            bg=self.theme.colors.SURFACE,
-            wraplength=650
-        )
-        description.pack(pady=(5, 8), anchor="w")
-        
-        # 🆕 НОВАЯ СЕКЦИЯ: Выбор источника изображений
-        source_frame = self.theme.create_modern_frame(
-            section,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=1,
-            highlightbackground=self.theme.colors.BORDER
-        )
-        source_frame.pack(fill="x", pady=(0, 12), padx=10, ipady=10)
-        
-        source_label = self.theme.create_modern_label(
-            source_frame,
-            text="🎨 Источник изображений:",
-            style="body_bold",
-            bg=self.theme.colors.SURFACE
-        )
-        source_label.pack(anchor="w", pady=(0, 8))
-        
-        # Радиокнопки для выбора типа
-        radio_frame = self.theme.create_modern_frame(
-            source_frame,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=0
-        )
-        radio_frame.pack(fill="x")
-        
-        # AI-генерация (по умолчанию)
-        ai_radio = tk.Radiobutton(
-            radio_frame,
-            text="🤖 AI-генерация (Pollinations API)",
-            variable=self.image_source_var,
-            value="ai_generation",
-            bg=self.theme.colors.SURFACE,
-            fg=self.theme.colors.TEXT_PRIMARY,
-            font=self.theme.typography.body_md(),
-            selectcolor=self.theme.colors.BUTTON_PRIMARY,
-            activebackground=self.theme.colors.SURFACE,
-            relief="flat",
-            borderwidth=0
-        )
-        ai_radio.pack(anchor="w", pady=2)
-        
-        # Поиск реальных фото (новая опция!)
-        real_radio = tk.Radiobutton(
-            radio_frame,
-            text="📸 Поиск реальных фото (Pixabay, Unsplash)",
-            variable=self.image_source_var,
-            value="real_search",
-            bg=self.theme.colors.SURFACE,
-            fg=self.theme.colors.TEXT_PRIMARY,
-            font=self.theme.typography.body_md(),
-            selectcolor=self.theme.colors.BUTTON_SUCCESS,
-            activebackground=self.theme.colors.SURFACE,
-            relief="flat",
-            borderwidth=0
-        )
-        real_radio.pack(anchor="w", pady=2)
+        section.pack(fill="x", pady=(0, 15), ipady=6)
 
-        # Режим без генерации
-        none_radio = tk.Radiobutton(
-            radio_frame,
-            text="🚫 Без генерации изображений (только промпт)",
-            variable=self.image_source_var,
-            value="no_generation",
-            bg=self.theme.colors.SURFACE,
-            fg=self.theme.colors.TEXT_PRIMARY,
-            font=self.theme.typography.body_md(),
-            selectcolor=self.theme.colors.BUTTON_WARNING if hasattr(self.theme.colors, 'BUTTON_WARNING') else self.theme.colors.BUTTON_PRIMARY,
-            activebackground=self.theme.colors.SURFACE,
-            relief="flat",
-            borderwidth=0
-        )
-        none_radio.pack(anchor="w", pady=2)
-        
-        # Описание выбранного режима
-        mode_info = self.theme.create_modern_label(
-            source_frame,
-            text="💡 Выберите AI для генерации, поиск для реальных фото, или режим без генерации (только промпт)",
-            style="caption",
-            bg=self.theme.colors.SURFACE,
-            fg=self.theme.colors.TEXT_SECONDARY,
-            wraplength=600
-        )
-        mode_info.pack(anchor="w", pady=(8, 0))
-        
-        # Современное поле для выбора папки проекта
-        project_frame = self.theme.create_modern_frame(
-            section,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=0
-        )
-        project_frame.pack(fill="x", pady=(0, 8))
-        
-        project_label = self.theme.create_modern_label(
-            project_frame, 
-            text="Папка проекта:", 
-            style="body",
-            bg=self.theme.colors.SURFACE
-        )
-        project_label.pack(anchor="w", pady=(0, 5))
-        
-        path_frame = self.theme.create_modern_frame(
-            project_frame,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=0
-        )
-        path_frame.pack(fill="x")
-        
-        # Современное поле ввода пути
-        project_entry = self.theme.create_modern_entry(
-            path_frame, 
-            textvariable=self.project_path_var,
-            font=self.theme.typography.body_lg()
-        )
-        project_entry.pack(side="left", fill="x", expand=True, padx=(0, 10), ipady=8)
-        
-        # Современная кнопка выбора папки
-        browse_project_btn = self.theme.create_modern_button(
+        # Путь проекта
+        path_frame = self.theme.create_modern_frame(section, bg=self.theme.colors.SURFACE)
+        path_frame.pack(fill="x", pady=(5, 8))
+
+        self.project_path_var = tk.StringVar()
+        entry = self.theme.create_modern_entry(path_frame, textvariable=self.project_path_var)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=6)
+
+        browse_btn = self.theme.create_modern_button(
             path_frame,
             text=f"{self.theme.get_icon('folder')} Выбрать",
             command=self.browse_project_path,
             style="secondary",
-            font=self.theme.typography.button_md()
         )
-        browse_project_btn.pack(side="right")
-        
-        # Современный фрейм с кнопками для отдельных изображений
-        buttons_frame = self.theme.create_modern_frame(
-            section,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=0
-        )
-        buttons_frame.pack(fill="x", pady=(8, 0))
-        
-        # Создаем современные кнопки в две строки
-        row1 = self.theme.create_modern_frame(
-            buttons_frame,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=0
-        )
-        row1.pack(fill="x", pady=(0, 8))
-        
-        row2 = self.theme.create_modern_frame(
-            buttons_frame,
-            bg=self.theme.colors.SURFACE,
-            highlightthickness=0
-        )
-        row2.pack(fill="x")
-        
-        # Первая строка современных кнопок
-        image_buttons_row1 = [
-            ("🖼️ Main", "main"),
-            ("📖 About1", "about1"),
-            ("📘 About2", "about2"),
-            ("📙 About3", "about3")
-        ]
-        
-        for text, image_name in image_buttons_row1:
-            btn = self.theme.create_modern_button(
-                row1,
-                text=text,
-                command=lambda name=image_name: self.regenerate_single_image(name),
-                style="primary",
-                font=self.theme.typography.button_md()
-            )
-            btn.pack(side="left", expand=True, fill="x", padx=2)
-        
-        # Вторая строка современных кнопок
-        image_buttons_row2 = [
-            ("⭐ Review1", "review1"),
-            ("⭐ Review2", "review2"),
-            ("⭐ Review3", "review3"),
-            ("🎯 Favicon", "favicon")
-        ]
-        
-        for text, image_name in image_buttons_row2:
-            btn = self.theme.create_modern_button(
-                row2,
-                text=text,
-                command=lambda name=image_name: self.regenerate_single_image(name),
-                style="secondary",
-                font=self.theme.typography.button_md()
-            )
-            btn.pack(side="left", expand=True, fill="x", padx=2)
-        
-        # Современная кнопка для пересоздания всех изображений
-        regenerate_all_btn = self.theme.create_modern_button(
-            section,
-            text=f"{self.theme.get_icon('reset')} Пересоздать ВСЕ изображения",
+        browse_btn.pack(side="right")
+
+        # Кнопки действий (компактно)
+        buttons = self.theme.create_modern_frame(section, bg=self.theme.colors.SURFACE)
+        buttons.pack(fill="x")
+
+        regen_all_btn = self.theme.create_modern_button(
+            buttons,
+            text=f"{self.theme.get_icon('reset')} Пересоздать все",
             command=self.regenerate_all_images,
-            style="success",
-            font=self.theme.typography.button_lg(),
-            padx=20,
-            pady=8
+            style="primary"
         )
-        regenerate_all_btn.pack(pady=(12, 0))
+        regen_all_btn.pack(side="left", padx=(0, 8))
+
+        # Кнопки отдельных изображений короткими чипами
+        names = [
+            ("Главное", "main"), ("О нас 1", "about1"), ("О нас 2", "about2"), ("О нас 3", "about3"),
+            ("Отзыв 1", "review1"), ("Отзыв 2", "review2"), ("Отзыв 3", "review3"), ("Favicon", "favicon")
+        ]
+        chips = self.theme.create_modern_frame(section, bg=self.theme.colors.SURFACE)
+        chips.pack(fill="x", pady=(10, 0))
+        for label, key in names:
+            btn = self.theme.create_modern_button(
+                chips,
+                text=label,
+                command=lambda k=key: self.regenerate_single_image(k),
+                style="secondary",
+                padx=10,
+                pady=6
+            )
+            btn.pack(side="left", padx=4, pady=2)
     
-    def create_status_section(self):
+    def create_status_section(self, parent=None):
         """Создает современную секцию статуса"""
         # Современный статусный контейнер
+        container = parent if parent is not None else self.scrollable_frame
         status_container = self.theme.create_modern_frame(
-            self.scrollable_frame,
+            container,
             bg=self.theme.colors.CARD,
             highlightthickness=1,
             highlightbackground=self.theme.colors.BORDER
@@ -842,81 +692,10 @@ class LandingPageGeneratorGUI:
         return True, ""
         
     def generate_images_only(self):
-        """Генерирует только изображения"""
-        if not self.validate_form()[0]:
             return
-        # Блокируем запуск, если выбран режим без генерации
-        if self.image_source_var.get() == "no_generation":
-            messagebox.showwarning("Предупреждение", "Выбран режим 'Без генерации изображений'. Выберите источник изображений (AI или поиск), чтобы продолжить.")
-            return
-            
-        theme = self.theme_var.get().strip()
-        
-        # Создаем папку для изображений
-        save_path = self.save_path_var.get()
-        media_folder = Path(save_path) / f"{theme}_images"
-        media_folder.mkdir(exist_ok=True)
-        
-        self.update_status("🎨 Генерация изображений...")
-        
-        # Запуск в отдельном потоке
-        threading.Thread(
-            target=self._generate_images_only_process,
-            args=(str(media_folder), theme),
-            daemon=True
-        ).start()
     
     def _generate_images_only_process(self, media_path, theme):
-
-        try:
-            from generators.image_generator import ImageGenerator
-            # Режим без генерации: выходим
-            if self.image_source_var.get() == "no_generation":
-                self.update_status("ℹ️ Режим без генерации включен — изображения не создаются")
                 return
-            
-            # 🆕 УЧИТЫВАЕМ ВЫБРАННЫЙ ИСТОЧНИК ИЗОБРАЖЕНИЙ
-            use_real_images = (self.image_source_var.get() == "real_search")
-            source_text = "РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ИЗОБРАЖЕНИЙ"
-            
-            self.update_status(f"🎨 Генерация {source_text}...")
-            
-            # Создаем генератор с выбранным источником
-            image_generator = ImageGenerator(
-                silent_mode=True,
-                use_real_images=use_real_images  # 🆕 Новый параметр!
-            )
-            
-            # Генерируем полный набор изображений
-            results = image_generator.generate_thematic_set(
-                theme_input=theme,
-                media_dir=media_path,
-                method="1",
-                progress_callback=self.update_status
-            )
-            
-            # Подсчитываем результаты
-            successful_count = results if isinstance(results, int) else 0
-            
-            # 🆕 УЧИТЫВАЕМ ТИП ИСТОЧНИКА В СООБЩЕНИЯХ
-            source_text = "реальных фото" if use_real_images else "AI-изображений"
-            action_text = "найдено и загружено" if use_real_images else "сгенерировано"
-            
-            self.update_status(f"✅ {action_text.capitalize()} {successful_count}/8 {source_text}")
-            
-            messagebox.showinfo(
-                "Готово",
-                f"Генерация изображений завершена!\n\n"
-                f"Успешно {action_text}: {successful_count}/8 {source_text}\n"
-                f"Источник: {'🔍 Поиск реальных фото' if use_real_images else '🤖 AI-генерация'}\n"
-                f"Папка: {media_path}\n\n"
-                f"Изображения сохранены и готовы к использованию."
-            )
-            
-        except Exception as e:
-            error_msg = f"Ошибка генерации изображений: {str(e)}"
-            self.update_status(f"❌ {error_msg}")
-            messagebox.showerror("Ошибка", error_msg)
 
     def create_landing(self):
         """Основная функция создания лендинга"""
@@ -963,8 +742,7 @@ class LandingPageGeneratorGUI:
             f"Домен: {domain}\n"
             f"Папка: {save_path}\n"
             f"Промпт: {prompt_type}\n\n"
-            f"Будет создан проект с папкой media. "
-            f"{'Изображения будут сгенерированы автоматически.' if self.image_source_var.get() != 'no_generation' else 'Изображения сейчас НЕ генерируются.'}\n\n"
+            f"Будет создан проект с папкой media. Изображения будут сгенерированы автоматически.\n\n"
             f"Продолжить?"
         )
         if not result:
@@ -1011,10 +789,9 @@ class LandingPageGeneratorGUI:
             
             # Создание структуры проекта, опциональная генерация изображений
             print("🔄 Шаг 2: Создание структуры проекта...")
-            should_generate_images = (self.image_source_var.get() != "no_generation")
-            use_real_images = (self.image_source_var.get() == "real_search")
+            should_generate_images = True
             project_path, media_path = self.cursor_manager.create_project_structure(
-                domain, save_path, theme, self.update_status, generate_images=should_generate_images, use_real_images=use_real_images
+                domain, save_path, theme, self.update_status, generate_images=should_generate_images
             )
             print(f"✅ Структура проекта создана: {project_path}")
             print(f"✅ Папка media создана: {media_path}")
@@ -1227,70 +1004,20 @@ class LandingPageGeneratorGUI:
     def _regenerate_image_process(self, image_name, media_path, theme):
         """Процесс пересоздания одного изображения"""
         try:
-            # Режим без генерации: выходим
-            if self.image_source_var.get() == "no_generation":
-                self.update_status("ℹ️ Режим без генерации включен — пересоздание изображений отключено")
-                messagebox.showwarning("Предупреждение", "Режим 'Без генерации изображений' активен. Выберите AI или поиск, чтобы пересоздавать изображения.")
-                return
-            # 🆕 УЧИТЫВАЕМ ВЫБРАННЫЙ ИСТОЧНИК ИЗОБРАЖЕНИЙ
-            use_real_images = (self.image_source_var.get() == "real_search")
-            source_text = "РЕАЛЬНОГО ФОТО" if use_real_images else "AI-ИЗОБРАЖЕНИЯ"
-            action_text = "Поиск" if use_real_images else "Пересоздание"
-            
-            self.update_status(f"🎨 {action_text} {source_text} {image_name}...")
+            self.update_status(f"🎨 Пересоздание AI-ИЗОБРАЖЕНИЯ {image_name}...")
             
             # Импортируем генератор
-            from generators.thematic_generator import ThematicImageGenerator
             from generators.image_generator import ImageGenerator
-            
-            # Создаем генераторы с выбранным источником
             image_generator = ImageGenerator(
                 silent_mode=True,
-                use_real_images=use_real_images  # 🆕 Новый параметр!
+                fast_mode=True
             )
-            thematic_gen = ThematicImageGenerator(silent_mode=True)
             
-            # Получаем промпты
-            prompts = thematic_gen.get_theme_prompts(theme)
+            # Получаем промпты (через основной генератор)
+            from generators.prompt_generator import create_complete_prompts_dict
+            prompts = create_complete_prompts_dict(theme)
             
-            # 🆕 НОВАЯ ЛОГИКА: выбор между AI и поиском реальных фото
-            if use_real_images:
-                # Используем поиск реальных изображений через новую систему
-                from generators.image_search_downloader import ImageSearchDownloader
-                searcher = ImageSearchDownloader(silent_mode=True)
-                
-                # Создаем временную папку для одного изображения
-                temp_media = Path(media_path) / "temp_single"
-                temp_media.mkdir(exist_ok=True)
-                
-                # Ищем и загружаем одно изображение
-                result = searcher._download_single_image(
-                    searcher._generate_search_queries(theme).get(image_name, theme),
-                    image_name,
-                    str(temp_media)
-                )
-                
-                if result:
-                    # Перемещаем файл в основную папку
-                    import shutil
-                    final_path = Path(media_path) / Path(result).name
-                    shutil.move(result, final_path)
-                    
-                    # Удаляем временную папку
-                    import shutil
-                    shutil.rmtree(temp_media, ignore_errors=True)
-                    
-                    self.update_status(f"✅ {image_name}: Найдено реальное фото!")
-                    messagebox.showinfo("Готово", f"Реальное фото '{image_name}' успешно найдено и загружено!")
-                    return
-                else:
-                    # Удаляем временную папку при ошибке
-                    import shutil
-                    shutil.rmtree(temp_media, ignore_errors=True)
-                    
-                    self.update_status(f"❌ {image_name}: Реальное фото не найдено")
-                    messagebox.showerror("Ошибка", f"Не удалось найти реальное фото для '{image_name}'")
-                    return
+            # Только AI-генерация
             
             # ОРИГИНАЛЬНАЯ ЛОГИКА AI-генерации: разные промпты для разных типов
             if image_name in ["review1", "review2", "review3"]:
@@ -1381,32 +1108,20 @@ class LandingPageGeneratorGUI:
     def _regenerate_all_images_process(self, media_path, theme):
         """Процесс пересоздания всех изображений"""
         try:
-            # Режим без генерации: выходим
-            if self.image_source_var.get() == "no_generation":
-                self.update_status("ℹ️ Режим без генерации включен — пересоздание изображений отключено")
-                messagebox.showwarning("Предупреждение", "Режим 'Без генерации изображений' активен. Выберите AI или поиск, чтобы пересоздавать изображения.")
-                return
-            # 🆕 УЧИТЫВАЕМ ВЫБРАННЫЙ ИСТОЧНИК ИЗОБРАЖЕНИЙ
-            use_real_images = (self.image_source_var.get() == "real_search")
-            source_text = "РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ИЗОБРАЖЕНИЙ"
-            action_text = "Поиск" if use_real_images else "Пересоздание"
-            
-            self.update_status(f"🎨 {action_text} всех {source_text}...")
+            self.update_status(f"🎨 Пересоздание всех AI-ИЗОБРАЖЕНИЙ...")
             
             # Импортируем генератор
             from generators.image_generator import ImageGenerator
             
-            # Создаем генератор с выбранным источником
             image_generator = ImageGenerator(
                 silent_mode=True,
-                use_real_images=use_real_images  # 🆕 Новый параметр!
+                fast_mode=True
             )
             
             # Генерируем полный набор с выбранным источником
             results = image_generator.generate_thematic_set(
                 theme_input=theme,
                 media_dir=media_path,
-                method="1",
                 progress_callback=self.update_status
             )
             
@@ -1414,8 +1129,8 @@ class LandingPageGeneratorGUI:
             successful_count = results if isinstance(results, int) else 0
             
             # 🆕 УЧИТЫВАЕМ ТИП ИСТОЧНИКА В СООБЩЕНИЯХ
-            action_past = "найдено и загружено" if use_real_images else "пересоздано"
-            source_desc = "реальных фото" if use_real_images else "AI-изображений"
+            action_past = "пересоздано"
+            source_desc = "AI-изображений"
             
             self.update_status(f"✅ {action_past.capitalize()} {successful_count}/8 {source_desc}")
             
@@ -1423,7 +1138,7 @@ class LandingPageGeneratorGUI:
                 "Готово",
                 f"Пересоздание завершено!\n\n"
                 f"Успешно {action_past}: {successful_count}/8 {source_desc}\n"
-                f"Источник: {'🔍 Поиск реальных фото' if use_real_images else '🤖 AI-генерация'}\n"
+                f"Источник: 🤖 AI-генерация\n"
                 f"Папка: {media_path}\n\n"
                 f"Проверьте результат в папке media."
             )

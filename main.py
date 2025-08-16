@@ -19,14 +19,24 @@ from pathlib import Path
 
 try:
     from gui import LandingPageGeneratorGUI
+    # Qt-версия (опционально)
+    try:
+        from gui.qt_main import run_qt
+        HAS_QT = True
+    except Exception:
+        HAS_QT = False
     
     def main():
         """Основная функция запуска"""
         print("🚀 Запуск Генератора Лендингов v2.0...")
         
         try:
-            app = LandingPageGeneratorGUI()
-            app.run()
+            # Если доступна PySide6 — запускаем современный Qt UI, иначе Tkinter
+            if HAS_QT:
+                run_qt()
+            else:
+                app = LandingPageGeneratorGUI()
+                app.run()
         except Exception as e:
             print(f"Ошибка запуска приложения: {e}")
             input("Нажмите Enter для выхода...")

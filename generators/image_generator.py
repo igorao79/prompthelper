@@ -19,92 +19,32 @@ warnings.filterwarnings('ignore', category=requests.packages.urllib3.exceptions.
 class ImageGenerator:
     """Класс для генерации полного набора тематических изображений ТОЛЬКО через Pollinations API"""
     
-    def __init__(self, silent_mode=False, simple_mode=True, use_real_images=False, fast_mode=True, max_workers=3):
+    def __init__(self, silent_mode=False, fast_mode=True, max_workers=3):
         self.silent_mode = silent_mode
-        self.simple_mode = simple_mode  # По умолчанию простой режим
-        self.use_real_images = use_real_images  # Новая опция: поиск реальных изображений
         self.fast_mode = fast_mode  # Быстрый режим Pollinations (меньше попыток/размер)
         self.max_workers = max(1, int(max_workers))
         self._retry_total = 3 if fast_mode else 5
         self._backoff_factor = 0.5 if fast_mode else 1
         
         if not self.silent_mode:
-            mode_text = "ПРОСТОЙ РЕЖИМ" if simple_mode else "СЛОЖНЫЙ РЕЖИМ"
-            source_text = "ПОИСК РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ГЕНЕРАЦИЯ"
             speed_text = "БЫСТРЫЙ" if fast_mode else "СТАНДАРТ"
-            print(f"🎨 ImageGenerator - {mode_text}, {source_text}, {speed_text}, ТОЛЬКО Pollinations API!")
+            print(f"🎨 ImageGenerator - AI-ГЕНЕРАЦИЯ, {speed_text}, ТОЛЬКО Pollinations API!")
     
-    def set_simple_mode(self, simple_mode=True):
-        """
-        Переключает режим генерации промптов
-        
-        Args:
-            simple_mode (bool): True для простых промптов, False для сложных
-        """
-        self.simple_mode = simple_mode
-        if not self.silent_mode:
-            mode_text = "ПРОСТОЙ РЕЖИМ" if simple_mode else "СЛОЖНЫЙ РЕЖИМ"
-            print(f"🔧 Переключено на: {mode_text}")
-    
-    def get_current_mode(self):
-        """Возвращает текущий режим генерации"""
-        return "simple" if self.simple_mode else "complex"
-    
-    def set_real_images_mode(self, use_real_images=True):
-        """
-        Переключает режим получения изображений
-        
-        Args:
-            use_real_images (bool): True для поиска реальных фото, False для AI-генерации
-        """
-        self.use_real_images = use_real_images
-        if not self.silent_mode:
-            source_text = "ПОИСК РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ГЕНЕРАЦИЯ"
-            print(f"🔧 Переключено на: {source_text}")
-    
-    def get_current_image_source(self):
-        """Возвращает текущий источник изображений"""
-        return "real_search" if self.use_real_images else "ai_generation"
-    
-    def generate_thematic_set(self, theme_input, media_dir, method="1", progress_callback=None, use_simple_prompts=None):
+    def generate_thematic_set(self, theme_input, media_dir, progress_callback=None):
         """
         Генерирует полный набор тематических изображений через Pollinations API
-        ИЛИ ищет и загружает РЕАЛЬНЫЕ фотографии из бесплатных источников
-        
-        НОВЫЙ ВЫБОР:
-        - use_real_images=False: AI-генерация (как раньше)
-        - use_real_images=True: Поиск реальных фото (как Pinterest, но лучше!)
         
         Args:
             theme_input (str): Тематика 
             media_dir (str): Путь к папке media
-            method (str): Метод генерации
             progress_callback (callable): Функция обратного вызова
-            use_simple_prompts (bool): Использовать простые промпты (если None, то из self.simple_mode)
             
         Returns:
             int: Количество успешно созданных изображений
         """
         
-        # НОВАЯ ЛОГИКА: выбор между AI и поиском реальных фото
-        if self.use_real_images:
-            if not self.silent_mode:
-                print(f"🔍 ПОИСК РЕАЛЬНЫХ ФОТОГРАФИЙ по теме: {theme_input}")
-            
-            # Используем поиск изображений вместо AI-генерации
-            try:
-                from generators.image_search_downloader import ImageSearchDownloader
-                searcher = ImageSearchDownloader(silent_mode=self.silent_mode)
-                return searcher.search_and_download_thematic_set(theme_input, media_dir, progress_callback)
-            except Exception as e:
-                if not self.silent_mode:
-                    print(f"❌ Ошибка поиска реальных изображений: {e}")
-                    print("🔄 Переходим на AI-генерацию как fallback...")
-                # Продолжаем с AI-генерацией как fallback
-        
-        # ОРИГИНАЛЬНАЯ ЛОГИКА: AI-генерация через Pollinations
         if not self.silent_mode:
-            print(f"🎨 AI-ГЕНЕРАЦИЯ (как перегенерация): Кардинально разные промпты для {theme_input}")
+            print(f"🎨 AI-ГЕНЕРАЦИЯ: Кардинально разные промпты для {theme_input}")
         
         # Создаем папку для изображений
         try:
@@ -126,14 +66,8 @@ class ImageGenerator:
             pass
         generated_count = 0
         
-        # Получаем тематические промпты только для основных изображений  
-        if use_simple_prompts is None:
-            use_simple_prompts = self.simple_mode
-            
-        if use_simple_prompts:
-            tematic_prompts, theme_data = self._generate_simple_prompts(theme_input)
-        else:
-            tematic_prompts, theme_data = self._generate_prompts(theme_input)
+        # Получаем тематические промпты
+        tematic_prompts, theme_data = self._generate_prompts(theme_input)
         
         # Параллельная генерация для ускорения (ограниченное число потоков)
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -154,6 +88,8 @@ class ImageGenerator:
             else:
                 base_prompt = tematic_prompts.get(image_name, f'professional {theme_input} service')
             # Рандомизация (короткая в быстром режиме)
+            # В обычном (качественном) режиме используем расширенную рандомизацию,
+            # в быстром — облегченную.
             if self.fast_mode:
                 return self._add_simple_randomization(base_prompt, image_name)
             return self._add_randomization(base_prompt, image_name)
@@ -166,16 +102,15 @@ class ImageGenerator:
             if not self.silent_mode:
                 print(f"🔄 Генерация {image_name} ({index}/8)...")
             prompt = build_prompt_for_image(image_name)
-            if self.fast_mode:
-                result = self._generate_image_pollinations_simple(prompt, image_name, media_dir)
-            else:
-                result = self._generate_image_pollinations_aggressive(prompt, image_name, media_dir)
+            # Ограничиваем длину промпта, чтобы не упираться в лимиты URL
+            prompt = self._truncate_prompt(prompt)
+            result = self._generate_image_pollinations_aggressive(prompt, image_name, media_dir)
             elapsed = perf_counter() - start_ts
             if not self.silent_mode:
                 print(f"⏱️ {image_name}: {elapsed:.2f}s")
             return (image_name, result, elapsed)
 
-        with ThreadPoolExecutor(max_workers=self.max_workers if not self.use_real_images else 1) as executor:
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {executor.submit(generate_one, name, i+1): name for i, name in enumerate(image_names)}
             completed = 0
             total_elapsed = 0.0
@@ -201,8 +136,7 @@ class ImageGenerator:
                 print(f"⏱️ Суммарное время потоков (без учёта параллелизма): {total_elapsed:.2f}s")
         
         if not self.silent_mode:
-            source_text = "РЕАЛЬНЫХ изображений" if self.use_real_images else "AI-изображений"
-            print(f"🎯 Создано {generated_count}/8 {source_text}")
+            print(f"🎯 Создано {generated_count}/8 AI-изображений")
         
         return generated_count
     
@@ -210,6 +144,7 @@ class ImageGenerator:
         """Генерирует изображение ТОЛЬКО через Pollinations API с агрессивными настройками"""
         # Добавляем рандомизацию к промпту
         enhanced_prompt = self._add_randomization(prompt, image_name)
+        enhanced_prompt = self._truncate_prompt(enhanced_prompt)
         
         # Настройки для разных типов изображений
         if image_name == 'favicon':
@@ -222,6 +157,7 @@ class ImageGenerator:
             if self.fast_mode:
                 api_params = "?width=832&height=512&model=flux&enhance=false&nologo=true"
             else:
+                # Вернули прежние параметры качества как до смены интерфейса
                 api_params = "?width=1024&height=768&model=flux&enhance=true&nologo=true"
         
         # Pollinations API URL
@@ -234,7 +170,7 @@ class ImageGenerator:
         session = self._create_aggressive_session()
         
         # Пробуем несколько раз с разными настройками
-        attempts = 2 if self.fast_mode else 3
+        attempts = 3 if self.fast_mode else 4
         for attempt in range(attempts):
             if not self.silent_mode:
                 print(f"🔄 Попытка {attempt + 1}/3...")
@@ -271,6 +207,17 @@ class ImageGenerator:
                     else:
                         if not self.silent_mode:
                             print(f"⚠️ Pollinations API: Слишком маленький файл ({len(image_data)} байт)")
+                        # Повторим без stream для надёжности
+                        try:
+                            raw_resp = session.get(api_url, timeout=timeout_cfg, stream=False)
+                            if raw_resp.status_code == 200 and len(raw_resp.content) > 1000:
+                                image = Image.open(BytesIO(raw_resp.content))
+                                if image_name == 'favicon':
+                                    image = self._make_favicon_transparent(image)
+                                if self._save_compressed_image(image, str(output_path), target_size_kb=target_size_kb):
+                                    return str(output_path)
+                        except Exception:
+                            pass
                 
                 elif response.status_code == 429:
                     if not self.silent_mode:
@@ -306,89 +253,28 @@ class ImageGenerator:
                 time.sleep(2)
                 continue
         
-        # Если все попытки не удались
+        # Если все попытки не удались – пробуем альтернативные параметры (другая модель/размер)
+        try:
+            alt_params = "?width=960&height=640&model=flux&enhance=true&nologo=true" if not self.fast_mode else "?width=768&height=512&model=turbo&enhance=false&nologo=true"
+            if image_name == 'favicon':
+                alt_params = "?width=512&height=512&model=turbo&enhance=false&nologo=true"
+            api_url_alt = f"https://image.pollinations.ai/prompt/{quote(enhanced_prompt)}{alt_params}"
+            resp = session.get(api_url_alt, timeout=(10, 30), stream=False)
+            if resp.status_code == 200 and len(resp.content) > 1000:
+                image = Image.open(BytesIO(resp.content))
+                if image_name == 'favicon':
+                    image = self._make_favicon_transparent(image)
+                if self._save_compressed_image(image, str(output_path), target_size_kb=target_size_kb):
+                    return str(output_path)
+        except Exception:
+            pass
+
+        # Если после всех вариантов не удалось
         if not self.silent_mode:
             print(f"❌ Pollinations API недоступен для {image_name} после 3 попыток")
         return None
     
-    def _generate_image_pollinations_simple(self, prompt, image_name, media_dir):
-        """УПРОЩЕННАЯ генерация изображений с короткими четкими промптами"""
-        # Используем ПРОСТУЮ рандомизацию вместо сложной
-        enhanced_prompt = self._add_simple_randomization(prompt, image_name)
-        
-        # Настройки для разных типов изображений
-        if image_name == 'favicon':
-            target_size_kb = 50
-            output_path = Path(media_dir) / f"{image_name}.png"
-            api_params = "?width=512&height=512&model=flux&enhance=false&nologo=true"
-        else:
-            target_size_kb = 150
-            output_path = Path(media_dir) / f"{image_name}.jpg"
-            api_params = "?width=1024&height=768&model=flux&enhance=false&nologo=true"
-        
-        # Pollinations API URL с упрощенным промптом
-        api_url = f"https://image.pollinations.ai/prompt/{quote(enhanced_prompt)}{api_params}"
-        
-        if not self.silent_mode:
-            print(f"🌐 ПРОСТОЙ запрос к Pollinations API: {enhanced_prompt}")
-        
-        # Создаем сессию
-        session = self._create_aggressive_session()
-        
-        # Пробуем 2 раза вместо 3 (быстрее)
-        for attempt in range(2):
-            if not self.silent_mode:
-                print(f"🔄 Попытка {attempt + 1}/2...")
-            
-            try:
-                response = session.get(api_url, timeout=(10, 30), stream=True)
-                
-                if not self.silent_mode:
-                    print(f"📊 Pollinations API: код {response.status_code}")
-                
-                if response.status_code == 200:
-                    image_data = response.content
-                    
-                    if len(image_data) > 1000:
-                        # Загружаем в PIL Image
-                        image = Image.open(BytesIO(image_data))
-                        
-                        if not self.silent_mode:
-                            print(f"🖼️ Изображение загружено: {image.size}")
-                
-                        # Для фавиконки делаем прозрачный фон
-                        if image_name == 'favicon':
-                            image = self._make_favicon_transparent(image)
-                        
-                        # Сжимаем и сохраняем
-                        if self._save_compressed_image(image, str(output_path), target_size_kb=target_size_kb):
-                            if not self.silent_mode:
-                                final_size_kb = output_path.stat().st_size / 1024
-                                print(f"✅ {image_name}: ПРОСТОЙ метод успешен ({final_size_kb:.1f}кб)")
-                            return str(output_path)
-                    else:
-                        if not self.silent_mode:
-                            print(f"⚠️ Слишком маленький файл ({len(image_data)} байт)")
-                
-                elif response.status_code == 429:
-                    if not self.silent_mode:
-                        print(f"⏰ Лимит запросов, пауза 5 сек...")
-                    time.sleep(5)
-                    continue
-                
-                else:
-                    if not self.silent_mode:
-                        print(f"❌ Ошибка {response.status_code}")
-                
-            except Exception as e:
-                if not self.silent_mode:
-                    print(f"⚠️ Ошибка: {str(e)[:50]}...")
-                time.sleep(1)
-                continue
-        
-        if not self.silent_mode:
-            print(f"❌ ПРОСТОЙ метод не сработал для {image_name} после 2 попыток")
-        return None
+    
     
     def _create_aggressive_session(self):
         """Создает агрессивную сессию для максимальной совместимости с Linux"""
@@ -494,32 +380,40 @@ class ImageGenerator:
             print(f"🎯 Промпт для {image_name}: {enhanced_prompt}")
         
         return enhanced_prompt
+
+    def _add_simple_randomization(self, prompt: str, image_name: str) -> str:
+        """Облегчённая рандомизация для fast_mode: короче строка, меньше терминов.
+        Сохраняем тематику, добавляем немного качества и уникальности, чтобы ускорить API и не бить лимиты URL."""
+        try:
+            import random, time, hashlib
+            base = prompt.strip()
+            # Короткий набор улучшений
+            quality_terms = ["high quality", "professional", "photorealistic"]
+            style_terms = ["modern", "clean", "premium"]
+            selected = ", ".join(random.sample(quality_terms, 1) + random.sample(style_terms, 1))
+            # Уникальность для обхода кэша
+            uniq = hashlib.md5(f"{image_name}_{time.time()}_{random.randint(1,99999)}".encode()).hexdigest()[:6]
+            enhanced = f"{base}, {selected}, u_{uniq}"
+            return enhanced
+        except Exception:
+            return prompt
+
+    def _truncate_prompt(self, prompt: str, max_len: int = 750) -> str:
+        """Ограничивает длину промпта, чтобы не превышать лимиты URL у Pollinations.
+        Обрезает по границе слов, добавляя многоточие при необходимости."""
+        try:
+            if len(prompt) <= max_len:
+                return prompt
+            cut = prompt[:max_len]
+            # стараемся не обрывать слово
+            last_space = cut.rfind(' ')
+            if last_space > 0:
+                cut = cut[:last_space]
+            return cut + " ..."
+        except Exception:
+            return prompt[:max_len]
     
-    def _add_simple_randomization(self, prompt, image_name):
-        """УПРОЩЕННЫЙ метод: создает короткие четкие промпты БЕЗ мусора"""
-        import time
-        
-        # Сохраняем оригинальный промпт как основу
-        base_prompt = prompt
-        
-        # Только ОДИН качественный термин (не 3-5!)
-        quality_terms = ["professional", "high quality", "modern", "expert"]
-        quality = random.choice(quality_terms)
-        
-        # Только ОДИН стилистический термин (не 2-3!)
-        style_terms = ["clean", "elegant", "contemporary", "polished"]  
-        style = random.choice(style_terms)
-        
-        # Минимальная уникальность (только 4 символа)
-        timestamp = str(int(time.time()))[-4:]
-        
-        # КОРОТКИЙ промпт: базовый + 1 качество + 1 стиль + метка
-        simple_prompt = f"{base_prompt}, {quality}, {style}, shot_{timestamp}"
-        
-        if not self.silent_mode:
-            print(f"🎯 ПРОСТОЙ промпт для {image_name}: {simple_prompt}")
-        
-        return simple_prompt
+    
     
     def _make_favicon_transparent(self, image):
         """Делает фавиконку с прозрачным фоном и оптимизирует для иконки"""
@@ -581,45 +475,10 @@ class ImageGenerator:
             return False
 
     def _generate_prompts(self, theme_input):
-        """Генерирует умные промпты для всех изображений"""
-        try:
-            # Используем новую функцию создания полных промптов с гарантированными людьми для review
-            from generators.prompt_generator import create_complete_prompts_dict
-            
-            prompts = create_complete_prompts_dict(theme_input)
-            
-            # Возвращаем промпты и данные темы
-            return prompts, {'theme': theme_input}
-            
-        except Exception as e:
-            if not self.silent_mode:
-                print(f"⚠️ Ошибка генерации промптов: {e}")
-            return self._generate_fallback_prompts(theme_input), {'theme': theme_input}
-    
-    def _generate_fallback_prompts(self, theme_input):
-        """Резервная генерация промптов с гарантированными людьми для review"""
-        # Генерируем человеческие review промпты даже для fallback
-        try:
-            from generators.prompt_generator import create_human_focused_review_prompts
-            human_reviews = create_human_focused_review_prompts()
-        except:
-            # Экстренный fallback с прямыми human-промптами
-            human_reviews = [
-                "portrait photo of happy customer, smiling person, HUMAN FACE ONLY, civilian clothes, testimonial portrait",
-                "portrait photo of satisfied client, pleased woman, PERSON ONLY, natural smile, customer review photo", 
-                "portrait photo of grateful customer, joyful man, HUMAN ONLY, positive expression, headshot style"
-            ]
-        
-        return {
-            'main': f'professional {theme_input} service, modern website hero image',
-            'about1': f'{theme_input} team at work, professional office environment',
-            'about2': f'{theme_input} process, step by step workflow',
-            'about3': f'{theme_input} results, success story visualization',
-            'review1': human_reviews[0],
-            'review2': human_reviews[1],
-            'review3': human_reviews[2],
-            'favicon': f'{theme_input} icon symbol, simple minimalist logo'
-        }
+        """Генерирует промпты для всех изображений (без простых режимов и фоллбеков)"""
+        from generators.prompt_generator import create_complete_prompts_dict
+        prompts = create_complete_prompts_dict(theme_input)
+        return prompts, {'theme': theme_input}
 
     def _generate_simple_prompts(self, theme_input):
         """Генерирует ПРОСТЫЕ базовые промпты БЕЗ сложной обработки"""
@@ -668,31 +527,4 @@ class ImageGenerator:
 
 
 # Класс для совместимости
-class ThematicImageGenerator:
-    """Класс для совместимости с существующим кодом"""
-    
-    def __init__(self, silent_mode=False):
-        self.silent_mode = silent_mode
-        self.base_generator = ImageGenerator(silent_mode=silent_mode)
-    
-    def generate_single_image(self, prompt, image_name, output_dir):
-        """Генерирует одно изображение с рандомизацией"""
-        enhanced_prompt = self.base_generator._add_randomization(prompt, image_name)
-        return self.base_generator._generate_image_pollinations_aggressive(enhanced_prompt, image_name, output_dir)
-    
-    def get_theme_prompts(self, theme_input):
-        """Получает промпты для тематики с гарантированными людьми для review"""
-        prompts, theme_data = self.base_generator._generate_prompts(theme_input)
-        
-        # Теперь _generate_prompts уже содержит сложные промпты для review,
-        # поэтому просто возвращаем их без fallback
-        return [
-            prompts.get('main', f'professional {theme_input} service'),
-            prompts.get('about1', f'quality {theme_input} business'),
-            prompts.get('about2', f'modern {theme_input} company'),
-            prompts.get('about3', f'expert {theme_input} team'),
-            prompts.get('review1', 'portrait photo of happy customer, smiling person, HUMAN FACE ONLY, civilian clothes'),  # Fallback на случай ошибки
-            prompts.get('review2', 'portrait photo of satisfied client, pleased woman, PERSON ONLY, natural smile'),        # Fallback на случай ошибки
-            prompts.get('review3', 'portrait photo of grateful customer, joyful man, HUMAN ONLY, positive expression'),     # Fallback на случай ошибки
-            prompts.get('favicon', f'{theme_input} icon symbol')
-        ] 
+# Конец файла

@@ -748,16 +748,47 @@ class CursorManager:
             return False
     
     def copy_to_clipboard(self, text, root_widget):
-        """
-        Копирует текст в буфер обмена
-        
-        Args:
-            text (str): Текст для копирования
-            root_widget: Корневой виджет Tkinter
-        """
-        root_widget.clipboard_clear()
-        root_widget.clipboard_append(text)
-        root_widget.update()
+        """Копирует текст в буфер обмена (Tkinter/Qt/pyperclip/OS clip)."""
+        # 1) Если передан Tk root
+        try:
+            if root_widget is not None:
+                root_widget.clipboard_clear()
+                root_widget.clipboard_append(text)
+                root_widget.update()
+                return True
+        except Exception:
+            pass
+
+        # 2) Пытаемся через Qt (PySide6)
+        try:
+            from PySide6 import QtWidgets  # type: ignore
+            cb = QtWidgets.QApplication.clipboard()
+            if cb is not None:
+                cb.setText(text)
+                return True
+        except Exception:
+            pass
+
+        # 3) Пытаемся через pyperclip
+        try:
+            import pyperclip  # type: ignore
+            pyperclip.copy(text)
+            return True
+        except Exception:
+            pass
+
+        # 4) Windows: clip
+        try:
+            if platform.system().lower() == 'windows':
+                p = subprocess.Popen(['clip'], stdin=subprocess.PIPE, close_fds=True)
+                if p.stdin:
+                    p.stdin.write(text.encode('utf-8'))
+                    p.stdin.close()
+                return True
+        except Exception:
+            pass
+
+        return False
     
     def auto_paste_prompt(self, delay_seconds=3):
         """
@@ -775,7 +806,7 @@ class CursorManager:
         else:
             print("Автовставка промптов отключена из-за отсутствия pyautogui")
     
-    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False, use_real_images=False):
+    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False):
         """
         Создает структуру папок проекта и генерирует тематические изображения
         
@@ -811,14 +842,14 @@ class CursorManager:
                 
                 # Создаем генератор в тихом режиме 
                 from generators.image_generator import ImageGenerator
-                # Источник выбирается на уровне GUI; пробрасываем сюда. Включаем fast_mode.
-                image_generator = ImageGenerator(silent_mode=True, use_real_images=use_real_images, fast_mode=True, max_workers=3)
+                # Всегда AI Pollinations, быстрый режим
+                # Восстановлено прежнее качество: высокий режим (enhance, выше разрешение)
+                image_generator = ImageGenerator(silent_mode=False, fast_mode=False, max_workers=2)
                 
                 # Генерируем изображения
                 results = image_generator.generate_thematic_set(
                     theme_input=theme,
                     media_dir=str(media_path),
-                    method="1",  # По умолчанию Pollinations
                     progress_callback=progress_callback
                 )
                 
@@ -857,7 +888,7 @@ class CursorManager:
         Returns:
             tuple: (success, message)
         """
-        # Всегда копируем в буфер обмена
+        # Копируем в буфер обмена (кросс-фреймворк)
         self.copy_to_clipboard(prompt, root_widget)
         
         # Пытаемся открыть Cursor

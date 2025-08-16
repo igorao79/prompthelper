@@ -64,7 +64,8 @@ class SettingsManager:
             "default_save_path": str(get_desktop_path()),
             "last_save_path": str(get_desktop_path()),
             "custom_prompt": "",
-            "last_selected_country": ""
+            "last_selected_country": "",
+            "landing_history": []  # [{"domain": str, "prompt": str, "ts": int}]
         }
         
         print(f"🔍 Загрузка настроек из: {self.settings_file}")
@@ -155,3 +156,20 @@ class SettingsManager:
     def get_last_selected_country(self):
         """Возвращает последнюю выбранную страну"""
         return self.settings.get("last_selected_country", "") 
+
+    # --- История последних лендингов ---
+    def add_landing_to_history(self, domain: str, prompt: str):
+        try:
+            from time import time
+            entry = {"domain": domain.strip(), "prompt": prompt or "", "ts": int(time())}
+            hist = self.settings.get("landing_history", [])
+            # удаляем дубликаты по домену
+            hist = [e for e in hist if e.get("domain") != entry["domain"]]
+            hist.insert(0, entry)
+            self.settings["landing_history"] = hist[:10]
+            self.save_settings()
+        except Exception as e:
+            print(f"❌ Ошибка обновления истории лендингов: {e}")
+
+    def get_landing_history(self):
+        return self.settings.get("landing_history", [])

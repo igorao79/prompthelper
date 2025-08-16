@@ -8,27 +8,28 @@ import time
 from .image_generator import ImageGenerator
 
 class ThematicImageGenerator:
-    """Генератор тематических изображений с продвинутой рандомизацией"""
-    
+    """Генератор тематических изображений (совместимость — не используется напрямую)"""
     def __init__(self, silent_mode=False):
         self.silent_mode = silent_mode
         self.base_generator = ImageGenerator(silent_mode=silent_mode)
-    
     def generate_single_image(self, prompt, image_name, output_dir):
-        """Генерирует одно изображение с рандомизацией"""
         enhanced_prompt = self.add_randomization(prompt)
-        return self.base_generator._generate_image_via_pollinations(
+        return self.base_generator._generate_image_pollinations_aggressive(
             enhanced_prompt, image_name, output_dir
         )
-    
     def get_theme_prompts(self, theme_input):
-        """Получает промпты для тематики"""
-        # Импортируем здесь чтобы избежать циклических импортов
-        try:
-            from generators.prompt_generator import create_thematic_prompts
-            return create_thematic_prompts(theme_input)
-        except ImportError:
-            return self._fallback_prompts(theme_input)
+        from generators.prompt_generator import create_complete_prompts_dict
+        prompts = create_complete_prompts_dict(theme_input)
+        return [
+            prompts.get('main', f'professional {theme_input} service'),
+            prompts.get('about1', f'quality {theme_input} business'),
+            prompts.get('about2', f'modern {theme_input} company'),
+            prompts.get('about3', f'expert {theme_input} team'),
+            prompts.get('review1', 'happy customer portrait'),
+            prompts.get('review2', 'satisfied client portrait'),
+            prompts.get('review3', 'grateful customer portrait'),
+            prompts.get('favicon', f'{theme_input} icon symbol')
+        ]
     
     def add_randomization(self, prompt):
         """Добавляет случайные элементы к промпту для уникальности"""

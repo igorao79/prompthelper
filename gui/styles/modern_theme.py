@@ -187,10 +187,10 @@ class ModernTheme:
         default_config = {
             "bg": self.colors.SURFACE,
             "relief": "flat",
-            "borderwidth": 1,
-            "highlightbackground": self.colors.BORDER,
-            "highlightthickness": 1,
-            "highlightcolor": self.colors.BORDER
+            "borderwidth": 0,
+            "highlightbackground": self.colors.SURFACE,
+            "highlightthickness": 0,
+            "highlightcolor": self.colors.SURFACE
         }
         
         final_config = {**default_config, **kwargs}
@@ -204,9 +204,9 @@ class ModernTheme:
             "fg": self.colors.TEXT_PRIMARY,
             "font": self.typography.heading_md(),
             "relief": "flat",
-            "borderwidth": 1,
-            "highlightbackground": self.colors.BORDER,
-            "highlightthickness": 1
+            "borderwidth": 0,
+            "highlightbackground": self.colors.SURFACE,
+            "highlightthickness": 0
         }
         
         final_config = {**default_config, **kwargs}
@@ -217,14 +217,14 @@ class ModernTheme:
         """Создает современное поле ввода"""
         default_config = {
             "bg": self.colors.CARD,
-            "fg": "#ffffff",  # Белый текст для контраста
+            "fg": self.colors.TEXT_PRIMARY,
             "font": self.typography.body_md(),
             "relief": "flat",
-            "borderwidth": 1,
-            "highlightbackground": self.colors.BORDER,
-            "highlightthickness": 1,
-            "highlightcolor": self.colors.PRIMARY,
-            "insertbackground": "#ffffff"  # Белый курсор
+            "borderwidth": 0,
+            "highlightbackground": self.colors.CARD,
+            "highlightthickness": 0,
+            "highlightcolor": self.colors.CARD,
+            "insertbackground": self.colors.TEXT_PRIMARY
         }
         
         final_config = {**default_config, **kwargs}
