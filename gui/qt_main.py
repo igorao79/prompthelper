@@ -55,10 +55,12 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		header.setSpacing(8)
 		self.edit_prompt_btn = QtWidgets.QPushButton("✏️ Настроить промпт")
 		self.reset_prompt_btn = QtWidgets.QPushButton("🔄 Сбросить")
+		self.update_btn = QtWidgets.QPushButton("⬇️ Обновления")
 		self.create_btn = QtWidgets.QPushButton("🚀 СОЗДАТЬ ЛЕНДИНГ ✨")
 		self.create_btn.setObjectName("PrimaryButton")
 		header.addWidget(self.edit_prompt_btn)
 		header.addWidget(self.reset_prompt_btn)
+		header.addWidget(self.update_btn)
 		header.addStretch(1)
 		header.addWidget(self.create_btn)
 		main.addLayout(header)
@@ -204,6 +206,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.create_btn.clicked.connect(self._on_create)
 		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
+		self.update_btn.clicked.connect(self._manual_check_updates)
 
 	def _browse_regen_path(self):
 		path = QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите папку проекта или media", self.path_edit.text())
@@ -260,6 +263,26 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		except Exception as e:
 			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось обновить: {e}")
 			self.status_label.setText("⚠️ Ошибка обновления")
+
+	def _manual_check_updates(self):
+		try:
+			checker = UpdateChecker(self.settings)
+			info = checker.check()
+			if info.available:
+				res = QtWidgets.QMessageBox.question(
+					self,
+					"Обновление доступно",
+					"Доступна новая версия из ветки linux. Установить сейчас?",
+					QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+					QtWidgets.QMessageBox.Yes
+				)
+				if res == QtWidgets.QMessageBox.Yes:
+					self._download_and_apply_update(info.latest_sha, info.zip_url)
+			else:
+				msg = "Обновлений нет" if not getattr(info, 'message', '') else f"Обновлений нет. {info.message}"
+				QtWidgets.QMessageBox.information(self, "Проверка обновлений", msg)
+		except Exception as e:
+			QtWidgets.QMessageBox.warning(self, "Проверка обновлений", f"Не удалось выполнить проверку: {e}")
 
 	def _resolve_media_path(self):
 		p = self.regen_path_edit.text().strip()
@@ -593,6 +616,19 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 def run_qt():
 	app = QtWidgets.QApplication([])
+	# Splash (лаунчер)
+	pix = QtGui.QPixmap(480, 240)
+	pix.fill(QtGui.QColor("#0b1220"))
+	splash = QtWidgets.QSplashScreen(pix)
+	splash.showMessage("Загрузка PromptHelper...", QtCore.Qt.AlignCenter | QtCore.Qt.AlignBottom, QtGui.QColor("#f8fafc"))
+	splash.show()
+	app.processEvents()
+
 	w = QtMainWindow()
-	w.show()
+
+	def _finish():
+		w.show()
+		splash.finish(w)
+
+	QtCore.QTimer.singleShot(700, _finish)
 	app.exec()

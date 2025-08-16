@@ -66,6 +66,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default="https://github.com/igorao79/prompthelper")
     parser.add_argument("--branch", default="linux")
+    parser.add_argument("--mode", choices=["local", "remote"], default="local", help="local: собирать из текущей папки; remote: скачать ветку и собирать")
     args = parser.parse_args()
 
     project_root = Path.cwd()
@@ -81,11 +82,16 @@ def main():
     src_dir.mkdir(parents=True, exist_ok=True)
     release_root.mkdir(parents=True, exist_ok=True)
 
-    # Скачиваем исходники ветки
-    try:
-        branch_root = download_branch_zip(args.repo, args.branch, src_dir)
-    except FileNotFoundError:
-        branch_root = clone_branch_git(args.repo, args.branch, src_dir)
+    # Источник исходников
+    if args.mode == "remote":
+        # Скачиваем исходники ветки
+        try:
+            branch_root = download_branch_zip(args.repo, args.branch, src_dir)
+        except FileNotFoundError:
+            branch_root = clone_branch_git(args.repo, args.branch, src_dir)
+    else:
+        # Используем текущий проект (ВАШ локальный код)
+        branch_root = project_root
 
     # Создаем venv и ставим зависимости
     python, pip_run = ensure_venv(venv_dir)
@@ -104,8 +110,8 @@ def main():
     # PyInstaller
     pyinstaller_cmd = [
         str(python), "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--onefile",
-        "--name", "PromptHelper",
+        "--noconfirm", "--clean", "--onefile", "--windowed", "--noconsole",
+        "--name", "LandGen",
         "--hidden-import", "PySide6",
         "--hidden-import", "PIL",
         "--hidden-import", "requests",
@@ -113,12 +119,39 @@ def main():
     ]
     run(pyinstaller_cmd, cwd=branch_root)
 
-    built_exe = branch_root / "dist" / ("PromptHelper.exe" if os.name == "nt" else "PromptHelper")
+    built_exe = branch_root / "dist" / ("LandGen.exe" if os.name == "nt" else "LandGen")
     if not built_exe.exists():
         raise RuntimeError("Сборка не создала EXE")
 
-    shutil.copy2(built_exe, release_root / built_exe.name)
-    print(f"✅ Готово: {release_root / built_exe.name}")
+    target_exe = release_root / "LandGen.exe"
+    shutil.copy2(built_exe, target_exe)
+    print(f"✅ Готово: {target_exe}")
+    
+    # Пытаемся сгенерировать иконку и компилировать установщик, если установлен Inno Setup
+    # Иконка в корневой папке проекта
+    icon_path = project_root / "landgen.ico"
+    try:
+        from PIL import Image  # проверка наличия Pillow
+        # генерируем иконку
+        run([str(python), str(project_root / "tools" / "make_icon.py"), "--out", str(icon_path), "--label", "LG"])
+    except Exception:
+        pass
+
+    # Компиляция Inno Setup (опционально)
+    iscc = Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe")
+    if not iscc.exists():
+        iscc = Path("C:/Program Files/Inno Setup 6/ISCC.exe")
+    if iscc.exists():
+        # копируем иконку рядом со скриптом инсталлятора
+        tools_icon = project_root / "tools" / "landgen.ico"
+        try:
+            if icon_path.exists():
+                shutil.copy2(icon_path, tools_icon)
+        except Exception:
+            pass
+        print("⚙️ Компиляция установщика Inno Setup...")
+        run([str(iscc), str(project_root / "tools" / "installer.iss")])
+        print("✅ Установщик собран (файл *.exe рядом с installer.iss или в Output)")
 
 
 if __name__ == "__main__":

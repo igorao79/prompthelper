@@ -894,8 +894,15 @@ class CursorManager:
         # Пытаемся открыть Cursor
         if self.open_cursor_with_project(project_path):
             if auto_paste:
-                # Автоматическая вставка
-                self.auto_paste_prompt(paste_delay)
+                # Автоматическая вставка: ждём окно и жмём Ctrl+V
+                try:
+                    time.sleep(max(1, paste_delay))
+                    if PYAUTOGUI_AVAILABLE:
+                        pyautogui.hotkey('ctrl', 'v')
+                    else:
+                        print("⚠️ pyautogui недоступен, автовставка невозможна")
+                except Exception as e:
+                    print(f"Ошибка автовставки: {e}")
             
             return True, "Cursor AI запущен успешно"
         else:
