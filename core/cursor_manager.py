@@ -775,7 +775,7 @@ class CursorManager:
         else:
             print("Автовставка промптов отключена из-за отсутствия pyautogui")
     
-    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None):
+    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False):
         """
         Создает структуру папок проекта и генерирует тематические изображения
         
@@ -784,6 +784,7 @@ class CursorManager:
             desktop_path (Path): Путь к директории для создания проекта (опционально)
             theme (str): Тематика для генерации изображений (опционально)
             progress_callback (callable): Функция обратного вызова для обновления прогресса
+            generate_images (bool): Генерировать ли изображения (по умолчанию False)
             
         Returns:
             tuple: (project_path, media_path)
@@ -803,7 +804,7 @@ class CursorManager:
         media_path.mkdir(exist_ok=True)
         
         # Генерация тематических изображений
-        if theme and IMAGE_GENERATION_AVAILABLE:
+        if theme and IMAGE_GENERATION_AVAILABLE and generate_images:
             try:
                 if progress_callback:
                     progress_callback("🎨 Запуск генерации изображений...")
@@ -834,7 +835,7 @@ class CursorManager:
                 if progress_callback:
                     progress_callback(f"⚠️ {error_msg}")
         
-        elif theme and not IMAGE_GENERATION_AVAILABLE:
+        elif theme and not IMAGE_GENERATION_AVAILABLE and generate_images:
             if progress_callback:
                 progress_callback("⚠️ Модуль генерации изображений недоступен")
         

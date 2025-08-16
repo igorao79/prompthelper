@@ -74,6 +74,9 @@ class LandingPageGeneratorGUI:
         self.project_path_var = tk.StringVar()
         self.last_created_project_path = None
         
+        # НОВАЯ ПЕРЕМЕННАЯ: Выбор типа изображений (AI или реальные фото)
+        self.image_source_var = tk.StringVar(value="no_generation")  # По умолчанию без генерации
+        
         # Привязываем обработчики изменений для автосброса промпта
         self.theme_var.trace('w', self._on_data_change)
         self.selected_country.trace('w', self._on_data_change)
@@ -475,12 +478,96 @@ class LandingPageGeneratorGUI:
         # Современное описание
         description = self.theme.create_modern_label(
             section,
-            text="Пересоздать отдельные изображения для существующего проекта",
+            text="Выберите источник изображений и пересоздайте изображения для проекта",
             style="caption",
             bg=self.theme.colors.SURFACE,
             wraplength=650
         )
         description.pack(pady=(5, 8), anchor="w")
+        
+        # 🆕 НОВАЯ СЕКЦИЯ: Выбор источника изображений
+        source_frame = self.theme.create_modern_frame(
+            section,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=1,
+            highlightbackground=self.theme.colors.BORDER
+        )
+        source_frame.pack(fill="x", pady=(0, 12), padx=10, ipady=10)
+        
+        source_label = self.theme.create_modern_label(
+            source_frame,
+            text="🎨 Источник изображений:",
+            style="body_bold",
+            bg=self.theme.colors.SURFACE
+        )
+        source_label.pack(anchor="w", pady=(0, 8))
+        
+        # Радиокнопки для выбора типа
+        radio_frame = self.theme.create_modern_frame(
+            source_frame,
+            bg=self.theme.colors.SURFACE,
+            highlightthickness=0
+        )
+        radio_frame.pack(fill="x")
+        
+        # AI-генерация (по умолчанию)
+        ai_radio = tk.Radiobutton(
+            radio_frame,
+            text="🤖 AI-генерация (Pollinations API)",
+            variable=self.image_source_var,
+            value="ai_generation",
+            bg=self.theme.colors.SURFACE,
+            fg=self.theme.colors.TEXT_PRIMARY,
+            font=self.theme.typography.body_md(),
+            selectcolor=self.theme.colors.BUTTON_PRIMARY,
+            activebackground=self.theme.colors.SURFACE,
+            relief="flat",
+            borderwidth=0
+        )
+        ai_radio.pack(anchor="w", pady=2)
+        
+        # Поиск реальных фото (новая опция!)
+        real_radio = tk.Radiobutton(
+            radio_frame,
+            text="📸 Поиск реальных фото (Pixabay, Unsplash)",
+            variable=self.image_source_var,
+            value="real_search",
+            bg=self.theme.colors.SURFACE,
+            fg=self.theme.colors.TEXT_PRIMARY,
+            font=self.theme.typography.body_md(),
+            selectcolor=self.theme.colors.BUTTON_SUCCESS,
+            activebackground=self.theme.colors.SURFACE,
+            relief="flat",
+            borderwidth=0
+        )
+        real_radio.pack(anchor="w", pady=2)
+
+        # Режим без генерации
+        none_radio = tk.Radiobutton(
+            radio_frame,
+            text="🚫 Без генерации изображений (только промпт)",
+            variable=self.image_source_var,
+            value="no_generation",
+            bg=self.theme.colors.SURFACE,
+            fg=self.theme.colors.TEXT_PRIMARY,
+            font=self.theme.typography.body_md(),
+            selectcolor=self.theme.colors.BUTTON_WARNING if hasattr(self.theme.colors, 'BUTTON_WARNING') else self.theme.colors.BUTTON_PRIMARY,
+            activebackground=self.theme.colors.SURFACE,
+            relief="flat",
+            borderwidth=0
+        )
+        none_radio.pack(anchor="w", pady=2)
+        
+        # Описание выбранного режима
+        mode_info = self.theme.create_modern_label(
+            source_frame,
+            text="💡 Выберите AI для генерации, поиск для реальных фото, или режим без генерации (только промпт)",
+            style="caption",
+            bg=self.theme.colors.SURFACE,
+            fg=self.theme.colors.TEXT_SECONDARY,
+            wraplength=600
+        )
+        mode_info.pack(anchor="w", pady=(8, 0))
         
         # Современное поле для выбора папки проекта
         project_frame = self.theme.create_modern_frame(
@@ -758,6 +845,10 @@ class LandingPageGeneratorGUI:
         """Генерирует только изображения"""
         if not self.validate_form()[0]:
             return
+        # Блокируем запуск, если выбран режим без генерации
+        if self.image_source_var.get() == "no_generation":
+            messagebox.showwarning("Предупреждение", "Выбран режим 'Без генерации изображений'. Выберите источник изображений (AI или поиск), чтобы продолжить.")
+            return
             
         theme = self.theme_var.get().strip()
         
@@ -779,9 +870,22 @@ class LandingPageGeneratorGUI:
 
         try:
             from generators.image_generator import ImageGenerator
+            # Режим без генерации: выходим
+            if self.image_source_var.get() == "no_generation":
+                self.update_status("ℹ️ Режим без генерации включен — изображения не создаются")
+                return
             
-            # Создаем генератор
-            image_generator = ImageGenerator(silent_mode=True)
+            # 🆕 УЧИТЫВАЕМ ВЫБРАННЫЙ ИСТОЧНИК ИЗОБРАЖЕНИЙ
+            use_real_images = (self.image_source_var.get() == "real_search")
+            source_text = "РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ИЗОБРАЖЕНИЙ"
+            
+            self.update_status(f"🎨 Генерация {source_text}...")
+            
+            # Создаем генератор с выбранным источником
+            image_generator = ImageGenerator(
+                silent_mode=True,
+                use_real_images=use_real_images  # 🆕 Новый параметр!
+            )
             
             # Генерируем полный набор изображений
             results = image_generator.generate_thematic_set(
@@ -794,12 +898,17 @@ class LandingPageGeneratorGUI:
             # Подсчитываем результаты
             successful_count = results if isinstance(results, int) else 0
             
-            self.update_status(f"✅ Сгенерировано {successful_count}/8 изображений")
+            # 🆕 УЧИТЫВАЕМ ТИП ИСТОЧНИКА В СООБЩЕНИЯХ
+            source_text = "реальных фото" if use_real_images else "AI-изображений"
+            action_text = "найдено и загружено" if use_real_images else "сгенерировано"
+            
+            self.update_status(f"✅ {action_text.capitalize()} {successful_count}/8 {source_text}")
             
             messagebox.showinfo(
                 "Готово",
                 f"Генерация изображений завершена!\n\n"
-                f"Успешно: {successful_count}/8 изображений\n"
+                f"Успешно {action_text}: {successful_count}/8 {source_text}\n"
+                f"Источник: {'🔍 Поиск реальных фото' if use_real_images else '🤖 AI-генерация'}\n"
                 f"Папка: {media_path}\n\n"
                 f"Изображения сохранены и готовы к использованию."
             )
@@ -854,9 +963,7 @@ class LandingPageGeneratorGUI:
             f"Домен: {domain}\n"
             f"Папка: {save_path}\n"
             f"Промпт: {prompt_type}\n\n"
-            f"🎨 Дополнительно будет создано 8 тематических изображений:\n"
-            f"   • main, about1-3, review1-3, favicon\n"
-            f"   • Изображения будут соответствовать тематике '{theme}'\n\n"
+            f"Будет создан проект с папкой media. Изображения сейчас НЕ генерируются.\n\n"
             f"Продолжить?"
         )
         if not result:
@@ -868,6 +975,9 @@ class LandingPageGeneratorGUI:
     def _create_landing_process(self):
         """Процесс создания лендинга в отдельном потоке"""
         try:
+            print("🚀 ЗАПУСК ПРОЦЕССА СОЗДАНИЯ ЛЕНДИНГА")
+            print("=" * 50)
+            
             # Получение данных
             theme = self.theme_var.get().strip()
             country = self.selected_country.get()
@@ -876,31 +986,50 @@ class LandingPageGeneratorGUI:
             city = self.current_city
             save_path = self.save_path_var.get()
             
+            print(f"📋 ПАРАМЕТРЫ СОЗДАНИЯ:")
+            print(f"  • Тематика: {theme}")
+            print(f"  • Страна: {country}")
+            print(f"  • Язык: {language}")
+            print(f"  • Домен: {domain}")
+            print(f"  • Город: {city}")
+            print(f"  • Папка: {save_path}")
+            
             # Обновление статуса
             self.update_status("🔄 Создание папок...")
+            print("🔄 Шаг 1: Создание папок...")
             
             # Создание структуры проекта с генерацией изображений
+            print("🔄 Шаг 2: Создание структуры проекта...")
             project_path, media_path = self.cursor_manager.create_project_structure(
-                domain, save_path, theme, self.update_status
+                domain, save_path, theme, self.update_status, generate_images=False
             )
+            print(f"✅ Структура проекта создана: {project_path}")
+            print(f"✅ Папка media создана: {media_path}")
             
             # Сохраняем путь проекта для автоматического выбора при перегенерации
             self.last_created_project_path = project_path
             
             self.update_status("📄 Подготовка промпта...")
+            print("🔄 Шаг 3: Подготовка промпта...")
             
             # Используем отредактированный промпт если есть, иначе генерируем новый с актуальными данными
             if self.current_prompt:
                 full_prompt = self.current_prompt
+                print("📝 Используется отредактированный промпт")
             else:
                 full_prompt = create_landing_prompt(country, city, language, domain, theme)
+                print("📝 Сгенерирован новый промпт")
+            
+            print(f"📏 Длина промпта: {len(full_prompt)} символов")
             
             self.update_status("🚀 Запуск Cursor AI...")
+            print("🔄 Шаг 4: Запуск Cursor AI...")
             
             # Запуск Cursor AI
             success, message = self.cursor_manager.open_project_and_paste_prompt(
                 project_path, full_prompt, self.root, auto_paste=True, paste_delay=5
             )
+            print(f"🎯 Результат запуска Cursor: success={success}, message='{message}'")
             
             if success:
                 self.update_status("✅ Готово! Cursor AI запущен")
@@ -910,8 +1039,6 @@ class LandingPageGeneratorGUI:
                     f"📁 Папка: {project_path}\n"
                     f"🎨 Папка media: {media_path}\n"
                     f"🚀 Cursor AI запущен с готовым промптом\n\n"
-                    f"🖼️ Тематические изображения созданы автоматически!\n"
-                    f"   Проверьте папку media в вашем проекте.\n\n"
                     f"💡 Если промпт не вставился автоматически,\n"
                     f"   нажмите Ctrl+V в Cursor AI"
                 )
@@ -932,10 +1059,20 @@ class LandingPageGeneratorGUI:
                 self.reset_form_after_creation()
                 
         except Exception as e:
-            error_msg = f"Ошибка: {str(e)}"
-            print(error_msg)
+            error_msg = f"Ошибка создания лендинга: {str(e)}"
+            print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {error_msg}")
+            print("🐛 ПОЛНАЯ ТРАССИРОВКА:")
+            import traceback
+            traceback.print_exc()
+            
             self.update_status(f"❌ {error_msg}")
-            messagebox.showerror("Ошибка", error_msg)
+            messagebox.showerror("Критическая ошибка", 
+                               f"{error_msg}\n\n"
+                               f"Проверьте консоль для подробной информации.\n\n"
+                               f"💡 Попробуйте:\n"
+                               f"• Перезапустить приложение\n"
+                               f"• Проверить заполнение всех полей\n"
+                               f"• Выбрать другую папку для сохранения")
     
     def update_status(self, text):
         """Обновляет статус с современными цветами"""
@@ -1077,26 +1214,94 @@ class LandingPageGeneratorGUI:
     def _regenerate_image_process(self, image_name, media_path, theme):
         """Процесс пересоздания одного изображения"""
         try:
-            self.update_status(f"🎨 Пересоздание изображения {image_name}...")
+            # Режим без генерации: выходим
+            if self.image_source_var.get() == "no_generation":
+                self.update_status("ℹ️ Режим без генерации включен — пересоздание изображений отключено")
+                messagebox.showwarning("Предупреждение", "Режим 'Без генерации изображений' активен. Выберите AI или поиск, чтобы пересоздавать изображения.")
+                return
+            # 🆕 УЧИТЫВАЕМ ВЫБРАННЫЙ ИСТОЧНИК ИЗОБРАЖЕНИЙ
+            use_real_images = (self.image_source_var.get() == "real_search")
+            source_text = "РЕАЛЬНОГО ФОТО" if use_real_images else "AI-ИЗОБРАЖЕНИЯ"
+            action_text = "Поиск" if use_real_images else "Пересоздание"
+            
+            self.update_status(f"🎨 {action_text} {source_text} {image_name}...")
             
             # Импортируем генератор
             from generators.thematic_generator import ThematicImageGenerator
             from generators.image_generator import ImageGenerator
             
-            # Создаем генераторы БЕЗ Icons8
-            image_generator = ImageGenerator(silent_mode=True)
+            # Создаем генераторы с выбранным источником
+            image_generator = ImageGenerator(
+                silent_mode=True,
+                use_real_images=use_real_images  # 🆕 Новый параметр!
+            )
             thematic_gen = ThematicImageGenerator(silent_mode=True)
             
             # Получаем промпты
             prompts = thematic_gen.get_theme_prompts(theme)
             
-            # КАРДИНАЛЬНО новый подход: разные промпты для разных типов
+            # 🆕 НОВАЯ ЛОГИКА: выбор между AI и поиском реальных фото
+            if use_real_images:
+                # Используем поиск реальных изображений через новую систему
+                from generators.image_search_downloader import ImageSearchDownloader
+                searcher = ImageSearchDownloader(silent_mode=True)
+                
+                # Создаем временную папку для одного изображения
+                temp_media = Path(media_path) / "temp_single"
+                temp_media.mkdir(exist_ok=True)
+                
+                # Ищем и загружаем одно изображение
+                result = searcher._download_single_image(
+                    searcher._generate_search_queries(theme).get(image_name, theme),
+                    image_name,
+                    str(temp_media)
+                )
+                
+                if result:
+                    # Перемещаем файл в основную папку
+                    import shutil
+                    final_path = Path(media_path) / Path(result).name
+                    shutil.move(result, final_path)
+                    
+                    # Удаляем временную папку
+                    import shutil
+                    shutil.rmtree(temp_media, ignore_errors=True)
+                    
+                    self.update_status(f"✅ {image_name}: Найдено реальное фото!")
+                    messagebox.showinfo("Готово", f"Реальное фото '{image_name}' успешно найдено и загружено!")
+                    return
+                else:
+                    # Удаляем временную папку при ошибке
+                    import shutil
+                    shutil.rmtree(temp_media, ignore_errors=True)
+                    
+                    self.update_status(f"❌ {image_name}: Реальное фото не найдено")
+                    messagebox.showerror("Ошибка", f"Не удалось найти реальное фото для '{image_name}'")
+                    return
+            
+            # ОРИГИНАЛЬНАЯ ЛОГИКА AI-генерации: разные промпты для разных типов
             if image_name in ["review1", "review2", "review3"]:
-                # ДЛЯ ОТЗЫВОВ - ТОЛЬКО ЛЮДИ! Игнорируем тематику полностью
-                prompt = "happy customer portrait"
+                # ДЛЯ ОТЗЫВОВ - СЛОЖНАЯ СИСТЕМА РАЗНООБРАЗИЯ ЛИЦ! 
+                self.update_status(f"🔥 {image_name}: Активируем ЭКСТРЕМАЛЬНУЮ систему разнообразия лиц!")
+                
+                try:
+                    from generators.prompt_generator import create_human_focused_review_prompts
+                    human_reviews = create_human_focused_review_prompts()
+                    
+                    # Выбираем соответствующий промпт
+                    review_index = int(image_name[-1]) - 1  # review1 -> 0, review2 -> 1, review3 -> 2
+                    prompt = human_reviews[review_index]
+                    
+                    self.update_status(f"✅ {image_name}: Получен сложный промпт ({len(prompt)} символов)")
+                    print(f"🎭 Тип лица: {['Западный/Европейский', 'Азиатский/Восточный', 'Африканский/Латиноамериканский'][review_index]}")
+                except Exception as e:
+                    self.update_status(f"⚠️ {image_name}: Ошибка сложной системы ({e}), используем fallback")
+                    prompt = "happy customer portrait"  # Fallback
+                    
             elif image_name == "favicon":
-                # ДЛЯ ФАВИКОНКИ - ТОЛЬКО ИКОНКА! Игнорируем тематику полностью  
-                prompt = "simple business icon"
+                # ДЛЯ ФАВИКОНКИ - ТЕМАТИЧЕСКАЯ ПРОСТАЯ ИКОНКА!  
+                prompt = f"{theme} simple icon logo, minimalist business symbol"
+                self.update_status(f"🏷️ {image_name}: Используем тематический промпт для иконки: {theme}")
             else:
                 # Для остальных используем тематические промпты
                 if isinstance(prompts, list):
@@ -1146,14 +1351,14 @@ class LandingPageGeneratorGUI:
                     
                     # Для обычных изображений используем сжатие до 150кб
                     if image_generator._save_compressed_image(image, str(filename), target_size_kb=150):
-                        self.update_status(f"✅ Изображение {image_name} пересоздано с сжатием!")
-                        messagebox.showinfo("Готово", f"Изображение '{image_name}' успешно пересоздано!")
+                        self.update_status(f"✅ AI-изображение {image_name} пересоздано с сжатием!")
+                        messagebox.showinfo("Готово", f"AI-изображение '{image_name}' успешно пересоздано!")
                     else:
-                        self.update_status(f"❌ Не удалось сохранить {image_name}")
-                        messagebox.showerror("Ошибка", f"Не удалось сохранить изображение '{image_name}'")
+                        self.update_status(f"❌ Не удалось сохранить AI-изображение {image_name}")
+                        messagebox.showerror("Ошибка", f"Не удалось сохранить AI-изображение '{image_name}'")
                 else:
-                    self.update_status(f"❌ Не удалось создать {image_name}")
-                    messagebox.showerror("Ошибка", f"Не удалось создать изображение '{image_name}'")
+                    self.update_status(f"❌ Не удалось создать AI-изображение {image_name}")
+                    messagebox.showerror("Ошибка", f"Не удалось создать AI-изображение '{image_name}'")
                 
         except Exception as e:
             error_msg = f"Ошибка пересоздания {image_name}: {str(e)}"
@@ -1163,15 +1368,28 @@ class LandingPageGeneratorGUI:
     def _regenerate_all_images_process(self, media_path, theme):
         """Процесс пересоздания всех изображений"""
         try:
-            self.update_status("🎨 Пересоздание всех изображений...")
+            # Режим без генерации: выходим
+            if self.image_source_var.get() == "no_generation":
+                self.update_status("ℹ️ Режим без генерации включен — пересоздание изображений отключено")
+                messagebox.showwarning("Предупреждение", "Режим 'Без генерации изображений' активен. Выберите AI или поиск, чтобы пересоздавать изображения.")
+                return
+            # 🆕 УЧИТЫВАЕМ ВЫБРАННЫЙ ИСТОЧНИК ИЗОБРАЖЕНИЙ
+            use_real_images = (self.image_source_var.get() == "real_search")
+            source_text = "РЕАЛЬНЫХ ФОТО" if use_real_images else "AI-ИЗОБРАЖЕНИЙ"
+            action_text = "Поиск" if use_real_images else "Пересоздание"
+            
+            self.update_status(f"🎨 {action_text} всех {source_text}...")
             
             # Импортируем генератор
             from generators.image_generator import ImageGenerator
             
-            # Создаем генератор БЕЗ Icons8
-            image_generator = ImageGenerator(silent_mode=True)
+            # Создаем генератор с выбранным источником
+            image_generator = ImageGenerator(
+                silent_mode=True,
+                use_real_images=use_real_images  # 🆕 Новый параметр!
+            )
             
-            # Генерируем полный набор
+            # Генерируем полный набор с выбранным источником
             results = image_generator.generate_thematic_set(
                 theme_input=theme,
                 media_dir=media_path,
@@ -1182,12 +1400,17 @@ class LandingPageGeneratorGUI:
             # Подсчитываем результаты
             successful_count = results if isinstance(results, int) else 0
             
-            self.update_status(f"✅ Пересоздано {successful_count}/8 изображений")
+            # 🆕 УЧИТЫВАЕМ ТИП ИСТОЧНИКА В СООБЩЕНИЯХ
+            action_past = "найдено и загружено" if use_real_images else "пересоздано"
+            source_desc = "реальных фото" if use_real_images else "AI-изображений"
+            
+            self.update_status(f"✅ {action_past.capitalize()} {successful_count}/8 {source_desc}")
             
             messagebox.showinfo(
                 "Готово",
                 f"Пересоздание завершено!\n\n"
-                f"Успешно: {successful_count}/8 изображений\n"
+                f"Успешно {action_past}: {successful_count}/8 {source_desc}\n"
+                f"Источник: {'🔍 Поиск реальных фото' if use_real_images else '🤖 AI-генерация'}\n"
                 f"Папка: {media_path}\n\n"
                 f"Проверьте результат в папке media."
             )
