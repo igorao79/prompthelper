@@ -7,7 +7,6 @@ from shared.city_generator import CityGenerator
 from shared.data import COUNTRIES_DATA
 from core.cursor_manager import CursorManager
 from generators.prompt_generator import create_landing_prompt
-from core.update_checker import UpdateChecker
 
 
 class QtMainWindow(QtWidgets.QMainWindow):
@@ -31,9 +30,6 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._apply_modern_style()
 		self._load_initial_state()
 		self._init_city()
- 
-		# Проверка обновлений при старте
-		self._check_updates_on_start()
 		# восстанавливаем кастомный промпт, если был сохранён ранее
 		try:
 			prev_prompt = self.settings.get_prompt()
@@ -218,48 +214,6 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				self._generate_city()
 		except Exception:
 			pass
-
-	def _check_updates_on_start(self):
-		try:
-			checker = UpdateChecker(self.settings)
-			info = checker.check()
-			if info.available:
-				res = QtWidgets.QMessageBox.question(
-					self,
-					"Обновление доступно",
-					"Найдены изменения в ветке linux репозитория igorao79/prompthelper. Обновить сейчас?",
-					QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-					QtWidgets.QMessageBox.Yes
-				)
-				if res == QtWidgets.QMessageBox.Yes:
-					self._download_and_apply_update(info.latest_sha, info.zip_url)
-		except Exception:
-			pass
-
-	def _download_and_apply_update(self, latest_sha: str, zip_url: str):
-		try:
-			self.status_label.setText("⬇️ Загружаем обновление...")
-			import requests, io, zipfile
-			r = requests.get(zip_url, timeout=60)
-			r.raise_for_status()
-			zf = zipfile.ZipFile(io.BytesIO(r.content))
-			# Распаковываем в текущую папку (поверх), пропуская вложенный корень
-			root_name = zf.namelist()[0].split('/')[0]
-			for n in zf.namelist():
-				if not n.endswith('/'):
-					rel = n[len(root_name)+1:] if n.startswith(root_name + '/') else n
-					if not rel:
-						continue
-					out_path = Path(rel)
-					out_path.parent.mkdir(parents=True, exist_ok=True)
-					with zf.open(n) as src, open(out_path, 'wb') as dst:
-						dst.write(src.read())
-			self.settings.set_last_update_sha(latest_sha)
-			QtWidgets.QMessageBox.information(self, "Обновление", "Обновление установлено. Перезапустите приложение.")
-			self.status_label.setText("✅ Обновление установлено")
-		except Exception as e:
-			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось обновить: {e}")
-			self.status_label.setText("⚠️ Ошибка обновления")
 
 	def _resolve_media_path(self):
 		p = self.regen_path_edit.text().strip()

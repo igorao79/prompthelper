@@ -1,0 +1,28 @@
+# Основные зависимости
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+lxml>=4.9.3
+fake-useragent>=1.4.0
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+pyautogui>=0.9.54
+pygetwindow>=0.0.9
+pyyaml>=6.0
+
+# AI обработка изображений
+rembg>=2.0.56
+onnxruntime>=1.16.0
+scikit-image>=0.21.0
+imageio>=2.31.0
+pillow-simd>=10.0.0;platform_machine=="x86_64"
+
+# GUI (современный)
+PySide6>=6.9.1
+
+# Сборка EXE
+pyinstaller>=6.0.0
+
+# Утилиты
+pathlib2>=2.3.7
+chardet>=5.2.0

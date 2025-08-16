@@ -16,8 +16,6 @@
 import sys
 import os
 from pathlib import Path
-from shared.settings_manager import SettingsManager
-from core.update_checker import UpdateChecker
 
 try:
     from gui import LandingPageGeneratorGUI
@@ -33,17 +31,6 @@ try:
         print("🚀 Запуск Генератора Лендингов v2.0...")
         
         try:
-            # Проверка обновлений (в фоне — просто лог)
-            try:
-                sm = SettingsManager()
-                info = UpdateChecker(sm).check()
-                if info.available:
-                    print("🔔 Доступно обновление ветки linux (igorao79/prompthelper)")
-                elif info.message:
-                    print(f"ℹ️ Проверка обновлений: {info.message}")
-            except Exception:
-                pass
-
             # Если доступна PySide6 — запускаем современный Qt UI, иначе Tkinter
             if HAS_QT:
                 run_qt()

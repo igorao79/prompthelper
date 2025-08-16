@@ -65,9 +65,7 @@ class SettingsManager:
             "last_save_path": str(get_desktop_path()),
             "custom_prompt": "",
             "last_selected_country": "",
-            "landing_history": [],  # [{"domain": str, "prompt": str, "ts": int}]
-            "auto_check_updates": True,
-            "last_update_sha": ""
+            "landing_history": []  # [{"domain": str, "prompt": str, "ts": int}]
         }
         
         print(f"🔍 Загрузка настроек из: {self.settings_file}")
@@ -175,18 +173,3 @@ class SettingsManager:
 
     def get_landing_history(self):
         return self.settings.get("landing_history", [])
-
-    # --- Обновления ---
-    def get_auto_check_updates(self) -> bool:
-        return bool(self.settings.get("auto_check_updates", True))
-
-    def set_auto_check_updates(self, value: bool):
-        self.settings["auto_check_updates"] = bool(value)
-        self.save_settings()
-
-    def get_last_update_sha(self) -> str:
-        return self.settings.get("last_update_sha", "")
-
-    def set_last_update_sha(self, sha: str):
-        self.settings["last_update_sha"] = sha or ""
-        self.save_settings()
