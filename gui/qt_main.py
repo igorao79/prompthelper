@@ -27,6 +27,12 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.domain = ""
 
 		self._bg_threads = []
+		self.max_parallel = 5
+		self._active_builds = 0
+		self._build_queue = []  # list of params dicts
+		self._active_jobs = []  # running params
+		self._job_seq = 1
+		self._last_city_by_country = {}
 		self._build_ui()
 		self._apply_modern_style()
 		self._load_initial_state()
@@ -123,7 +129,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		# Domain
 		self.domain_edit = QtWidgets.QLineEdit()
 		form.addWidget(QtWidgets.QLabel("Домен"), row, 0)
-		form.addWidget(self.domain_edit, row, 1, 1, 2)
+		form.addWidget(self.domain_edit, row, 1)
+		self.no_images_checkbox = QtWidgets.QCheckBox("Без изображений")
+		self.no_images_checkbox.setToolTip("Создать только папки и открыть Cursor с промптом")
+		form.addWidget(self.no_images_checkbox, row, 2)
 		row += 1
 
 		# Правая колонка (форма + статус + инструменты)
@@ -135,6 +144,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.status_label = QtWidgets.QLabel("✅ Готов к работе")
 		self.status_label.setObjectName("StatusLabel")
 		right_v.addWidget(self.status_label)
+		# Mini queue panel
+		queue_group = QtWidgets.QGroupBox("Очередь задач")
+		ql = QtWidgets.QVBoxLayout(queue_group)
+		self.queue_list = QtWidgets.QListWidget()
+		self.queue_list.setMaximumHeight(120)
+		ql.addWidget(self.queue_list)
+		right_v.addWidget(queue_group)
 
 		# Image regeneration (compact tools)
 		regen_group = QtWidgets.QGroupBox("Перегенерация изображений")
@@ -239,24 +255,29 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		except Exception:
 			pass
 
-	def _download_and_apply_update(self, latest_sha: str, zip_url: str):
+	def _download_and_apply_update(self, latest_sha: str, zip_url: str, binary_url: str | None = None):
 		try:
 			self.status_label.setText("⬇️ Загружаем обновление...")
 			import requests, io, zipfile
-			r = requests.get(zip_url, timeout=60)
-			r.raise_for_status()
-			zf = zipfile.ZipFile(io.BytesIO(r.content))
-			# Распаковываем в текущую папку (поверх), пропуская вложенный корень
-			root_name = zf.namelist()[0].split('/')[0]
-			for n in zf.namelist():
-				if not n.endswith('/'):
-					rel = n[len(root_name)+1:] if n.startswith(root_name + '/') else n
-					if not rel:
-						continue
-					out_path = Path(rel)
-					out_path.parent.mkdir(parents=True, exist_ok=True)
-					with zf.open(n) as src, open(out_path, 'wb') as dst:
-						dst.write(src.read())
+			if binary_url:
+				r = requests.get(binary_url, timeout=60)
+				r.raise_for_status()
+				with open("LandGen.exe", 'wb') as f:
+					f.write(r.content)
+			else:
+				r = requests.get(zip_url, timeout=60)
+				r.raise_for_status()
+				zf = zipfile.ZipFile(io.BytesIO(r.content))
+				root_name = zf.namelist()[0].split('/')[0]
+				for n in zf.namelist():
+					if not n.endswith('/'):
+						rel = n[len(root_name)+1:] if n.startswith(root_name + '/') else n
+						if not rel:
+							continue
+						out_path = Path(rel)
+						out_path.parent.mkdir(parents=True, exist_ok=True)
+						with zf.open(n) as src, open(out_path, 'wb') as dst:
+							dst.write(src.read())
 			self.settings.set_last_update_sha(latest_sha)
 			QtWidgets.QMessageBox.information(self, "Обновление", "Обновление установлено. Перезапустите приложение.")
 			self.status_label.setText("✅ Обновление установлено")
@@ -277,7 +298,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtWidgets.QMessageBox.Yes
 				)
 				if res == QtWidgets.QMessageBox.Yes:
-					self._download_and_apply_update(info.latest_sha, info.zip_url)
+					self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
 			else:
 				msg = "Обновлений нет" if not getattr(info, 'message', '') else f"Обновлений нет. {info.message}"
 				QtWidgets.QMessageBox.information(self, "Проверка обновлений", msg)
@@ -556,14 +577,57 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		)
 		if res != QtWidgets.QMessageBox.Yes:
 			return
-		self._create_landing()
+		# Добавляем задачу в очередь; обработчик сам подхватит до 5 параллельно
+		self._enqueue_build()
 
 	def _create_landing(self):
-		# Создание в фоне, чтобы UI не зависал
+		# Создание в фоне через очередь, чтобы ограничить параллелизм
+		self._start_build_task()
+
+	def _enqueue_build(self):
+		params = {
+			"save_path": self.path_edit.text(),
+			"country": self.country,
+			"theme": self.theme,
+			"domain": self.domain,
+			"city": self._pick_next_city(self.country),
+			"custom_prompt": getattr(self, "_custom_prompt", None),
+			"no_images": self.no_images_checkbox.isChecked(),
+			"id": self._job_seq
+		}
+		self._job_seq += 1
+		self._build_queue.append(params)
+		self._refresh_queue_ui()
+		self._start_build_task()
+
+	def _pick_next_city(self, country: str) -> str:
+		# Выбираем город, избегая повторения подряд для одной страны
+		try:
+			last = self._last_city_by_country.get(country, "")
+			city = self.city_generator.get_random_city(country)
+			# если совпал — пробуем ещё раз 1-2 попытки
+			for _ in range(2):
+				if city != last and city:
+					break
+				city = self.city_generator.get_random_city(country)
+			self._last_city_by_country[country] = city
+			return city
+		except Exception:
+			return self.city or ""
+
+	def _start_build_task(self):
+		if self._active_builds >= self.max_parallel:
+			return
+		if not self._build_queue:
+			return
+		params = self._build_queue.pop(0)
+		self._active_builds += 1
+		self._active_jobs.append(params)
 		self.status_label.setText("🚧 Создание проекта и изображений...")
+
 		def task():
 			try:
-				zip_path = ensure_empty_zip_for_landing(self.path_edit.text(), self.country, self.theme)
+				zip_path = ensure_empty_zip_for_landing(params["save_path"], params["country"], params["theme"])
 				if zip_path:
 					print(f"ZIP создан: {zip_path}")
 				def progress_cb(text: str):
@@ -571,14 +635,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, text)
 					)
 				project_path, media_path = self.cursor_manager.create_project_structure(
-					self.domain, self.path_edit.text(), self.theme, progress_cb, generate_images=True
+					params["domain"], params["save_path"], params["theme"], progress_cb, generate_images=not params.get("no_images", False)
 				)
-				# автоподстановка пути проекта для перегенерации
 				QtCore.QMetaObject.invokeMethod(
 					self.regen_path_edit, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(project_path))
 				)
-				language = get_language_by_country(self.country)
-				prompt = getattr(self, "_custom_prompt", None) or create_landing_prompt(self.country, self.city, language, self.domain, self.theme)
+				language = get_language_by_country(params["country"])
+				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"])
 				try:
 					QtWidgets.QApplication.clipboard().setText(prompt)
 				except Exception:
@@ -587,24 +650,50 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				QtCore.QMetaObject.invokeMethod(
 					self, "_show_create_done", QtCore.Qt.QueuedConnection,
 					QtCore.Q_ARG(str, f"Проект: {project_path}\nMedia: {media_path}\n{message}"),
-					QtCore.Q_ARG(str, prompt)
+					QtCore.Q_ARG(str, prompt),
+					QtCore.Q_ARG(str, params["domain"]),
+					QtCore.Q_ARG(str, params["theme"]) 
 				)
 			except Exception as e:
 				QtCore.QMetaObject.invokeMethod(
 					self, "_show_create_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
 				)
+			finally:
+				QtCore.QMetaObject.invokeMethod(self, "_on_build_finished", QtCore.Qt.QueuedConnection)
+
 		worker = QtCore.QThread(self)
 		worker.run = task  # type: ignore
 		self._bg_threads.append(worker)
 		worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
 		worker.start()
 
-	@QtCore.Slot(str, str)
-	def _show_create_done(self, message: str, prompt: str):
+	@QtCore.Slot()
+	def _on_build_finished(self):
+		self._active_builds = max(0, self._active_builds - 1)
+		if self._active_jobs:
+			self._active_jobs.pop(0)
+		self._refresh_queue_ui()
+		if self._build_queue:
+			self._start_build_task()
+
+	def _refresh_queue_ui(self):
+		items = []
+		for p in self._active_jobs:
+			items.append(f"▶ {p['id']}: {p['domain']} [{p['theme']}] {'(без изображений)' if p.get('no_images') else ''}")
+		for p in self._build_queue:
+			items.append(f"⏳ {p['id']}: {p['domain']} [{p['theme']}] {'(без изображений)' if p.get('no_images') else ''}")
+		self.queue_list.clear()
+		self.queue_list.addItems(items)
+
+	@QtCore.Slot(str, str, str, str)
+	def _show_create_done(self, message: str, prompt: str, domain: str, theme: str):
 		QtWidgets.QMessageBox.information(self, "Готово", message)
-		# сохранение истории
-		self.settings.add_theme_to_history(self.theme)
-		self.settings.add_landing_to_history(self.domain, prompt)
+		# сохранение истории — для многопоточности фиксируем текущее состояние домена/темы
+		try:
+			self.settings.add_theme_to_history(theme)
+			self.settings.add_landing_to_history(domain, prompt)
+		except Exception:
+			pass
 		self._load_initial_state()
 		self.status_label.setText("✅ Готов к работе")
 

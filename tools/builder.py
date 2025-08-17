@@ -69,7 +69,8 @@ def main():
     parser.add_argument("--mode", choices=["local", "remote"], default="local", help="local: собирать из текущей папки; remote: скачать ветку и собирать")
     args = parser.parse_args()
 
-    project_root = Path.cwd()
+    # Корень проекта от файла builder.py (../)
+    project_root = Path(__file__).resolve().parent.parent
     build_root = project_root / "_build"
     release_root = project_root / "release"
     venv_dir = build_root / "venv"
@@ -117,7 +118,7 @@ def main():
         "--hidden-import", "requests",
         str(branch_root / "main.py"),
     ]
-    run(pyinstaller_cmd, cwd=branch_root)
+    run(pyinstaller_cmd, cwd=str(branch_root))
 
     built_exe = branch_root / "dist" / ("LandGen.exe" if os.name == "nt" else "LandGen")
     if not built_exe.exists():
@@ -128,27 +129,11 @@ def main():
     print(f"✅ Готово: {target_exe}")
     
     # Пытаемся сгенерировать иконку и компилировать установщик, если установлен Inno Setup
-    # Иконка в корневой папке проекта
-    icon_path = project_root / "landgen.ico"
-    try:
-        from PIL import Image  # проверка наличия Pillow
-        # генерируем иконку
-        run([str(python), str(project_root / "tools" / "make_icon.py"), "--out", str(icon_path), "--label", "LG"])
-    except Exception:
-        pass
-
     # Компиляция Inno Setup (опционально)
     iscc = Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe")
     if not iscc.exists():
         iscc = Path("C:/Program Files/Inno Setup 6/ISCC.exe")
     if iscc.exists():
-        # копируем иконку рядом со скриптом инсталлятора
-        tools_icon = project_root / "tools" / "landgen.ico"
-        try:
-            if icon_path.exists():
-                shutil.copy2(icon_path, tools_icon)
-        except Exception:
-            pass
         print("⚙️ Компиляция установщика Inno Setup...")
         run([str(iscc), str(project_root / "tools" / "installer.iss")])
         print("✅ Установщик собран (файл *.exe рядом с installer.iss или в Output)")

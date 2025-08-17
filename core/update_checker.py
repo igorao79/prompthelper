@@ -14,6 +14,7 @@ class UpdateInfo:
     available: bool
     latest_sha: str
     zip_url: str = GITHUB_ZIP_URL
+    binary_url: Optional[str] = None
     message: str = ""
 
 
@@ -34,10 +35,13 @@ class UpdateChecker:
             latest_sha = data.get("commit", {}).get("sha", "")
             prev_sha = self.settings.get_last_update_sha()
 
-            if latest_sha and latest_sha != prev_sha:
-                return UpdateInfo(True, latest_sha)
+            # Ищем бинарный релиз LandGen.exe (опционально)
+            binary_url = self._get_latest_release_binary_url()
 
-            return UpdateInfo(False, latest_sha or prev_sha)
+            if latest_sha and latest_sha != prev_sha:
+                return UpdateInfo(True, latest_sha, GITHUB_ZIP_URL, binary_url)
+
+            return UpdateInfo(False, latest_sha or prev_sha, GITHUB_ZIP_URL, binary_url)
 
         except Exception as e:
             return UpdateInfo(False, self.settings.get_last_update_sha(), message=str(e)[:200])
@@ -47,5 +51,22 @@ class UpdateChecker:
             self.settings.set_last_update_sha(latest_sha)
         except Exception:
             pass
+
+    def _get_latest_release_binary_url(self) -> Optional[str]:
+        try:
+            releases_api = "https://api.github.com/repos/igorao79/prompthelper/releases/latest"
+            r = requests.get(releases_api, timeout=10)
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            assets = data.get("assets", [])
+            for a in assets:
+                url = a.get("browser_download_url")
+                name = a.get("name", "")
+                if url and name and name.lower().endswith(".exe") and "landgen" in name.lower():
+                    return url
+            return None
+        except Exception:
+            return None
 
 

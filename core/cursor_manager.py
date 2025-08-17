@@ -870,6 +870,9 @@ class CursorManager:
         elif theme and not IMAGE_GENERATION_AVAILABLE and generate_images:
             if progress_callback:
                 progress_callback("⚠️ Модуль генерации изображений недоступен")
+        elif theme and not generate_images:
+            if progress_callback:
+                progress_callback("📁 Создание проекта без изображений")
         
         return project_path, media_path
     
