@@ -11,7 +11,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from tkinter import messagebox
+messagebox = None  # Tkinter удалён
 
 def get_current_year():
     """
@@ -183,6 +183,46 @@ def get_language_display_name(country):
     
     return language_display_map.get(country, f"английский ({country})")
 
+def get_language_name_by_code(code: str) -> str:
+    """
+    Возвращает человеко-понятное название языка по коду (ISO 639-1, с поддержкой регионов)
+    """
+    try:
+        code = (code or "en").strip()
+        mapping = {
+            "en": "английский",
+            "ru": "русский",
+            "uk": "украинский",
+            "be": "белорусский",
+            "kk": "казахский",
+            "de": "немецкий",
+            "fr": "французский",
+            "it": "итальянский",
+            "es": "испанский",
+            "pl": "польский",
+            "cs": "чешский",
+            "tr": "турецкий",
+            "zh": "китайский",
+            "ja": "японский",
+            "ko": "корейский",
+            "hi": "хинди",
+            "pt": "португальский",
+            # Региональные варианты (если придут)
+            "en-US": "английский",
+            "en-GB": "английский",
+            "pt-BR": "португальский",
+            "en-CA": "английский",
+            "es-MX": "испанский",
+            "es-CL": "испанский",
+            "es-PE": "испанский",
+        }
+        if code in mapping:
+            return mapping[code]
+        base = code.split('-')[0]
+        return mapping.get(base, code)
+    except Exception:
+        return code or "en"
+
 def sanitize_filename(filename):
     """
     Очищает имя файла от недопустимых символов
@@ -315,41 +355,5 @@ def open_text_editor(text, title="Редактирование промпта"):
     Returns:
         str: Отредактированный текст или None если отменено
     """
-    try:
-        import tkinter as tk
-        from tkinter import scrolledtext
-        
-        root = tk.Tk()
-        root.title(title)
-        root.geometry("600x400")
-        
-        # Создаем текстовое поле с прокруткой
-        text_area = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=70, height=20)
-        text_area.pack(expand=True, fill='both', padx=10, pady=10)
-        
-        # Вставляем исходный текст
-        text_area.insert(tk.END, text)
-        
-        result = {'text': None}
-        
-        def save_and_close():
-            result['text'] = text_area.get('1.0', tk.END).strip()
-            root.destroy()
-        
-        def cancel():
-            root.destroy()
-        
-        # Кнопки
-        button_frame = tk.Frame(root)
-        button_frame.pack(pady=5)
-        
-        tk.Button(button_frame, text="Сохранить", command=save_and_close).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Отмена", command=cancel).pack(side=tk.LEFT, padx=5)
-        
-        root.mainloop()
-        
-        return result['text']
-        
-    except Exception as e:
-        print(f"Ошибка открытия редактора: {e}")
-        return text 
+    # Tkinter редактор удалён. Возвращаем исходный текст без изменений.
+    return text

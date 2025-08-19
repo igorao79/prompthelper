@@ -33,6 +33,26 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._active_jobs = []  # running params
 		self._job_seq = 1
 		self._last_city_by_country = {}
+		# Сопоставление кодов языков для человеко-читаемого отображения
+		self._language_code_to_display = {
+			"en": "английский",
+			"ru": "русский",
+			"uk": "украинский",
+			"be": "белорусский",
+			"kk": "казахский",
+			"de": "немецкий",
+			"fr": "французский",
+			"it": "итальянский",
+			"es": "испанский",
+			"pl": "польский",
+			"cs": "чешский",
+			"tr": "турецкий",
+			"zh": "китайский",
+			"ja": "японский",
+			"ko": "корейский",
+			"hi": "хинди",
+			"pt": "португальский",
+		}
 		self._build_ui()
 		self._apply_modern_style()
 		self._load_initial_state()
@@ -62,11 +82,15 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.edit_prompt_btn = QtWidgets.QPushButton("✏️ Настроить промпт")
 		self.reset_prompt_btn = QtWidgets.QPushButton("🔄 Сбросить")
 		self.update_btn = QtWidgets.QPushButton("⬇️ Обновления")
+		self.settings_btn = QtWidgets.QPushButton("⚙️ Настройки")
+		self.grid_btn = QtWidgets.QPushButton("🧩 Режим сетки")
 		self.create_btn = QtWidgets.QPushButton("🚀 СОЗДАТЬ ЛЕНДИНГ ✨")
 		self.create_btn.setObjectName("PrimaryButton")
 		header.addWidget(self.edit_prompt_btn)
 		header.addWidget(self.reset_prompt_btn)
 		header.addWidget(self.update_btn)
+		header.addWidget(self.settings_btn)
+		header.addWidget(self.grid_btn)
 		header.addStretch(1)
 		header.addWidget(self.create_btn)
 		main.addLayout(header)
@@ -126,6 +150,17 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		form.addWidget(self.city_btn, row, 2, alignment=QtCore.Qt.AlignTop)
 		row += 1
 
+		# Language override (checkbox + combobox)
+		self.custom_lang_cb = QtWidgets.QCheckBox("Нестандартный язык")
+		self.custom_lang_combo = QtWidgets.QComboBox()
+		self.custom_lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt"])
+		self.custom_lang_combo.setEnabled(False)
+		self.custom_lang_cb.toggled.connect(self._on_custom_lang_toggle)
+		self.custom_lang_combo.currentTextChanged.connect(self._on_custom_lang_changed)
+		form.addWidget(self.custom_lang_cb, row, 0)
+		form.addWidget(self.custom_lang_combo, row, 1)
+		row += 1
+
 		# Domain
 		self.domain_edit = QtWidgets.QLineEdit()
 		form.addWidget(QtWidgets.QLabel("Домен"), row, 0)
@@ -150,40 +185,23 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.queue_list = QtWidgets.QListWidget()
 		self.queue_list.setMaximumHeight(120)
 		ql.addWidget(self.queue_list)
+		self.queue_label = QtWidgets.QLabel("Очередь: 0")
+		self.queue_label.setStyleSheet("color:#94a3b8; font-size:12px;")
+		ql.addWidget(self.queue_label)
 		right_v.addWidget(queue_group)
 
-		# Image regeneration (compact tools)
-		regen_group = QtWidgets.QGroupBox("Перегенерация изображений")
-		regen_layout = QtWidgets.QVBoxLayout(regen_group)
-		path_row = QtWidgets.QHBoxLayout()
-		self.regen_path_edit = QtWidgets.QLineEdit(self.settings.get_save_path())
-		self.regen_path_edit.setPlaceholderText("Укажите папку проекта или media")
-		self.regen_browse_btn = QtWidgets.QPushButton("📂 Выбрать папку")
-		self.regen_browse_btn.clicked.connect(self._browse_regen_path)
-		path_row.addWidget(self.regen_path_edit)
-		path_row.addWidget(self.regen_browse_btn)
-		regen_layout.addLayout(path_row)
-
-		btn_row = QtWidgets.QHBoxLayout()
-		self.regen_all_btn = QtWidgets.QPushButton("🔁 Перегенерировать все (8)")
-		self.regen_all_btn.clicked.connect(self._regenerate_all_images)
-		btn_row.addWidget(self.regen_all_btn)
-		regen_layout.addLayout(btn_row)
-
-		grid = QtWidgets.QGridLayout()
-		image_names = [
-			("main", "Main"), ("about1", "About 1"), ("about2", "About 2"), ("about3", "About 3"),
-			("review1", "Review 1"), ("review2", "Review 2"), ("review3", "Review 3"), ("favicon", "Favicon")
-		]
-		self._image_buttons = {}
-		for i, (iname, label) in enumerate(image_names):
-			btn = QtWidgets.QPushButton(label)
-			btn.clicked.connect(lambda _, n=iname: self._regenerate_single_image(n))
-			self._image_buttons[iname] = btn
-			grid.addWidget(btn, i // 4, i % 4)
-		regen_layout.addLayout(grid)
-
-		right_v.addWidget(regen_group)
+		# Image generation settings (model selection)
+		model_group = QtWidgets.QGroupBox("Параметры генерации изображений")
+		model_layout = QtWidgets.QHBoxLayout(model_group)
+		model_layout.addWidget(QtWidgets.QLabel("Модель Ideogram:"))
+		self.model_combo = QtWidgets.QComboBox()
+		self.model_combo.addItems(["3.0 Turbo"]) 
+		current_model = self.settings.settings.get("ideogram_model", "3.0 Turbo")
+		idx = self.model_combo.findText(current_model)
+		self.model_combo.setCurrentIndex(idx if idx >= 0 else 0)
+		self.model_combo.currentTextChanged.connect(self._on_model_change)
+		model_layout.addWidget(self.model_combo)
+		right_v.addWidget(model_group)
 
 		# Левая колонка — Избранные страны + История лендингов
 		left_group = QtWidgets.QGroupBox("Быстрый доступ")
@@ -223,11 +241,19 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
 		self.update_btn.clicked.connect(self._manual_check_updates)
+		self.settings_btn.clicked.connect(self._open_settings_dialog)
+		self.grid_btn.clicked.connect(self._open_grid_dialog)
 
-	def _browse_regen_path(self):
-		path = QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите папку проекта или media", self.path_edit.text())
-		if path:
-			self.regen_path_edit.setText(path)
+		# Применяем ограничения по наличию API ключа
+		self._refresh_no_images_state()
+
+	def _on_model_change(self, text: str):
+		try:
+			self.settings.settings["ideogram_model"] = text.strip()
+			self.settings.save_settings()
+			self.status_label.setText(f"✅ Модель Ideogram: {text}")
+		except Exception:
+			pass
 
 	def _init_city(self):
 		# Инициализация города при старте
@@ -305,85 +331,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		except Exception as e:
 			QtWidgets.QMessageBox.warning(self, "Проверка обновлений", f"Не удалось выполнить проверку: {e}")
 
-	def _resolve_media_path(self):
-		p = self.regen_path_edit.text().strip()
-		if not p:
-			return None
-		pp = Path(p)
-		if pp.is_dir() and pp.name.lower() == 'media':
-			return pp
-		if pp.is_dir():
-			# если это папка проекта — используем project/media
-			cand = pp / 'media'
-			return cand if cand.exists() else None
-		return None
-
-	def _regenerate_all_images(self):
-		media = self._resolve_media_path()
-		if not media:
-			QtWidgets.QMessageBox.warning(self, "Перегенерация", "Укажите корректную папку проекта или media")
-			return
-		# Запускаем в фоне, UI не блокируется
-		self.status_label.setText("🚧 Перегенерация: подготовка...")
-		def task():
-			try:
-				from generators.image_generator import ImageGenerator
-				gen = ImageGenerator(silent_mode=False, fast_mode=False, max_workers=2)
-				def cb(text):
-					QtCore.QMetaObject.invokeMethod(
-						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, text)
-					)
-				count = gen.generate_thematic_set(self.theme_combo.currentText().strip() or self.theme, str(media), progress_callback=cb)
-				QtCore.QMetaObject.invokeMethod(
-					self, "_show_regen_result", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"Готово: {count}/8")
-				)
-			except Exception as e:
-				QtCore.QMetaObject.invokeMethod(
-					self, "_show_regen_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
-				)
-		worker = QtCore.QThread(self)
-		worker.run = task  # type: ignore
-		self._bg_threads.append(worker)
-		worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
-		worker.start()
-
-	def _regenerate_single_image(self, image_name):
-		media = self._resolve_media_path()
-		if not media:
-			QtWidgets.QMessageBox.warning(self, "Перегенерация", "Укажите корректную папку проекта или media")
-			return
-		# В фоне, без блокировки UI
-		self.status_label.setText(f"🚧 Перегенерация: {image_name}...")
-		def task():
-			try:
-				from generators.image_generator import ImageGenerator
-				gen = ImageGenerator(silent_mode=False, fast_mode=False, max_workers=1)
-				prompt_map, _ = gen._generate_prompts(self.theme_combo.currentText().strip() or self.theme)
-				from time import perf_counter
-				start = perf_counter()
-				res = gen._generate_image_pollinations_aggressive(prompt_map.get(image_name, ''), image_name, str(media))
-				elapsed = perf_counter() - start
-				msg = f"{image_name}: готово за {elapsed:.1f}s" if res else f"{image_name}: не удалось"
-				QtCore.QMetaObject.invokeMethod(
-					self, "_show_regen_result", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, msg)
-				)
-			except Exception as e:
-				QtCore.QMetaObject.invokeMethod(
-					self, "_show_regen_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
-				)
-		worker = QtCore.QThread(self)
-		worker.run = task  # type: ignore
-		self._bg_threads.append(worker)
-		worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
-		worker.start()
-
-	@QtCore.Slot(str)
-	def _show_regen_result(self, msg: str):
-		QtWidgets.QMessageBox.information(self, "Перегенерация", msg)
-
-	@QtCore.Slot(str)
-	def _show_regen_error(self, msg: str):
-		QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось перегенерировать: {msg}")
+	# удалены методы перегенерации изображений
 
 	def _load_initial_state(self):
 		# История тематик
@@ -462,6 +410,82 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			"""
 		)
 
+	def _refresh_no_images_state(self):
+		try:
+			has_key = bool(self.settings.get_ideogram_api_key())
+			if not has_key:
+				self.no_images_checkbox.setChecked(True)
+				self.no_images_checkbox.setEnabled(False)
+			else:
+				self.no_images_checkbox.setEnabled(True)
+		except Exception:
+			pass
+
+	def _open_settings_dialog(self):
+		try:
+			dlg = QtWidgets.QDialog(self)
+			dlg.setWindowTitle("Настройки")
+			layout = QtWidgets.QVBoxLayout(dlg)
+			# Ideogram API
+			grp_api = QtWidgets.QGroupBox("Ideogram API")
+			api_layout = QtWidgets.QHBoxLayout(grp_api)
+			api_layout.addWidget(QtWidgets.QLabel("API ключ:"))
+			api_edit = QtWidgets.QLineEdit(self.settings.get_ideogram_api_key())
+			api_layout.addWidget(api_edit)
+			btn_save_api = QtWidgets.QPushButton("Сохранить ключ")
+			api_layout.addWidget(btn_save_api)
+			layout.addWidget(grp_api)
+
+			# Файл настроек — выбор папки
+			grp_file = QtWidgets.QGroupBox("Файл настроек")
+			file_layout = QtWidgets.QHBoxLayout(grp_file)
+			path_label = QtWidgets.QLineEdit(str(self.settings.settings_file))
+			path_label.setReadOnly(True)
+			btn_choose = QtWidgets.QPushButton("Выбрать папку")
+			file_layout.addWidget(path_label, 1)
+			file_layout.addWidget(btn_choose)
+			layout.addWidget(grp_file)
+
+			# Cursor поведение
+			grp_cursor = QtWidgets.QGroupBox("Cursor")
+			cursor_layout = QtWidgets.QVBoxLayout(grp_cursor)
+			auto_paste_cb = QtWidgets.QCheckBox("Автоматически вставлять промпт в Cursor")
+			auto_paste_cb.setChecked(bool(self.settings.get_auto_paste_prompt()))
+			cursor_layout.addWidget(auto_paste_cb)
+			layout.addWidget(grp_cursor)
+
+			btns = QtWidgets.QHBoxLayout()
+			btn_ok = QtWidgets.QPushButton("Закрыть")
+			btns.addStretch(1)
+			btns.addWidget(btn_ok)
+			layout.addLayout(btns)
+
+			def _save_api():
+				self.settings.set_ideogram_api_key(api_edit.text().strip())
+				self.status_label.setText("✅ API ключ Ideogram сохранён")
+				self._refresh_no_images_state()
+			btn_save_api.clicked.connect(_save_api)
+
+			def _choose_dir():
+				folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите папку", str(Path(self.settings.settings_file).parent))
+				if folder:
+					ok = self.settings.relocate_settings_file(folder)
+					if ok:
+						path_label.setText(str(self.settings.settings_file))
+						self.status_label.setText("✅ Путь к файлу настроек обновлён")
+					else:
+						QtWidgets.QMessageBox.critical(self, "Ошибка", "Не удалось перенести файл настроек")
+			btn_choose.clicked.connect(_choose_dir)
+
+			def _toggle_auto_paste(checked: bool):
+				self.settings.set_auto_paste_prompt(bool(checked))
+			auto_paste_cb.toggled.connect(_toggle_auto_paste)
+
+			btn_ok.clicked.connect(dlg.accept)
+			dlg.exec()
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Настройки", f"Не удалось открыть окно настроек: {e}")
+
 	def _browse_path(self):
 		path = QtWidgets.QFileDialog.getExistingDirectory(self, "Выберите папку", self.path_edit.text())
 		if path:
@@ -487,7 +511,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 	def _on_country_change(self, text):
 		self.country = text
 		if text:
-			self.status_label.setText(f"🌐 Язык: {get_language_display_name(text)}")
+			self.status_label.setText(f"🌐 Язык: {self._get_effective_language_display(text)}")
 			self._generate_city()
 			self.settings.set_last_selected_country(text)
 		self._update_fav_button()
@@ -534,7 +558,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		if not theme or not country or not domain or not city:
 			QtWidgets.QMessageBox.warning(self, "Предупреждение", "Заполните тематику, страну, домен и сгенерируйте город")
 			return
-		language = get_language_by_country(country)
+		language = self._get_effective_language_code(country)
 		prompt = create_landing_prompt(country, city, language, domain, theme)
 		text, ok = QtWidgets.QInputDialog.getMultiLineText(self, "Редактирование промпта", "Промпт:", prompt)
 		if ok:
@@ -570,10 +594,18 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		if not ok:
 			QtWidgets.QMessageBox.critical(self, "Ошибка", msg)
 			return
+		# Если нет API ключа — не разрешаем снимать "без изображений"
+		try:
+			if not self.settings.get_ideogram_api_key() and not self.no_images_checkbox.isChecked():
+				QtWidgets.QMessageBox.warning(self, "Требуется API ключ", "Введите Ideogram API ключ в настройках или включите режим 'Без изображений'.")
+				return
+		except Exception:
+			pass
+		language_display = self._get_effective_language_display(self.country) if self.country else ""
 		res = QtWidgets.QMessageBox.question(
 			self,
 			"Подтверждение",
-			f"Создать лендинг?\n\nТематика: {self.theme}\nСтрана: {self.country}\nГород: {self.city}\nДомен: {self.domain}\nПапка: {self.path_edit.text()}\n\nИзображения будут сгенерированы автоматически."
+			f"Создать лендинг?\n\nТематика: {self.theme}\nСтрана: {self.country}\nГород: {self.city}\nЯзык: {language_display}\nДомен: {self.domain}\nПапка: {self.path_edit.text()}\n\nИзображения будут сгенерированы автоматически, если включено и задан API ключ."
 		)
 		if res != QtWidgets.QMessageBox.Yes:
 			return
@@ -593,12 +625,17 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			"city": self._pick_next_city(self.country),
 			"custom_prompt": getattr(self, "_custom_prompt", None),
 			"no_images": self.no_images_checkbox.isChecked(),
-			"id": self._job_seq
+			"language": self._get_effective_language_code(self.country) if self.country else get_language_by_country(self.country),
+			"id": self._job_seq,
+			"auto_paste": bool(self.settings.get_auto_paste_prompt()),
 		}
 		self._job_seq += 1
 		self._build_queue.append(params)
 		self._refresh_queue_ui()
 		self._start_build_task()
+
+		# Обновляем счётчик очереди
+		self._update_queue_label()
 
 	def _pick_next_city(self, country: str) -> str:
 		# Выбираем город, избегая повторения подряд для одной страны
@@ -634,19 +671,26 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtCore.QMetaObject.invokeMethod(
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, text)
 					)
+				# Генерация изображений возможна только при наличии API ключа
+				should_gen_images = (not params.get("no_images", False)) and bool(self.settings.get_ideogram_api_key())
 				project_path, media_path = self.cursor_manager.create_project_structure(
-					params["domain"], params["save_path"], params["theme"], progress_cb, generate_images=not params.get("no_images", False)
+					params["domain"], params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images
 				)
-				QtCore.QMetaObject.invokeMethod(
-					self.regen_path_edit, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(project_path))
-				)
-				language = get_language_by_country(params["country"])
+				# Виджет пути перегенерации был удалён; больше не обновляем
+				language = params.get("language") or get_language_by_country(params["country"]) 
 				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"])
-				try:
-					QtWidgets.QApplication.clipboard().setText(prompt)
-				except Exception:
-					pass
-				success, message = self.cursor_manager.open_project_and_paste_prompt(project_path, prompt, None, auto_paste=False)
+				# Для грид-режима ничего не вставляем и не копируем; признак origin == 'grid'
+				origin = params.get("origin", "single")
+				do_copy = origin != "grid"
+				do_auto_paste = bool(params.get("auto_paste", False)) and origin != "grid"
+				if do_copy:
+					try:
+						QtWidgets.QApplication.clipboard().setText(prompt)
+					except Exception:
+						pass
+				success, message = self.cursor_manager.open_project_and_paste_prompt(
+					project_path, prompt, None, auto_paste=do_auto_paste
+				)
 				QtCore.QMetaObject.invokeMethod(
 					self, "_show_create_done", QtCore.Qt.QueuedConnection,
 					QtCore.Q_ARG(str, f"Проект: {project_path}\nMedia: {media_path}\n{message}"),
@@ -673,6 +717,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		if self._active_jobs:
 			self._active_jobs.pop(0)
 		self._refresh_queue_ui()
+		self._update_queue_label()
 		if self._build_queue:
 			self._start_build_task()
 
@@ -684,6 +729,143 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			items.append(f"⏳ {p['id']}: {p['domain']} [{p['theme']}] {'(без изображений)' if p.get('no_images') else ''}")
 		self.queue_list.clear()
 		self.queue_list.addItems(items)
+
+	def _update_queue_label(self):
+		try:
+			q_total = len(self._active_jobs) + len(self._build_queue)
+			self.queue_label.setText(f"Очередь: {q_total}")
+		except Exception:
+			pass
+
+	def _open_grid_dialog(self):
+		try:
+			dlg = QtWidgets.QDialog(self)
+			dlg.setWindowTitle("Режим генерации сетки (5)")
+			v = QtWidgets.QVBoxLayout(dlg)
+			# Выбор страны в диалоге
+			country_row = QtWidgets.QHBoxLayout()
+			country_row.addWidget(QtWidgets.QLabel("Страна:"))
+			country_combo = QtWidgets.QComboBox()
+			country_combo.addItems(sorted(COUNTRIES_DATA.keys()))
+			# Текущее значение из основной формы — если есть
+			cur_country = self.country_combo.currentText().strip()
+			if cur_country:
+				idx = country_combo.findText(cur_country)
+				if idx >= 0:
+					country_combo.setCurrentIndex(idx)
+			country_row.addWidget(country_combo, 1)
+			v.addLayout(country_row)
+			# Две многострочные области: тематики и домены
+			inputs = QtWidgets.QHBoxLayout()
+			left_box = QtWidgets.QGroupBox("Тематики (каждая с новой строки)")
+			left_v = QtWidgets.QVBoxLayout(left_box)
+			themes_text = QtWidgets.QPlainTextEdit()
+			themes_text.setPlaceholderText("Автомойка\nПолировка и детейлинг авто\nАвтосервис и ремонт машин\nШиномонтаж\nЗамена масла")
+			left_v.addWidget(themes_text)
+			right_box = QtWidgets.QGroupBox("Домены (каждый с новой строки)")
+			right_v = QtWidgets.QVBoxLayout(right_box)
+			domains_text = QtWidgets.QPlainTextEdit()
+			domains_text.setPlaceholderText("familykedx.org\nfrankjgoh.org\npuccinyomf.org\ncuekuth.org\nblockbzore.org")
+			right_v.addWidget(domains_text)
+			inputs.addWidget(left_box, 1)
+			inputs.addWidget(right_box, 1)
+			v.addLayout(inputs)
+			# Низ: опции
+			bottom = QtWidgets.QHBoxLayout()
+			custom_lang_cb = QtWidgets.QCheckBox("Нестандартный язык")
+			custom_lang_cb.setChecked(self.custom_lang_cb.isChecked())
+			lang_combo = QtWidgets.QComboBox()
+			lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt"])
+			lang_combo.setCurrentText(self.custom_lang_combo.currentText())
+			no_images_cb = QtWidgets.QCheckBox("Без изображений")
+			no_images_cb.setChecked(self.no_images_checkbox.isChecked() or not bool(self.settings.get_ideogram_api_key()))
+			if not self.settings.get_ideogram_api_key():
+				no_images_cb.setEnabled(False)
+			bottom.addWidget(custom_lang_cb)
+			bottom.addWidget(lang_combo)
+			bottom.addStretch(1)
+			bottom.addWidget(no_images_cb)
+			v.addLayout(bottom)
+
+			btns = QtWidgets.QHBoxLayout()
+			start_btn = QtWidgets.QPushButton("Запустить очередь")
+			btns.addStretch(1)
+			btns.addWidget(start_btn)
+			v.addLayout(btns)
+
+			def _start():
+				country = country_combo.currentText().strip()
+				if not country:
+					QtWidgets.QMessageBox.warning(self, "Предупреждение", "Выберите страну")
+					return
+				save_path = self.path_edit.text().strip()
+				# Разбираем списки
+				themes = [s.strip() for s in themes_text.toPlainText().splitlines() if s.strip()]
+				domains = [s.strip() for s in domains_text.toPlainText().splitlines() if s.strip()]
+				pairs = list(zip(themes, domains))
+				if not pairs:
+					QtWidgets.QMessageBox.warning(self, "Режим сетки", "Заполните тематики и домены")
+					return
+				for theme, domain in pairs:
+					ok, err, fixed = validate_domain(domain)
+					if not ok:
+						self.status_label.setText(f"⚠️ Пропуск '{domain}': {err}")
+						continue
+					params = {
+						"save_path": save_path,
+						"country": country,
+						"theme": theme,
+						"domain": fixed,
+						"city": self._pick_next_city(country),
+						"custom_prompt": getattr(self, "_custom_prompt", None),
+						"no_images": bool(no_images_cb.isChecked()),
+						"language": (lang_combo.currentText().strip() if custom_lang_cb.isChecked() else self._get_effective_language_code(country)),
+						"id": self._job_seq,
+						"auto_paste": False,
+						"origin": "grid"
+					}
+					self._job_seq += 1
+					self._build_queue.append(params)
+				self._refresh_queue_ui()
+				self._start_build_task()
+				self._update_queue_label()
+				dlg.accept()
+
+			start_btn.clicked.connect(_start)
+			dlg.exec()
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Режим сетки", f"Не удалось открыть окно: {e}")
+
+	def _on_custom_lang_toggle(self, checked: bool):
+		try:
+			self.custom_lang_combo.setEnabled(bool(checked))
+			country = self.country_combo.currentText().strip()
+			if country:
+				self.status_label.setText(f"🌐 Язык: {self._get_effective_language_display(country)}")
+		except Exception:
+			pass
+
+	def _on_custom_lang_changed(self, text: str):
+		try:
+			country = self.country_combo.currentText().strip()
+			if country:
+				self.status_label.setText(f"🌐 Язык: {self._get_effective_language_display(country)}")
+		except Exception:
+			pass
+
+	def _get_effective_language_code(self, country: str) -> str:
+		try:
+			if hasattr(self, 'custom_lang_cb') and self.custom_lang_cb.isChecked():
+				code = (self.custom_lang_combo.currentText() or 'en').strip()
+				return code
+			return get_language_by_country(country)
+		except Exception:
+			return get_language_by_country(country)
+
+	def _get_effective_language_display(self, country: str) -> str:
+		code = self._get_effective_language_code(country)
+		name = self._language_code_to_display.get(code, code)
+		return name if not (hasattr(self, 'custom_lang_cb') and self.custom_lang_cb.isChecked()) else f"{name} (переопределён)"
 
 	@QtCore.Slot(str, str, str, str)
 	def _show_create_done(self, message: str, prompt: str, domain: str, theme: str):

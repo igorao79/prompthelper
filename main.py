@@ -14,64 +14,33 @@
 """
 
 import sys
-import os
-from pathlib import Path
 from shared.settings_manager import SettingsManager
 from core.update_checker import UpdateChecker
+from gui.qt_main import run_qt
 
-try:
-    from gui import LandingPageGeneratorGUI
-    # Qt-версия (опционально)
+
+def main():
+    """Точка входа: только Qt-версия (PySide6)."""
+    print("🚀 Запуск Генератора Лендингов v2.0 (Qt)...")
     try:
-        from gui.qt_main import run_qt
-        HAS_QT = True
-    except Exception:
-        HAS_QT = False
-    
-    def main():
-        """Основная функция запуска"""
-        print("🚀 Запуск Генератора Лендингов v2.0...")
-        
+        # Проверка обновлений (лог)
         try:
-            # Проверка обновлений (в фоне — просто лог)
-            try:
-                sm = SettingsManager()
-                info = UpdateChecker(sm).check()
-                if info.available:
-                    print("🔔 Доступно обновление ветки linux (igorao79/prompthelper)")
-                elif info.message:
-                    print(f"ℹ️ Проверка обновлений: {info.message}")
-            except Exception:
-                pass
+            sm = SettingsManager()
+            info = UpdateChecker(sm).check()
+            if info.available:
+                print("🔔 Доступно обновление ветки linux (igorao79/prompthelper)")
+            elif info.message:
+                print(f"ℹ️ Проверка обновлений: {info.message}")
+        except Exception:
+            pass
 
-            # Если доступна PySide6 — запускаем современный Qt UI, иначе Tkinter
-            if HAS_QT:
-                run_qt()
-            else:
-                app = LandingPageGeneratorGUI()
-                app.run()
-        except Exception as e:
-            print(f"Ошибка запуска приложения: {e}")
-            input("Нажмите Enter для выхода...")
-            return 1
-        
+        run_qt()
         return 0
+    except Exception as e:
+        print(f"Ошибка запуска приложения: {e}")
+        input("Нажмите Enter для выхода...")
+        return 1
 
-    if __name__ == "__main__":
-        sys.exit(main())
-        
-except ImportError as e:
-    print(f"Ошибка импорта: {e}")
-    print("Убедитесь, что все необходимые файлы находятся в папке с программой:")
-    print("- gui.py")
-    print("- shared/helpers.py") 
-    print("- shared/data.py")
-    print("- generators/prompt_generator.py")
-    print("- core/cursor_manager.py")
-    input("Нажмите Enter для выхода...")
-    sys.exit(1)
-    
-except Exception as e:
-    print(f"Критическая ошибка: {e}")
-    input("Нажмите Enter для выхода...")
-    sys.exit(1) 
+
+if __name__ == "__main__":
+    sys.exit(main())

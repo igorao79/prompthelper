@@ -13,9 +13,9 @@ class PromptOptimizer:
         'about1': 90,
         'about2': 90, 
         'about3': 90,
-        'review1': 110,
-        'review2': 110,
-        'review3': 110,
+        'gallery1': 110,
+        'gallery2': 110,
+        'gallery3': 110,
         'favicon': 70
     }
     

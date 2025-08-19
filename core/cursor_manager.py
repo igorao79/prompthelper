@@ -10,8 +10,7 @@ import subprocess
 import time
 import platform
 from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, messagebox
+tk = None  # Tkinter больше не используется
 
 # Проверяем доступность pyautogui
 try:
@@ -21,9 +20,9 @@ except ImportError:
     PYAUTOGUI_AVAILABLE = False
     print("⚠️ pyautogui недоступен, автовставка промптов отключена")
 
-# Импорт для генерации изображений
+# Импорт для генерации изображений (Ideogram)
 try:
-    from generators.image_generator import ImageGenerator
+    from generators.ideogram_generator import IdeogramGenerator
     IMAGE_GENERATION_AVAILABLE = True
 except ImportError as e:
     IMAGE_GENERATION_AVAILABLE = False
@@ -480,68 +479,8 @@ class CursorManager:
         Returns:
             str: Путь к Cursor AI или None
         """
-        try:
-            # Создаем временное окно для диалога
-            root = tk.Tk()
-            root.withdraw()  # Скрываем основное окно
-            
-            result = messagebox.askyesno(
-                "Cursor AI не найден",
-                "Cursor AI не найден автоматически.\n\n"
-                "Хотите указать путь к Cursor вручную?\n\n"
-                "Нажмите 'Да' чтобы выбрать файл Cursor.exe\n"
-                "Нажмите 'Нет' чтобы продолжить без Cursor"
-            )
-            
-            if result:
-                # Адаптируем диалог под ОС
-                if self.os_type == 'windows':
-                    filetypes = [
-                        ("Cursor executable", "Cursor.exe"),
-                        ("Executable files", "*.exe"),
-                        ("Link files", "*.lnk"),
-                        ("All files", "*.*")
-                    ]
-                    initialdir = "C:\\Program Files"
-                elif self.os_type == 'linux':
-                    filetypes = [
-                        ("Cursor AppImage", "*.AppImage"),
-                        ("Cursor executable", "cursor"),
-                        ("All files", "*")
-                    ]
-                    initialdir = str(Path.home())
-                elif self.os_type == 'darwin':  # macOS
-                    filetypes = [
-                        ("Cursor app", "Cursor"),
-                        ("Application", "*.app"),
-                        ("All files", "*")
-                    ]
-                    initialdir = "/Applications"
-                else:
-                    filetypes = [("All files", "*")]
-                    initialdir = str(Path.home())
-                
-                file_path = filedialog.askopenfilename(
-                    title=f"Выберите Cursor ({self.os_type})",
-                    filetypes=filetypes,
-                    initialdir=initialdir
-                )
-                
-                if file_path and os.path.exists(file_path):
-                    if self._test_cursor_executable(file_path) or file_path.endswith('.lnk'):
-                        print(f"Пользователь выбрал Cursor: {file_path}")
-                        self.cached_cursor_path = file_path
-                        root.destroy()
-                        return file_path
-                    else:
-                        messagebox.showerror("Ошибка", "Выбранный файл не является рабочим Cursor")
-            
-            root.destroy()
-            return None
-            
-        except Exception as e:
-            print(f"Ошибка диалога выбора файла: {e}")
-            return None
+        # Tkinter диалоги удалены; возвращаем None без запроса
+        return None
     
     def open_cursor_with_project(self, project_path):
         """
@@ -840,17 +779,27 @@ class CursorManager:
                 if progress_callback:
                     progress_callback("🎨 Запуск генерации изображений...")
                 
-                # Создаем генератор в тихом режиме 
-                from generators.image_generator import ImageGenerator
-                # Всегда AI Pollinations, быстрый режим
-                # Восстановлено прежнее качество: высокий режим (enhance, выше разрешение)
-                image_generator = ImageGenerator(silent_mode=False, fast_mode=False, max_workers=2)
-                
-                # Генерируем изображения
-                results = image_generator.generate_thematic_set(
-                    theme_input=theme,
+                # Ideogram: промпт НЕ меняется — используем theme как есть
+                # Читаем выбранную модель из настроек, по умолчанию 2a-turbo
+                try:
+                    from shared.settings_manager import SettingsManager
+                    sm = SettingsManager()
+                    mdl = sm.settings.get("ideogram_model", "3.0 Turbo")
+                    mpo = sm.settings.get("ideogram_magic_prompt_option", "ON")
+                except Exception:
+                    mdl = "3.0 Turbo"
+                    mpo = "ON"
+                # Читаем API ключ
+                try:
+                    key = sm.get_ideogram_api_key()
+                except Exception:
+                    key = ""
+                ideogram = IdeogramGenerator(api_key=key, silent_mode=False, model=mdl, magic_prompt_option=mpo)
+                # Генерация 8 изображений: 2 запроса по 4 изображения
+                results = ideogram.generate_eight_images(
+                    prompt=theme,
                     media_dir=str(media_path),
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
                 )
                 
                 # Подсчитываем успешные генерации
@@ -859,7 +808,7 @@ class CursorManager:
                 if progress_callback:
                     progress_callback(f"✅ Генерация изображений завершена: {successful_count}/8")
                 
-                print(f"🎨 Сгенерировано {successful_count}/8 тематических изображений")
+                print(f"🎨 Сгенерировано {successful_count}/8 тематических изображений (Ideogram)")
                 
             except Exception as e:
                 error_msg = f"Ошибка генерации изображений: {str(e)}"
