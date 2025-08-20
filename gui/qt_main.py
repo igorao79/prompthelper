@@ -284,12 +284,16 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtCore.QMetaObject.invokeMethod(
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "✅ LandGen.exe сохранён на Рабочем столе")
 					)
-					QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
+					QtCore.QMetaObject.invokeMethod(
+						self, "_on_download_done", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(dest))
+					)
 				except Exception as e:
 					QtCore.QMetaObject.invokeMethod(
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "⚠️ Ошибка скачивания EXE")
 					)
-					QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {e}")
+					QtCore.QMetaObject.invokeMethod(
+						self, "_on_download_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
+					)
 			worker = QtCore.QThread(self)
 			worker.run = _bg_download  # type: ignore
 			self._bg_threads.append(worker)
@@ -298,6 +302,22 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		except Exception as e:
 			QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {e}")
 			self.status_label.setText("⚠️ Ошибка скачивания EXE")
+
+	@QtCore.Slot(str)
+	def _on_download_done(self, dest: str):
+		try:
+			QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
+			# Подсветим файл в проводнике, не блокирует UI
+			QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(Path(dest).parent)))
+		except Exception:
+			pass
+
+	@QtCore.Slot(str)
+	def _on_download_error(self, message: str):
+		try:
+			QtWidgets.QMessageBox.critical(self, "Скачивание", message)
+		except Exception:
+			pass
 
 	def _on_model_change(self, text: str):
 		try:
