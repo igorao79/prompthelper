@@ -204,8 +204,7 @@ class SettingsManager:
             from time import time
             entry = {"domain": domain.strip(), "prompt": prompt or "", "ts": int(time())}
             hist = self.settings.get("landing_history", [])
-            # удаляем дубликаты по домену
-            hist = [e for e in hist if e.get("domain") != entry["domain"]]
+            # сохраняем все записи, даже с одинаковым доменом (не теряем промпты)
             hist.insert(0, entry)
             self.settings["landing_history"] = hist[:10]
             self.save_settings()

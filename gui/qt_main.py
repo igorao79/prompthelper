@@ -748,6 +748,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, text)
 					)
 				# Генерация изображений возможна только при наличии API ключа
+				# В грид-режиме тоже генерируем изображения, если галочка не стоит и ключ задан
 				should_gen_images = (not params.get("no_images", False)) and bool(self.settings.get_ideogram_api_key())
 				# Папка проекта может отличаться от домена, если в сетке указаны дубли доменов
 				project_folder = params.get("folder_name", params["domain"])
@@ -877,8 +878,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt"])
 			lang_combo.setCurrentText(self.custom_lang_combo.currentText())
 			no_images_cb = QtWidgets.QCheckBox("Без изображений")
-			no_images_cb.setChecked(self.no_images_checkbox.isChecked() or not bool(self.settings.get_ideogram_api_key()))
-			if not self.settings.get_ideogram_api_key():
+			# По умолчанию в режиме сетки генерируем изображения, если есть API ключ
+			has_key = bool(self.settings.get_ideogram_api_key())
+			no_images_cb.setChecked(not has_key)
+			if not has_key:
 				no_images_cb.setEnabled(False)
 			bottom.addWidget(custom_lang_cb)
 			bottom.addWidget(lang_combo)
@@ -930,16 +933,18 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					if not ok:
 						self.status_label.setText(f"⚠️ Пропуск '{domain}': {err}")
 						continue
+					# Убираем звёздочку из названия страны (визуальный маркер избранного)
+					clean_country = country.replace('★', '').strip()
 					params = {
 						"save_path": save_path,
-						"country": country,
+						"country": clean_country,
 						"theme": theme,
 						"domain": fixed,
 						"folder_name": folder_name,
-						"city": self._pick_next_city(country),
+						"city": self._pick_next_city(clean_country),
 						"custom_prompt": getattr(self, "_custom_prompt", None),
 						"no_images": bool(no_images_cb.isChecked()),
-						"language": (lang_combo.currentText().strip() if custom_lang_cb.isChecked() else self._get_effective_language_code(country)),
+						"language": (lang_combo.currentText().strip() if custom_lang_cb.isChecked() else self._get_effective_language_code(clean_country)),
 						"id": self._job_seq,
 						"auto_paste": False,
 						"origin": "grid"
