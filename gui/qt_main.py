@@ -58,8 +58,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._load_initial_state()
 		self._init_city()
  
-		# Проверка обновлений при старте
-		self._check_updates_on_start()
+		# Отключено: не предлагать обновления при старте
 		# восстанавливаем кастомный промпт, если был сохранён ранее
 		try:
 			prev_prompt = self.settings.get_prompt()
@@ -741,6 +740,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		try:
 			dlg = QtWidgets.QDialog(self)
 			dlg.setWindowTitle("Режим генерации сетки (5)")
+			# Делаем окно немодальным, чтобы главное окно можно было перемещать
+			dlg.setWindowModality(QtCore.Qt.NonModal)
+			dlg.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
 			v = QtWidgets.QVBoxLayout(dlg)
 			# Выбор страны в диалоге
 			country_row = QtWidgets.QHBoxLayout()
@@ -832,7 +834,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				dlg.accept()
 
 			start_btn.clicked.connect(_start)
-			dlg.exec()
+			# Храним ссылку, чтобы диалог не был уничтожен сборщиком мусора
+			self._grid_dialog = dlg
+			dlg.show()
 		except Exception as e:
 			QtWidgets.QMessageBox.critical(self, "Режим сетки", f"Не удалось открыть окно: {e}")
 

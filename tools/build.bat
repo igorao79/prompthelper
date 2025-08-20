@@ -25,7 +25,7 @@ python -c "import sys;print(sys.version)" >nul 2>nul || (
 )
 
 echo Запуск сборщика...
-python "%SCRIPT_DIR%builder.py" --repo %REPO% --branch %BRANCH%
+python "%SCRIPT_DIR%builder.py" --repo %REPO% --branch %BRANCH% --mode remote
 if errorlevel 1 (
   echo Ошибка сборки.
   pause

@@ -66,7 +66,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default="https://github.com/igorao79/prompthelper")
     parser.add_argument("--branch", default="linux")
-    parser.add_argument("--mode", choices=["local", "remote"], default="local", help="local: собирать из текущей папки; remote: скачать ветку и собирать")
+    parser.add_argument("--mode", choices=["local", "remote"], default="remote", help="local: собирать из текущей папки; remote: скачать ветку и собирать")
     args = parser.parse_args()
 
     # Корень проекта от файла builder.py (../)
