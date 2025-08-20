@@ -80,7 +80,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		header.setSpacing(8)
 		self.edit_prompt_btn = QtWidgets.QPushButton("✏️ Настроить промпт")
 		self.reset_prompt_btn = QtWidgets.QPushButton("🔄 Сбросить")
-		self.update_btn = QtWidgets.QPushButton("⬇️ Скачать EXE")
+		self.update_btn = QtWidgets.QPushButton("⬇️ Обновить")
 		self.settings_btn = QtWidgets.QPushButton("⚙️ Настройки")
 		self.grid_btn = QtWidgets.QPushButton("🧩 Режим сетки")
 		self.create_btn = QtWidgets.QPushButton("🚀 СОЗДАТЬ ЛЕНДИНГ ✨")
@@ -252,11 +252,14 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			from pathlib import Path
 			import requests
 			self.status_label.setText("⬇️ Скачивание LandGen.exe...")
-			url = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
+			# Добавляем заголовки, чтобы избежать кешей, и cache-busting параметр
+			base = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
+			import time
+			url = f"{base}?t={int(time.time())}"
 			dest_dir = Path(str(get_desktop_path()))
 			dest_dir.mkdir(parents=True, exist_ok=True)
 			dest = dest_dir / "LandGen.exe"
-			r = requests.get(url, stream=True, timeout=60)
+			r = requests.get(url, stream=True, timeout=60, headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"LandGen-Client"})
 			if r.status_code != 200:
 				raise RuntimeError(f"HTTP {r.status_code}")
 			length = int(r.headers.get("Content-Length", "0") or 0)
