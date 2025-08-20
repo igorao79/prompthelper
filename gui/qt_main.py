@@ -80,7 +80,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		header.setSpacing(8)
 		self.edit_prompt_btn = QtWidgets.QPushButton("✏️ Настроить промпт")
 		self.reset_prompt_btn = QtWidgets.QPushButton("🔄 Сбросить")
-		self.update_btn = QtWidgets.QPushButton("⬇️ Обновления")
+		self.update_btn = QtWidgets.QPushButton("⬇️ Скачать EXE")
 		self.settings_btn = QtWidgets.QPushButton("⚙️ Настройки")
 		self.grid_btn = QtWidgets.QPushButton("🧩 Режим сетки")
 		self.create_btn = QtWidgets.QPushButton("🚀 СОЗДАТЬ ЛЕНДИНГ ✨")
@@ -239,12 +239,42 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.create_btn.clicked.connect(self._on_create)
 		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
-		self.update_btn.clicked.connect(self._manual_check_updates)
+		self.update_btn.clicked.connect(self._download_latest_program)
 		self.settings_btn.clicked.connect(self._open_settings_dialog)
 		self.grid_btn.clicked.connect(self._open_grid_dialog)
 
 		# Применяем ограничения по наличию API ключа
 		self._refresh_no_images_state()
+
+	def _download_latest_program(self):
+		"""Скачивает готовый LandGen.exe с релиза latest на Рабочий стол."""
+		try:
+			from pathlib import Path
+			import requests
+			self.status_label.setText("⬇️ Скачивание LandGen.exe...")
+			url = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
+			dest_dir = Path(str(get_desktop_path()))
+			dest_dir.mkdir(parents=True, exist_ok=True)
+			dest = dest_dir / "LandGen.exe"
+			r = requests.get(url, stream=True, timeout=60)
+			if r.status_code != 200:
+				raise RuntimeError(f"HTTP {r.status_code}")
+			length = int(r.headers.get("Content-Length", "0") or 0)
+			written = 0
+			with open(dest, "wb") as f:
+				for chunk in r.iter_content(chunk_size=1024 * 64):
+					if not chunk:
+						continue
+					f.write(chunk)
+					written += len(chunk)
+					if length:
+						pct = int(written * 100 / length)
+						self.status_label.setText(f"⬇️ Скачивание LandGen.exe... {pct}%")
+			self.status_label.setText("✅ LandGen.exe сохранён на Рабочем столе")
+			QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {e}")
+			self.status_label.setText("⚠️ Ошибка скачивания EXE")
 
 	def _on_model_change(self, text: str):
 		try:
@@ -282,13 +312,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 	def _download_and_apply_update(self, latest_sha: str, zip_url: str, binary_url: str | None = None):
 		try:
-			self.status_label.setText("⬇️ Загружаем обновление...")
+			self.status_label.setText("⬇️ Загружаем последнюю сборку...")
 			import requests, io, zipfile
-			if binary_url:
-				r = requests.get(binary_url, timeout=60)
-				r.raise_for_status()
-				with open("LandGen.exe", 'wb') as f:
-					f.write(r.content)
+			# Скачиваем готовый EXE с релиза latest, если есть
+			try:
+				binary = binary_url or f"https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
+				r = requests.get(binary, timeout=60)
+				if r.status_code == 200 and r.headers.get('content-type','').lower().find('application') >= 0:
+					with open("LandGen.exe", 'wb') as f:
+						f.write(r.content)
+					self.status_label.setText("✅ Скачан LandGen.exe в папку программы")
+					QtWidgets.QMessageBox.information(self, "Скачано", "Скачан LandGen.exe рядом с программой. Откройте папку и запустите.")
+					return
+			except Exception:
+				pass
 			else:
 				r = requests.get(zip_url, timeout=60)
 				r.raise_for_status()
@@ -304,7 +341,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						with zf.open(n) as src, open(out_path, 'wb') as dst:
 							dst.write(src.read())
 			self.settings.set_last_update_sha(latest_sha)
-			QtWidgets.QMessageBox.information(self, "Обновление", "Обновление установлено. Перезапустите приложение.")
+			QtWidgets.QMessageBox.information(self, "Обновление", "Файлы исходников обновлены. Для EXE используйте кнопку 'Скачать EXE'.")
 			self.status_label.setText("✅ Обновление установлено")
 		except Exception as e:
 			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось обновить: {e}")
@@ -315,15 +352,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			checker = UpdateChecker(self.settings)
 			info = checker.check()
 			if info.available:
-				res = QtWidgets.QMessageBox.question(
-					self,
-					"Обновление доступно",
-					"Доступна новая версия из ветки linux. Установить сейчас?",
-					QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-					QtWidgets.QMessageBox.Yes
-				)
-				if res == QtWidgets.QMessageBox.Yes:
-					self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
+				self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
 			else:
 				msg = "Обновлений нет" if not getattr(info, 'message', '') else f"Обновлений нет. {info.message}"
 				QtWidgets.QMessageBox.information(self, "Проверка обновлений", msg)
@@ -400,12 +429,17 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			"""
 			QWidget { background: #0b1220; color: #f8fafc; font-size: 14px; }
 			QLabel { color: #cbd5e1; }
-			QLineEdit, QComboBox { background: #0b1526; border: 0px; padding: 10px 12px; border-radius: 8px; color: #f8fafc; }
-			QPushButton { background: #475569; border: 0px; padding: 10px 16px; border-radius: 8px; color: #f8fafc; }
+			/* Инпуты более видимые: контрастная рамка и подсветка в фокусе (без box-shadow) */
+			QLineEdit, QComboBox, QPlainTextEdit { background: #0b1526; border: 2px solid #1e293b; padding: 10px 12px; border-radius: 10px; color: #f8fafc; }
+			QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus { border: 2px solid #2563eb; background: #0d1b2e; }
+			QPushButton { background: #475569; border: 0px; padding: 10px 16px; border-radius: 10px; color: #f8fafc; }
 			QPushButton:hover { background: #334155; }
 			QPushButton#PrimaryButton { background: #2563eb; }
 			QPushButton#PrimaryButton:hover { background: #1d4ed8; }
 			#StatusLabel { color: #10b981; padding: 8px 6px; }
+			/* Подписи к полям ярче */
+			QGroupBox { border: 1px solid #1e293b; border-radius: 10px; margin-top: 8px; }
+			QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; color: #e2e8f0; }
 			"""
 		)
 
@@ -746,13 +780,29 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			v = QtWidgets.QVBoxLayout(dlg)
 			# Выбор страны в диалоге
 			country_row = QtWidgets.QHBoxLayout()
-			country_row.addWidget(QtWidgets.QLabel("Страна:"))
+			label_country = QtWidgets.QLabel("Страна:")
+			label_country.setStyleSheet("color:#e2e8f0;font-weight:600;")
+			country_row.addWidget(label_country)
 			country_combo = QtWidgets.QComboBox()
-			country_combo.addItems(sorted(COUNTRIES_DATA.keys()))
-			# Текущее значение из основной формы — если есть
-			cur_country = self.country_combo.currentText().strip()
-			if cur_country:
-				idx = country_combo.findText(cur_country)
+			# Избранные страны приоритетно сверху
+			favs = self.settings.get_favorite_countries()
+			all_countries = list(COUNTRIES_DATA.keys())
+			favorites = [c for c in favs if c in all_countries]
+			others = [c for c in sorted(all_countries) if c not in favs]
+			country_combo.addItem("— выберите страну —")
+			if favorites:
+				country_combo.addItem("— Избранные —")
+				for c in favorites:
+					country_combo.addItem(f"★ {c}")
+				country_combo.insertSeparator(country_combo.count())
+			country_combo.addItem("— Все страны —")
+			for c in others:
+				country_combo.addItem(c)
+			# Стили для визуального отделения
+			country_combo.setStyleSheet("QComboBox{font-weight:600;} QAbstractItemView::item{padding:6px;} ")
+			# Не выбираем автоматически. Если ранее пользователь уже выбирал — восстановим
+			if hasattr(self, "_grid_last_country") and self._grid_last_country:
+				idx = country_combo.findText(self._grid_last_country)
 				if idx >= 0:
 					country_combo.setCurrentIndex(idx)
 			country_row.addWidget(country_combo, 1)
@@ -762,6 +812,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			left_box = QtWidgets.QGroupBox("Тематики (каждая с новой строки)")
 			left_v = QtWidgets.QVBoxLayout(left_box)
 			themes_text = QtWidgets.QPlainTextEdit()
+			# Длинные тематики визуально переносятся, но логически остаются одной строкой
+			themes_text.setWordWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
 			themes_text.setPlaceholderText("Автомойка\nПолировка и детейлинг авто\nАвтосервис и ремонт машин\nШиномонтаж\nЗамена масла")
 			left_v.addWidget(themes_text)
 			right_box = QtWidgets.QGroupBox("Домены (каждый с новой строки)")
@@ -800,11 +852,19 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				if not country:
 					QtWidgets.QMessageBox.warning(self, "Предупреждение", "Выберите страну")
 					return
+				# Сохраняем выбранную страну для следующих запусков диалога
+				self._grid_last_country = country
 				save_path = self.path_edit.text().strip()
 				# Разбираем списки
 				themes = [s.strip() for s in themes_text.toPlainText().splitlines() if s.strip()]
 				domains = [s.strip() for s in domains_text.toPlainText().splitlines() if s.strip()]
-				pairs = list(zip(themes, domains))
+				# Поддержка одной тематики на несколько доменов (и наоборот)
+				if len(themes) == 1 and len(domains) > 1:
+					pairs = [(themes[0], d) for d in domains]
+				elif len(domains) == 1 and len(themes) > 1:
+					pairs = [(t, domains[0]) for t in themes]
+				else:
+					pairs = list(zip(themes, domains))
 				if not pairs:
 					QtWidgets.QMessageBox.warning(self, "Режим сетки", "Заполните тематики и домены")
 					return
