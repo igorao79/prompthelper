@@ -3,7 +3,7 @@ from pathlib import Path
 
 from shared.settings_manager import SettingsManager, get_desktop_path
 from core.version import VERSION
-from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing
+from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing, sanitize_filename
 from shared.city_generator import CityGenerator
 from shared.data import COUNTRIES_DATA
 from core.cursor_manager import CursorManager
@@ -261,10 +261,35 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			self.status_label.setText("⬇️ Скачивание LandGen.exe...")
 			# Добавляем заголовки, чтобы избежать кешей, и cache-busting параметр
 			base = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
-			import time
+			import time, os
 			url = f"{base}?t={int(time.time())}"
-			dest_dir = Path(str(get_desktop_path()))
-			dest_dir.mkdir(parents=True, exist_ok=True)
+			# Пытаемся выбрать доступную папку: Desktop → Downloads → CWD → TEMP
+			def _candidate_dirs():
+				dirs = []
+				try:
+					dirs.append(Path(str(get_desktop_path())))
+				except Exception:
+					pass
+				dirs.extend([
+					Path.home() / "Downloads",
+					Path.home() / "Загрузки",
+					Path.cwd(),
+					Path(os.environ.get("TEMP", os.environ.get("TMP", str(Path.home()))))
+				])
+				return dirs
+			def _first_writable_dir():
+				for d in _candidate_dirs():
+					try:
+						d.mkdir(parents=True, exist_ok=True)
+						probe = d / ".__lg_probe.tmp"
+						with open(probe, "wb") as f:
+							f.write(b"ok")
+						probe.unlink(missing_ok=True)
+						return d
+					except Exception:
+						continue
+				return Path.cwd()
+			dest_dir = _first_writable_dir()
 			dest = dest_dir / "LandGen.exe"
 			def _bg_download():
 				try:
@@ -757,8 +782,15 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Генерация изображений возможна только при наличии API ключа
 				# В грид-режиме тоже генерируем изображения, если галочка не стоит и ключ задан
 				should_gen_images = (not params.get("no_images", False)) and bool(self.settings.get_ideogram_api_key())
-				# Папка проекта может отличаться от домена, если в сетке указаны дубли доменов
-				project_folder = params.get("folder_name", params["domain"])
+				# Уникализируем папку проекта: домен + тематика (санация) + порядковый id
+				base_folder = params.get("folder_name") or params["domain"]
+				try:
+					folder_suffix = sanitize_filename(params.get("theme", ""))
+					if folder_suffix:
+						base_folder = f"{base_folder}_{folder_suffix}"
+				except Exception:
+					pass
+				project_folder = f"{base_folder}_{params['id']}"
 				project_path, media_path = self.cursor_manager.create_project_structure(
 					project_folder, params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images, cancel_check=(lambda: bool(cancel.is_set())) if cancel else None
 				)
