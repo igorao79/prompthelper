@@ -84,6 +84,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.update_btn = QtWidgets.QPushButton("⬇️ Обновить")
 		self.settings_btn = QtWidgets.QPushButton("⚙️ Настройки")
 		self.grid_btn = QtWidgets.QPushButton("🧩 Режим сетки")
+		self.stop_btn = QtWidgets.QPushButton("⏹️ Остановить")
 		self.create_btn = QtWidgets.QPushButton("🚀 СОЗДАТЬ ЛЕНДИНГ ✨")
 		self.create_btn.setObjectName("PrimaryButton")
 		header.addWidget(self.edit_prompt_btn)
@@ -91,6 +92,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		header.addWidget(self.update_btn)
 		header.addWidget(self.settings_btn)
 		header.addWidget(self.grid_btn)
+		header.addWidget(self.stop_btn)
 		self.version_label = QtWidgets.QLabel(f"Версия: {VERSION}")
 		self.version_label.setStyleSheet("color:#94a3b8;font-size:12px;")
 		header.addStretch(1)
@@ -246,6 +248,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.update_btn.clicked.connect(self._download_latest_program)
 		self.settings_btn.clicked.connect(self._open_settings_dialog)
 		self.grid_btn.clicked.connect(self._open_grid_dialog)
+		self.stop_btn.clicked.connect(self._stop_all)
 
 		# Применяем ограничения по наличию API ключа
 		self._refresh_no_images_state()
@@ -693,6 +696,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._start_build_task()
 
 	def _enqueue_build(self):
+		import threading
+		cancel_event = threading.Event()
 		params = {
 			"save_path": self.path_edit.text(),
 			"country": self.country,
@@ -704,6 +709,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			"language": self._get_effective_language_code(self.country) if self.country else get_language_by_country(self.country),
 			"id": self._job_seq,
 			"auto_paste": bool(self.settings.get_auto_paste_prompt()),
+			"cancel_event": cancel_event,
 		}
 		self._job_seq += 1
 		self._build_queue.append(params)
@@ -740,6 +746,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 		def task():
 			try:
+				cancel = params.get("cancel_event")
 				zip_path = ensure_empty_zip_for_landing(params["save_path"], params["country"], params["theme"])
 				if zip_path:
 					print(f"ZIP создан: {zip_path}")
@@ -753,8 +760,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Папка проекта может отличаться от домена, если в сетке указаны дубли доменов
 				project_folder = params.get("folder_name", params["domain"])
 				project_path, media_path = self.cursor_manager.create_project_structure(
-					project_folder, params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images
+					project_folder, params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images, cancel_check=(lambda: bool(cancel.is_set())) if cancel else None
 				)
+				if cancel and cancel.is_set():
+					return
 				# Виджет пути перегенерации был удалён; больше не обновляем
 				language = params.get("language") or get_language_by_country(params["country"]) 
 				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"])
@@ -799,6 +808,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._update_queue_label()
 		if self._build_queue:
 			self._start_build_task()
+
+	def _stop_all(self):
+		try:
+			# Ставим флаг отмены всем текущим и ожидающим задачам
+			for p in self._active_jobs + self._build_queue:
+				ce = p.get("cancel_event")
+				if ce:
+					try:
+						ce.set()
+					except Exception:
+						pass
+			self.status_label.setText("⏹️ Очередь помечена на остановку")
+		except Exception:
+			pass
 
 	def _refresh_queue_ui(self):
 		items = []

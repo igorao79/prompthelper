@@ -745,7 +745,7 @@ class CursorManager:
         else:
             print("Автовставка промптов отключена из-за отсутствия pyautogui")
     
-    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False):
+    def create_project_structure(self, domain, desktop_path=None, theme=None, progress_callback=None, generate_images=False, cancel_check=None):
         """
         Создает структуру папок проекта и генерирует тематические изображения
         
@@ -796,6 +796,9 @@ class CursorManager:
                     key = ""
                 ideogram = IdeogramGenerator(api_key=key, silent_mode=False, model=mdl, magic_prompt_option=mpo)
                 # Генерация 8 изображений: 2 запроса по 4 изображения
+                # отмена между батчами
+                if cancel_check and cancel_check():
+                    return project_path, media_path
                 results = ideogram.generate_eight_images(
                     prompt=theme,
                     media_dir=str(media_path),
