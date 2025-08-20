@@ -709,8 +709,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					)
 				# Генерация изображений возможна только при наличии API ключа
 				should_gen_images = (not params.get("no_images", False)) and bool(self.settings.get_ideogram_api_key())
+				# Папка проекта может отличаться от домена, если в сетке указаны дубли доменов
+				project_folder = params.get("folder_name", params["domain"])
 				project_path, media_path = self.cursor_manager.create_project_structure(
-					params["domain"], params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images
+					project_folder, params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images
 				)
 				# Виджет пути перегенерации был удалён; больше не обновляем
 				language = params.get("language") or get_language_by_country(params["country"]) 
@@ -862,16 +864,28 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				themes = [s.strip() for s in themes_text.toPlainText().splitlines() if s.strip()]
 				domains = [s.strip() for s in domains_text.toPlainText().splitlines() if s.strip()]
 				# Поддержка одной тематики на несколько доменов (и наоборот)
+				pairs = []
 				if len(themes) == 1 and len(domains) > 1:
-					pairs = [(themes[0], d) for d in domains]
+					base_theme = themes[0]
+					# Если домены совпадают (дубликаты) — создаём разные папки с индексами
+					counts = {}
+					for d in domains:
+						key = d
+						counts[key] = counts.get(key, 0) + 1
+						folder = d if counts[key] == 1 else f"{d}_{counts[key]}"
+						pairs.append((base_theme, d, folder))
 				elif len(domains) == 1 and len(themes) > 1:
-					pairs = [(t, domains[0]) for t in themes]
+					base_domain = domains[0]
+					for idx, t in enumerate(themes, start=1):
+						folder = f"{base_domain}_{idx}"
+						pairs.append((t, base_domain, folder))
 				else:
-					pairs = list(zip(themes, domains))
+					for t, d in zip(themes, domains):
+						pairs.append((t, d, d))
 				if not pairs:
 					QtWidgets.QMessageBox.warning(self, "Режим сетки", "Заполните тематики и домены")
 					return
-				for theme, domain in pairs:
+				for theme, domain, folder_name in pairs:
 					ok, err, fixed = validate_domain(domain)
 					if not ok:
 						self.status_label.setText(f"⚠️ Пропуск '{domain}': {err}")
@@ -881,6 +895,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						"country": country,
 						"theme": theme,
 						"domain": fixed,
+						"folder_name": folder_name,
 						"city": self._pick_next_city(country),
 						"custom_prompt": getattr(self, "_custom_prompt", None),
 						"no_images": bool(no_images_cb.isChecked()),
