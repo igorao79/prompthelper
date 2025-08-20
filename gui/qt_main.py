@@ -2,6 +2,7 @@ from PySide6 import QtWidgets, QtGui, QtCore
 from pathlib import Path
 
 from shared.settings_manager import SettingsManager, get_desktop_path
+from core.version import VERSION
 from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing
 from shared.city_generator import CityGenerator
 from shared.data import COUNTRIES_DATA
@@ -90,7 +91,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		header.addWidget(self.update_btn)
 		header.addWidget(self.settings_btn)
 		header.addWidget(self.grid_btn)
+		self.version_label = QtWidgets.QLabel(f"Версия: {VERSION}")
+		self.version_label.setStyleSheet("color:#94a3b8;font-size:12px;")
 		header.addStretch(1)
+		header.addWidget(self.version_label)
 		header.addWidget(self.create_btn)
 		main.addLayout(header)
 
@@ -259,22 +263,38 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			dest_dir = Path(str(get_desktop_path()))
 			dest_dir.mkdir(parents=True, exist_ok=True)
 			dest = dest_dir / "LandGen.exe"
-			r = requests.get(url, stream=True, timeout=60, headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"LandGen-Client"})
-			if r.status_code != 200:
-				raise RuntimeError(f"HTTP {r.status_code}")
-			length = int(r.headers.get("Content-Length", "0") or 0)
-			written = 0
-			with open(dest, "wb") as f:
-				for chunk in r.iter_content(chunk_size=1024 * 64):
-					if not chunk:
-						continue
-					f.write(chunk)
-					written += len(chunk)
-					if length:
-						pct = int(written * 100 / length)
-						self.status_label.setText(f"⬇️ Скачивание LandGen.exe... {pct}%")
-			self.status_label.setText("✅ LandGen.exe сохранён на Рабочем столе")
-			QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
+			def _bg_download():
+				try:
+					r = requests.get(url, stream=True, timeout=60, headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"LandGen-Client"})
+					if r.status_code != 200:
+						raise RuntimeError(f"HTTP {r.status_code}")
+					length = int(r.headers.get("Content-Length", "0") or 0)
+					written = 0
+					with open(dest, "wb") as f:
+						for chunk in r.iter_content(chunk_size=1024 * 64):
+							if not chunk:
+								continue
+							f.write(chunk)
+							written += len(chunk)
+							if length:
+								pct = int(written * 100 / length)
+								QtCore.QMetaObject.invokeMethod(
+									self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ Скачивание LandGen.exe... {pct}%")
+								)
+					QtCore.QMetaObject.invokeMethod(
+						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "✅ LandGen.exe сохранён на Рабочем столе")
+					)
+					QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
+				except Exception as e:
+					QtCore.QMetaObject.invokeMethod(
+						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "⚠️ Ошибка скачивания EXE")
+					)
+					QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {e}")
+			worker = QtCore.QThread(self)
+			worker.run = _bg_download  # type: ignore
+			self._bg_threads.append(worker)
+			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
+			worker.start()
 		except Exception as e:
 			QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {e}")
 			self.status_label.setText("⚠️ Ошибка скачивания EXE")
