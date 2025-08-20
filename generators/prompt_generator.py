@@ -1832,6 +1832,11 @@ Each site is built in a new, isolated project, with no memory of previous work. 
 - Website topic: {theme}  
 - Image folder: media  
 
+IMPORTANT – FILESYSTEM RULES (STRICT):
+- Use the CURRENT working directory as the project root. Do NOT create any extra top‑level folder (including a folder named after the domain). Put all files directly into the current folder.
+- Create the image directory only as "./media" inside the current folder.
+- Never nest the project into an additional subfolder. If your scaffolder suggests creating a parent folder — do not do it; save files right here.
+
 ---
 
 ## 📄 Requirements:
