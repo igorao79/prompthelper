@@ -4,7 +4,7 @@ from pathlib import Path
 
 from shared.settings_manager import SettingsManager, get_desktop_path
 from core.version import VERSION
-from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing, sanitize_filename
+from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing, sanitize_filename, get_country_short_code
 from shared.city_generator import CityGenerator
 from shared.data import COUNTRIES_DATA
 from core.cursor_manager import CursorManager
@@ -348,7 +348,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "⚠️ Ошибка скачивания EXE")
 					)
 					QtCore.QMetaObject.invokeMethod(
-						self, "_on_download_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
+						self, "_on_download_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, self._mask_urls(str(e)))
 					)
 			worker = QtCore.QThread(self)
 			worker.run = _bg_download  # type: ignore
@@ -356,7 +356,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
 			worker.start()
 		except Exception as e:
-			QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {e}")
+			QtWidgets.QMessageBox.critical(self, "Скачивание", "Не удалось скачать EXE. Проверьте интернет или повторите позже.")
 			self.status_label.setText("⚠️ Ошибка скачивания EXE")
 
 	@QtCore.Slot(str)
@@ -374,9 +374,17 @@ class QtMainWindow(QtWidgets.QMainWindow):
 	@QtCore.Slot(str)
 	def _on_download_error(self, message: str):
 		try:
-			QtWidgets.QMessageBox.critical(self, "Скачивание", message)
+			QtWidgets.QMessageBox.critical(self, "Скачивание", self._mask_urls(message))
 		except Exception:
 			pass
+
+	def _mask_urls(self, text: str) -> str:
+		"""Скрывает явные URL в сообщениях об ошибках (для приватности ссылок)."""
+		try:
+			import re
+			return re.sub(r"https?://[^\s]+", "<hidden>", text or "")
+		except Exception:
+			return text or ""
 
 	def _on_model_change(self, text: str):
 		try:
@@ -488,7 +496,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
 			worker.start()
 		except Exception as e:
-			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось запустить обновление: {e}")
+			QtWidgets.QMessageBox.critical(self, "Обновление", "Не удалось запустить обновление. Попробуйте позже.")
 			self.status_label.setText("⚠️ Ошибка обновления")
 
 	@QtCore.Slot()
@@ -1090,12 +1098,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				try:
 					from datetime import datetime
 					clean_country = country.replace('★', '').strip()
+					country_abbr = get_country_short_code(clean_country)
 					unique_themes = list({t for t, _ in raw_pairs})
 					folder_theme = unique_themes[0] if len(unique_themes) == 1 else "grid"
-					parent_name = f"{sanitize_filename(clean_country)}_{sanitize_filename(folder_theme)}_{datetime.now().strftime('%d.%m.%Y')}"
+					parent_name = f"{sanitize_filename(country_abbr)}_{sanitize_filename(folder_theme)}_{datetime.now().strftime('%d.%m.%Y')}"
 					batch_dir = Path(outer_save_path) / parent_name
 					batch_dir.mkdir(parents=True, exist_ok=True)
-					# Пустая .zip с тем же именем внутри партии
+					# Пустая .zip с тем же именем внутри партии (только одна, без дублей)
 					try:
 						import zipfile
 						zip_path = batch_dir / f"{parent_name}.zip"
