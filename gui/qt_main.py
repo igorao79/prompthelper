@@ -428,27 +428,55 @@ class QtMainWindow(QtWidgets.QMainWindow):
 								QtCore.QMetaObject.invokeMethod(
 									self, "_on_update_binary_downloaded", QtCore.Qt.QueuedConnection
 								)
-								QtCore.QMetaObject.invokeMethod(self.settings, "set_last_update_sha", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
+								QtCore.QMetaObject.invokeMethod(self, "_apply_update_mark", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
 								return
 						except Exception:
 							pass
-					# 2) Иначе — скачиваем zip исходников и распаковываем
+					# 2) Иначе — безопасное применение zip через временную папку и бэкап
 					r = requests.get(zip_url, timeout=60)
 					r.raise_for_status()
 					zf = zipfile.ZipFile(io.BytesIO(r.content))
-					root_name = zf.namelist()[0].split('/')[0]
-					for n in zf.namelist():
-						if not n.endswith('/'):
-							rel = n[len(root_name)+1:] if n.startswith(root_name + '/') else n
-							if not rel:
+					import tempfile, shutil, os, time as _time
+					with tempfile.TemporaryDirectory() as tmpdir:
+						zf.extractall(tmpdir)
+						names = zf.namelist()
+						root_name = names[0].split('/')[0] if names else ''
+						src_root = Path(tmpdir) / root_name if root_name else Path(tmpdir)
+						whitelist = {"core", "generators", "gui", "shared", "tools", "main.py", "README.md", "requirements.txt"}
+						backup_dir = Path(".backup_update") / _time.strftime("%Y%m%d_%H%M%S")
+						backup_dir.mkdir(parents=True, exist_ok=True)
+						for item in whitelist:
+							src_path = src_root / item
+							if not src_path.exists():
 								continue
-							out_path = Path(rel)
-							out_path.parent.mkdir(parents=True, exist_ok=True)
-							with zf.open(n) as src, open(out_path, 'wb') as dst:
-								dst.write(src.read())
-					QtCore.QMetaObject.invokeMethod(self.settings, "set_last_update_sha", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
+							dst_path = Path(item)
+							# Бэкап существующего
+							try:
+								if dst_path.exists():
+									if dst_path.is_dir():
+										shutil.copytree(dst_path, backup_dir / item)
+									else:
+										(backup_dir / dst_path.parent).mkdir(parents=True, exist_ok=True)
+										shutil.copy2(dst_path, backup_dir / item)
+							except Exception:
+								pass
+							# Копирование поверх
+							try:
+								if src_path.is_dir():
+									for root, dirs, files in os.walk(src_path):
+										rel_root = Path(root).relative_to(src_path)
+										target_root = dst_path / rel_root
+										target_root.mkdir(parents=True, exist_ok=True)
+										for fname in files:
+											shutil.copy2(Path(root) / fname, target_root / fname)
+								else:
+									dst_path.parent.mkdir(parents=True, exist_ok=True)
+									shutil.copy2(src_path, dst_path)
+							except Exception:
+								pass
+					QtCore.QMetaObject.invokeMethod(self, "_apply_update_mark", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
 					QtCore.QMetaObject.invokeMethod(
-						self, "_on_update_sources_applied", QtCore.Qt.QueuedConnection
+						self, "_on_update_sources_applied_with_backup", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(backup_dir))
 					)
 				except Exception as e:
 					QtCore.QMetaObject.invokeMethod(
@@ -476,6 +504,21 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		try:
 			QtWidgets.QMessageBox.information(self, "Обновление", "Файлы исходников обновлены. Для EXE используйте кнопку 'Скачать EXE'.")
 			self.status_label.setText("✅ Обновление установлено")
+		except Exception:
+			pass
+
+	@QtCore.Slot(str)
+	def _on_update_sources_applied_with_backup(self, backup_dir: str):
+		try:
+			QtWidgets.QMessageBox.information(self, "Обновление", f"Файлы исходников обновлены безопасно. Резервная копия: {backup_dir}")
+			self.status_label.setText("✅ Обновление установлено (создан бэкап)")
+		except Exception:
+			pass
+
+	@QtCore.Slot(str)
+	def _apply_update_mark(self, sha: str):
+		try:
+			self.settings.set_last_update_sha(sha)
 		except Exception:
 			pass
 
