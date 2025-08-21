@@ -1835,6 +1835,9 @@ Each site is built in a new, isolated project, with no memory of previous work. 
 IMPORTANT – FILESYSTEM RULES (STRICT):
 - Use the CURRENT working directory as the project root. Do NOT create any extra top‑level folder (including a folder named after the domain). Put all files directly into the current folder.
 - Create the image directory only as "./media" inside the current folder.
+- Do NOT create or modify anything inside "./media". The folder already exists and must be used as‑is.
+- Never generate or save new images/icons/SVGs. Do not create files with extensions: .svg, .png, .jpg, .jpeg, .webp, .gif, .ico, .avif (or any other image/binary assets).
+- Do not inline SVG markup or base64‑encoded images into HTML/CSS/JS. Only reference already existing files.
 - Never nest the project into an additional subfolder. If your scaffolder suggests creating a parent folder — do not do it; save files right here.
 
 ---
@@ -1863,6 +1866,8 @@ IMPORTANT – FILESYSTEM RULES (STRICT):
 - **Use images from the folder specified in the \"Image folder\" parameter**:
   - Example: `./media/file.jpg`  
   - No other image directories allowed.
+  - Do NOT create or modify files in `./media`. The folder is provided and must remain unchanged.
+  - Do NOT generate or embed SVGs (including inline `<svg>`), nor any new bitmap assets; reference existing files only.
 
 ### 4. Order Form (Required):
 - On the home page, include a complete order form with:
@@ -1921,7 +1926,7 @@ IMPORTANT – FILESYSTEM RULES (STRICT):
 ### 9. Realism:
 - All links, buttons, and sections must function correctly
 - Populate contact details, social media links, and addresses with plausible but random data — never leave them empty
-- Avoid placeholders or filler text like \"company name,\" \"lorem ipsum,\" or \"sample text\"
+- Avoid placeholders or filler text like "company name," "lorem ipsum," or "sample text"
 
 ### 10. SEO & Metadata:
 - Add the following (all in the specified language and relevant to the topic):
@@ -1935,7 +1940,6 @@ IMPORTANT – FILESYSTEM RULES (STRICT):
   - Use a mix of formatting styles (some compact, some spaced out, some commented)
   - Mix techniques: inline styles in one section, CSS classes in another
 - Obfuscate the code structure slightly so it doesn't look like a generic boilerplate
-- Occasionally use rare but valid HTML/CSS constructs to mimic individual coding habits
 
 ### 12. External Links & Embeds (Randomized):
 - Add 1–3 external links or embedded elements, like a real website would:

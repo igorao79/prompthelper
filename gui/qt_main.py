@@ -35,6 +35,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._active_jobs = []  # running params
 		self._job_seq = 1
 		self._last_city_by_country = {}
+		self._pending_update_sha = None
 		# Сопоставление кодов языков для человеко-читаемого отображения
 		self._language_code_to_display = {
 			"en": "английский",
@@ -364,6 +365,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
 			# Подсветим файл в проводнике, не блокирует UI
 			QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(Path(dest).parent)))
+			if getattr(self, "_pending_update_sha", None):
+				self.settings.set_last_update_sha(self._pending_update_sha)
+				self._pending_update_sha = None
 		except Exception:
 			pass
 
@@ -404,7 +408,17 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtWidgets.QMessageBox.Yes
 				)
 				if res == QtWidgets.QMessageBox.Yes:
-					self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
+					if platform.system().lower() == 'windows':
+						self._start_windows_exe_download_for_update(info.latest_sha)
+					else:
+						self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
+		except Exception:
+			pass
+
+	def _start_windows_exe_download_for_update(self, latest_sha: str):
+		try:
+			self._pending_update_sha = latest_sha
+			self._download_latest_program()
 		except Exception:
 			pass
 
@@ -414,24 +428,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			import requests, io, zipfile
 			def _bg_update():
 				try:
-					# 1) Windows: пробуем бинарник
+					# 1) Windows: переключаемся на скачивание EXE через существующий механизм
 					if platform.system().lower() == 'windows':
-						try:
-							binary = binary_url or f"https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
-							r = requests.get(binary, timeout=60)
-							if r.status_code == 200 and r.headers.get('content-type','').lower().find('application') >= 0:
-								with open("LandGen.exe", 'wb') as f:
-									f.write(r.content)
-								QtCore.QMetaObject.invokeMethod(
-									self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "✅ Скачан LandGen.exe в папку программы")
-								)
-								QtCore.QMetaObject.invokeMethod(
-									self, "_on_update_binary_downloaded", QtCore.Qt.QueuedConnection
-								)
-								QtCore.QMetaObject.invokeMethod(self, "_apply_update_mark", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
-								return
-						except Exception:
-							pass
+						QtCore.QMetaObject.invokeMethod(self, "_start_windows_exe_download_for_update", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
+						return
 					# 2) Иначе — безопасное применение zip через временную папку и бэкап
 					r = requests.get(zip_url, timeout=60)
 					r.raise_for_status()
@@ -1068,7 +1068,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					return
 				# Сохраняем выбранную страну для следующих запусков диалога
 				self._grid_last_country = country
-				save_path = self.path_edit.text().strip()
+				outer_save_path = self.path_edit.text().strip()
 				# Разбираем списки
 				themes = [s.strip() for s in themes_text.toPlainText().splitlines() if s.strip()]
 				domains = [s.strip() for s in domains_text.toPlainText().splitlines() if s.strip()]
@@ -1085,6 +1085,27 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						raw_pairs.append((t, d))
 				if not raw_pairs:
 					QtWidgets.QMessageBox.warning(self, "Режим сетки", "Заполните тематики и домены")
+					return
+				# Создаём родительскую папку партии, чтобы не засорять корень сохранения
+				try:
+					from datetime import datetime
+					clean_country = country.replace('★', '').strip()
+					unique_themes = list({t for t, _ in raw_pairs})
+					folder_theme = unique_themes[0] if len(unique_themes) == 1 else "grid"
+					parent_name = f"{sanitize_filename(clean_country)}_{sanitize_filename(folder_theme)}_{datetime.now().strftime('%d.%m.%Y')}"
+					batch_dir = Path(outer_save_path) / parent_name
+					batch_dir.mkdir(parents=True, exist_ok=True)
+					# Пустая .zip с тем же именем внутри партии
+					try:
+						import zipfile
+						zip_path = batch_dir / f"{parent_name}.zip"
+						if not zip_path.exists():
+							with zipfile.ZipFile(zip_path, mode='w', compression=zipfile.ZIP_DEFLATED):
+								pass
+					except Exception:
+						pass
+				except Exception as _e:
+					QtWidgets.QMessageBox.warning(self, "Режим сетки", f"Не удалось подготовить папку партии: {_e}")
 					return
 				# Валидируем домены и считаем повторы
 				validated = []  # (theme, fixed_domain)
@@ -1112,7 +1133,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						folder_name = fixed_domain
 						needs_index = False  # уникальный домен → индекс не нужен
 					params = {
-						"save_path": save_path,
+						"save_path": str(batch_dir),
 						"country": clean_country,
 						"theme": theme,
 						"domain": fixed_domain,
