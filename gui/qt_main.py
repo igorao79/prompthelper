@@ -801,7 +801,11 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Имя папки формируется заранее при постановке задачи в очередь (folder_name),
 				# здесь просто добавляем порядковый id для уникальности
 				base_folder = params.get("folder_name") or params["domain"]
-				project_folder = f"{base_folder}_{params['id']}"
+				# Индекс добавляем только при необходимости (при коллизиях/дубликатах)
+				if params.get("needs_index"):
+					project_folder = f"{base_folder}_{params['id']}"
+				else:
+					project_folder = base_folder
 				project_path, media_path = self.cursor_manager.create_project_structure(
 					project_folder, params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images, cancel_check=(lambda: bool(cancel.is_set())) if cancel else None
 				)
@@ -1000,13 +1004,17 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtWidgets.QMessageBox.warning(self, "Режим сетки", "После валидации доменов задач не осталось")
 					return
 				# Создаём задачи: добавляем тематику к имени папки только если домен повторяется
+				# и включаем индексацию только если есть потенциальные коллизии имён
+				needs_index_global = any(cnt >= 2 for cnt in domain_counts.values())
 				for theme, fixed_domain in validated:
 					# Убираем звёздочку из названия страны (визуальный маркер избранного)
 					clean_country = country.replace('★', '').strip()
 					if domain_counts.get(fixed_domain, 0) >= 2:
 						folder_name = f"{fixed_domain}_{sanitize_filename(theme)}"
+						needs_index = True  # несколько задач на одну базу → возможны коллизии
 					else:
 						folder_name = fixed_domain
+						needs_index = False  # уникальный домен → индекс не нужен
 					params = {
 						"save_path": save_path,
 						"country": clean_country,
@@ -1019,7 +1027,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						"language": (lang_combo.currentText().strip() if custom_lang_cb.isChecked() else self._get_effective_language_code(clean_country)),
 						"id": self._job_seq,
 						"auto_paste": False,
-						"origin": "grid"
+						"origin": "grid",
+						"needs_index": needs_index
 					}
 					self._job_seq += 1
 					self._build_queue.append(params)
