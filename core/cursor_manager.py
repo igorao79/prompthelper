@@ -583,11 +583,14 @@ class CursorManager:
             project_full_path = str(project_path)
             
             if self.os_type == 'windows':
-                # Для Windows используем tasklist
+                # Для Windows используем tasklist, но без появления консольных окон
                 try:
+                    si = subprocess.STARTUPINFO()
+                    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    creationflags = 0x08000000  # CREATE_NO_WINDOW
                     result = subprocess.run(['tasklist', '/FO', 'CSV'], 
                                           capture_output=True, text=True, timeout=5,
-                                          encoding='utf-8', errors='ignore')
+                                          encoding='utf-8', errors='ignore', startupinfo=si, creationflags=creationflags)
                     if result.returncode == 0:
                         lines = result.stdout.split('\n')
                         for line in lines:
@@ -597,7 +600,7 @@ class CursorManager:
                                     wmic_result = subprocess.run(['wmic', 'process', 'where', 
                                                                 f'name="Cursor.exe"', 'get', 'CommandLine'], 
                                                                capture_output=True, text=True, timeout=3,
-                                                               encoding='utf-8', errors='ignore')
+                                                               encoding='utf-8', errors='ignore', startupinfo=si, creationflags=creationflags)
                                     if project_name in wmic_result.stdout or project_full_path in wmic_result.stdout:
                                         print(f"Найден запущенный Cursor с проектом: {project_name}")
                                         return True
@@ -719,7 +722,10 @@ class CursorManager:
         # 4) Windows: clip
         try:
             if platform.system().lower() == 'windows':
-                p = subprocess.Popen(['clip'], stdin=subprocess.PIPE, close_fds=True)
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                creationflags = 0x08000000  # CREATE_NO_WINDOW
+                p = subprocess.Popen(['clip'], stdin=subprocess.PIPE, close_fds=True, startupinfo=si, creationflags=creationflags)
                 if p.stdin:
                     p.stdin.write(text.encode('utf-8'))
                     p.stdin.close()
