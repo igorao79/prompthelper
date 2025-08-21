@@ -301,9 +301,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 							f.write(b"ok")
 						probe.unlink(missing_ok=True)
 						return d
+					except PermissionError:
+						continue
 					except Exception:
 						continue
-				return Path.cwd()
+				# Фоллбек на системный TEMP
+				import tempfile
+				return Path(tempfile.gettempdir())
 			dest_dir = _first_writable_dir()
 			dest = dest_dir / "LandGen.exe"
 			def _bg_download():
@@ -330,6 +334,14 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtCore.QMetaObject.invokeMethod(
 						self, "_on_download_done", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(dest))
 					)
+				except PermissionError as e:
+					QtCore.QMetaObject.invokeMethod(
+						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "⚠️ Ошибка скачивания EXE: права доступа")
+					)
+					QtCore.QMetaObject.invokeMethod(
+						self, "_on_download_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"Нет доступа для записи: {e}. Попробуйте выбрать другую папку или запустить от администратора.")
+					)
+					return
 				except Exception as e:
 					QtCore.QMetaObject.invokeMethod(
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "⚠️ Ошибка скачивания EXE")
@@ -400,39 +412,80 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		try:
 			self.status_label.setText("⬇️ Загружаем последнюю сборку...")
 			import requests, io, zipfile
-			# Для Windows пробуем скачать готовый EXE с релиза latest, если есть
-			if platform.system().lower() == 'windows':
+			def _bg_update():
 				try:
-					binary = binary_url or f"https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
-					r = requests.get(binary, timeout=60)
-					if r.status_code == 200 and r.headers.get('content-type','').lower().find('application') >= 0:
-						with open("LandGen.exe", 'wb') as f:
-							f.write(r.content)
-						self.status_label.setText("✅ Скачан LandGen.exe в папку программы")
-						QtWidgets.QMessageBox.information(self, "Скачано", "Скачан LandGen.exe рядом с программой. Откройте папку и запустите.")
-						return
-				except Exception:
-					pass
-			else:
-				r = requests.get(zip_url, timeout=60)
-				r.raise_for_status()
-				zf = zipfile.ZipFile(io.BytesIO(r.content))
-				root_name = zf.namelist()[0].split('/')[0]
-				for n in zf.namelist():
-					if not n.endswith('/'):
-						rel = n[len(root_name)+1:] if n.startswith(root_name + '/') else n
-						if not rel:
-							continue
-						out_path = Path(rel)
-						out_path.parent.mkdir(parents=True, exist_ok=True)
-						with zf.open(n) as src, open(out_path, 'wb') as dst:
-							dst.write(src.read())
-			self.settings.set_last_update_sha(latest_sha)
+					# 1) Windows: пробуем бинарник
+					if platform.system().lower() == 'windows':
+						try:
+							binary = binary_url or f"https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
+							r = requests.get(binary, timeout=60)
+							if r.status_code == 200 and r.headers.get('content-type','').lower().find('application') >= 0:
+								with open("LandGen.exe", 'wb') as f:
+									f.write(r.content)
+								QtCore.QMetaObject.invokeMethod(
+									self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "✅ Скачан LandGen.exe в папку программы")
+								)
+								QtCore.QMetaObject.invokeMethod(
+									self, "_on_update_binary_downloaded", QtCore.Qt.QueuedConnection
+								)
+								QtCore.QMetaObject.invokeMethod(self.settings, "set_last_update_sha", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
+								return
+						except Exception:
+							pass
+					# 2) Иначе — скачиваем zip исходников и распаковываем
+					r = requests.get(zip_url, timeout=60)
+					r.raise_for_status()
+					zf = zipfile.ZipFile(io.BytesIO(r.content))
+					root_name = zf.namelist()[0].split('/')[0]
+					for n in zf.namelist():
+						if not n.endswith('/'):
+							rel = n[len(root_name)+1:] if n.startswith(root_name + '/') else n
+							if not rel:
+								continue
+							out_path = Path(rel)
+							out_path.parent.mkdir(parents=True, exist_ok=True)
+							with zf.open(n) as src, open(out_path, 'wb') as dst:
+								dst.write(src.read())
+					QtCore.QMetaObject.invokeMethod(self.settings, "set_last_update_sha", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
+					QtCore.QMetaObject.invokeMethod(
+						self, "_on_update_sources_applied", QtCore.Qt.QueuedConnection
+					)
+				except Exception as e:
+					QtCore.QMetaObject.invokeMethod(
+						self, "_on_update_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
+					)
+			worker = QtCore.QThread(self)
+			worker.run = _bg_update  # type: ignore
+			self._bg_threads.append(worker)
+			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
+			worker.start()
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось запустить обновление: {e}")
+			self.status_label.setText("⚠️ Ошибка обновления")
+
+	@QtCore.Slot()
+	def _on_update_binary_downloaded(self):
+		try:
+			QtWidgets.QMessageBox.information(self, "Скачано", "Скачан LandGen.exe рядом с программой. Откройте папку и запустите.")
+			self.status_label.setText("✅ Обновление (бинарник) скачано")
+		except Exception:
+			pass
+
+	@QtCore.Slot()
+	def _on_update_sources_applied(self):
+		try:
 			QtWidgets.QMessageBox.information(self, "Обновление", "Файлы исходников обновлены. Для EXE используйте кнопку 'Скачать EXE'.")
 			self.status_label.setText("✅ Обновление установлено")
-		except Exception as e:
-			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось обновить: {e}")
+		except Exception:
+			pass
+
+	@QtCore.Slot(str)
+	def _on_update_error(self, message: str):
+		try:
+			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось обновить: {message}")
 			self.status_label.setText("⚠️ Ошибка обновления")
+		except Exception:
+			pass
 
 	def _manual_check_updates(self):
 		try:
