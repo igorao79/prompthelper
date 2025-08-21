@@ -1,4 +1,5 @@
 from PySide6 import QtWidgets, QtGui, QtCore
+import platform
 from pathlib import Path
 
 from shared.settings_manager import SettingsManager, get_desktop_path
@@ -58,6 +59,16 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._apply_modern_style()
 		self._load_initial_state()
 		self._init_city()
+
+		# Автопроверка обновлений: при старте и периодически
+		try:
+			QtCore.QTimer.singleShot(2000, self._check_updates_on_start)
+			self._updates_timer = QtCore.QTimer(self)
+			self._updates_timer.setInterval(30 * 60 * 1000)  # каждые 30 минут
+			self._updates_timer.timeout.connect(self._check_updates_on_start)
+			self._updates_timer.start()
+		except Exception:
+			pass
  
 		# Отключено: не предлагать обновления при старте
 		# восстанавливаем кастомный промпт, если был сохранён ранее
@@ -245,7 +256,11 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.create_btn.clicked.connect(self._on_create)
 		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
-		self.update_btn.clicked.connect(self._download_latest_program)
+		# Кнопка обновления: в Windows скачиваем EXE, в других ОС — проверяем и ставим обновление исходников
+		if platform.system().lower() == 'windows':
+			self.update_btn.clicked.connect(self._download_latest_program)
+		else:
+			self.update_btn.clicked.connect(self._manual_check_updates)
 		self.settings_btn.clicked.connect(self._open_settings_dialog)
 		self.grid_btn.clicked.connect(self._open_grid_dialog)
 		self.stop_btn.clicked.connect(self._stop_all)
@@ -377,7 +392,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					QtWidgets.QMessageBox.Yes
 				)
 				if res == QtWidgets.QMessageBox.Yes:
-					self._download_and_apply_update(info.latest_sha, info.zip_url)
+					self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
 		except Exception:
 			pass
 
@@ -385,18 +400,19 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		try:
 			self.status_label.setText("⬇️ Загружаем последнюю сборку...")
 			import requests, io, zipfile
-			# Скачиваем готовый EXE с релиза latest, если есть
-			try:
-				binary = binary_url or f"https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
-				r = requests.get(binary, timeout=60)
-				if r.status_code == 200 and r.headers.get('content-type','').lower().find('application') >= 0:
-					with open("LandGen.exe", 'wb') as f:
-						f.write(r.content)
-					self.status_label.setText("✅ Скачан LandGen.exe в папку программы")
-					QtWidgets.QMessageBox.information(self, "Скачано", "Скачан LandGen.exe рядом с программой. Откройте папку и запустите.")
-					return
-			except Exception:
-				pass
+			# Для Windows пробуем скачать готовый EXE с релиза latest, если есть
+			if platform.system().lower() == 'windows':
+				try:
+					binary = binary_url or f"https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
+					r = requests.get(binary, timeout=60)
+					if r.status_code == 200 and r.headers.get('content-type','').lower().find('application') >= 0:
+						with open("LandGen.exe", 'wb') as f:
+							f.write(r.content)
+						self.status_label.setText("✅ Скачан LandGen.exe в папку программы")
+						QtWidgets.QMessageBox.information(self, "Скачано", "Скачан LandGen.exe рядом с программой. Откройте папку и запустите.")
+						return
+				except Exception:
+					pass
 			else:
 				r = requests.get(zip_url, timeout=60)
 				r.raise_for_status()
@@ -782,14 +798,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Генерация изображений возможна только при наличии API ключа
 				# В грид-режиме тоже генерируем изображения, если галочка не стоит и ключ задан
 				should_gen_images = (not params.get("no_images", False)) and bool(self.settings.get_ideogram_api_key())
-				# Уникализируем папку проекта: домен + тематика (санация) + порядковый id
+				# Имя папки формируется заранее при постановке задачи в очередь (folder_name),
+				# здесь просто добавляем порядковый id для уникальности
 				base_folder = params.get("folder_name") or params["domain"]
-				try:
-					folder_suffix = sanitize_filename(params.get("theme", ""))
-					if folder_suffix:
-						base_folder = f"{base_folder}_{folder_suffix}"
-				except Exception:
-					pass
 				project_folder = f"{base_folder}_{params['id']}"
 				project_path, media_path = self.cursor_manager.create_project_structure(
 					project_folder, params["save_path"], params["theme"], progress_cb, generate_images=should_gen_images, cancel_check=(lambda: bool(cancel.is_set())) if cancel else None
@@ -961,40 +972,46 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Разбираем списки
 				themes = [s.strip() for s in themes_text.toPlainText().splitlines() if s.strip()]
 				domains = [s.strip() for s in domains_text.toPlainText().splitlines() if s.strip()]
-				# Поддержка одной тематики на несколько доменов (и наоборот)
-				pairs = []
-				if len(themes) == 1 and len(domains) > 1:
-					base_theme = themes[0]
-					# Если домены совпадают (дубликаты) — создаём разные папки с индексами
-					counts = {}
+				# Формируем пары (тема, домен)
+				raw_pairs = []
+				if len(themes) == 1 and len(domains) >= 1:
 					for d in domains:
-						key = d
-						counts[key] = counts.get(key, 0) + 1
-						folder = d if counts[key] == 1 else f"{d}_{counts[key]}"
-						pairs.append((base_theme, d, folder))
-				elif len(domains) == 1 and len(themes) > 1:
-					base_domain = domains[0]
-					for idx, t in enumerate(themes, start=1):
-						folder = f"{base_domain}_{idx}"
-						pairs.append((t, base_domain, folder))
+						raw_pairs.append((themes[0], d))
+				elif len(domains) == 1 and len(themes) >= 1:
+					for t in themes:
+						raw_pairs.append((t, domains[0]))
 				else:
 					for t, d in zip(themes, domains):
-						pairs.append((t, d, d))
-				if not pairs:
+						raw_pairs.append((t, d))
+				if not raw_pairs:
 					QtWidgets.QMessageBox.warning(self, "Режим сетки", "Заполните тематики и домены")
 					return
-				for theme, domain, folder_name in pairs:
-					ok, err, fixed = validate_domain(domain)
+				# Валидируем домены и считаем повторы
+				validated = []  # (theme, fixed_domain)
+				domain_counts = {}
+				for t, d in raw_pairs:
+					ok, err, fixed = validate_domain(d)
 					if not ok:
-						self.status_label.setText(f"⚠️ Пропуск '{domain}': {err}")
+						self.status_label.setText(f"⚠️ Пропуск '{d}': {err}")
 						continue
+					validated.append((t, fixed))
+					domain_counts[fixed] = domain_counts.get(fixed, 0) + 1
+				if not validated:
+					QtWidgets.QMessageBox.warning(self, "Режим сетки", "После валидации доменов задач не осталось")
+					return
+				# Создаём задачи: добавляем тематику к имени папки только если домен повторяется
+				for theme, fixed_domain in validated:
 					# Убираем звёздочку из названия страны (визуальный маркер избранного)
 					clean_country = country.replace('★', '').strip()
+					if domain_counts.get(fixed_domain, 0) >= 2:
+						folder_name = f"{fixed_domain}_{sanitize_filename(theme)}"
+					else:
+						folder_name = fixed_domain
 					params = {
 						"save_path": save_path,
 						"country": clean_country,
 						"theme": theme,
-						"domain": fixed,
+						"domain": fixed_domain,
 						"folder_name": folder_name,
 						"city": self._pick_next_city(clean_country),
 						"custom_prompt": getattr(self, "_custom_prompt", None),
