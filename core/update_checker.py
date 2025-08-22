@@ -87,7 +87,7 @@ class UpdateChecker:
             data = r.json()
             version = data.get("tag_name") or data.get("name") or None
             assets = data.get("assets", [])
-            # Ищем zip-архив с exe (предпочтительно) или сам exe
+            # Ищем zip-архив с exe (предпочтительно) или сам .exe
             zip_url = None
             exe_url = None
             for a in assets:
