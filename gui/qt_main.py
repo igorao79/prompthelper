@@ -588,7 +588,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			except Exception:
 				pass
 			checker = UpdateChecker(self.settings)
-			info = checker.check()
+			# Принудительно проверяем независимо от пользовательской настройки
+			info = checker.check_force()
 			if info.available:
 				res = QtWidgets.QMessageBox.question(
 					self,

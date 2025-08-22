@@ -47,6 +47,26 @@ class UpdateChecker:
         except Exception as e:
             return UpdateInfo(False, self.settings.get_last_update_sha(), message=str(e)[:200])
 
+    def check_force(self) -> UpdateInfo:
+        """То же что check(), но игнорирует настройку auto_check_updates."""
+        try:
+            resp = requests.get(GITHUB_API_BRANCH, timeout=10)
+            if resp.status_code != 200:
+                return UpdateInfo(False, self.settings.get_last_update_sha(), message=f"HTTP {resp.status_code}")
+
+            data = resp.json()
+            latest_sha = data.get("commit", {}).get("sha", "")
+            prev_sha = self.settings.get_last_update_sha()
+
+            binary_url, version = self._get_latest_release_binary_url()
+
+            if latest_sha and latest_sha != prev_sha:
+                return UpdateInfo(True, latest_sha, GITHUB_ZIP_URL, binary_url, version or (latest_sha[:7] if latest_sha else ""))
+
+            return UpdateInfo(False, latest_sha or prev_sha, GITHUB_ZIP_URL, binary_url, version or (latest_sha[:7] if latest_sha else ""))
+        except Exception as e:
+            return UpdateInfo(False, self.settings.get_last_update_sha(), message=str(e)[:200])
+
     def accept_update(self, latest_sha: str):
         try:
             self.settings.set_last_update_sha(latest_sha)
