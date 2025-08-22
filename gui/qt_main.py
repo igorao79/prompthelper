@@ -318,22 +318,51 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						raise RuntimeError(f"HTTP {r.status_code}")
 					length = int(r.headers.get("Content-Length", "0") or 0)
 					written = 0
-					with open(dest, "wb") as f:
-						for chunk in r.iter_content(chunk_size=1024 * 64):
-							if not chunk:
-								continue
-							f.write(chunk)
-							written += len(chunk)
-							if length:
-								pct = int(written * 100 / length)
-								QtCore.QMetaObject.invokeMethod(
-									self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ Скачивание LandGen.exe... {pct}%")
-								)
+					# Пытаемся сохранить в нескольких каталогах по очереди
+					candidates = []
+					for d in _candidate_dirs():
+						try:
+							d.mkdir(parents=True, exist_ok=True)
+							probe = d / ".__lg_probe.tmp"
+							with open(probe, "wb") as pf:
+								pf.write(b"ok")
+							probe.unlink(missing_ok=True)
+							candidates.append(d)
+						except Exception:
+							continue
+					if not candidates:
+						candidates = [dest.parent]
+					saved_path = None
+					last_err = None
+					for target_dir in candidates:
+						try:
+							cur_dest = target_dir / "LandGen.exe"
+							with open(cur_dest, "wb") as f:
+								for chunk in r.iter_content(chunk_size=1024 * 64):
+									if not chunk:
+										continue
+									f.write(chunk)
+									written += len(chunk)
+									if length:
+										pct = int(written * 100 / length)
+										QtCore.QMetaObject.invokeMethod(
+											self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ Скачивание LandGen.exe... {pct}%")
+										)
+							saved_path = str(cur_dest)
+							break
+						except PermissionError as pe:
+							last_err = pe
+							continue
+						except Exception as we:
+							last_err = we
+							break
+					if not saved_path:
+						raise last_err or RuntimeError("Не удалось сохранить файл")
 					QtCore.QMetaObject.invokeMethod(
-						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "✅ LandGen.exe сохранён на Рабочем столе")
+						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, "✅ LandGen.exe сохранён")
 					)
 					QtCore.QMetaObject.invokeMethod(
-						self, "_on_download_done", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(dest))
+						self, "_on_download_done", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(saved_path))
 					)
 				except PermissionError as e:
 					QtCore.QMetaObject.invokeMethod(
@@ -411,7 +440,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				res = QtWidgets.QMessageBox.question(
 					self,
 					"Обновление доступно",
-					"Найдены изменения в ветке linux репозитория igorao79/prompthelper. Обновить сейчас?",
+					"Доступно обновление. Обновить сейчас?",
 					QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
 					QtWidgets.QMessageBox.Yes
 				)
