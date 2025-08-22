@@ -30,7 +30,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.domain = ""
 
 		self._bg_threads = []
-		self.max_parallel = 5
+		self.max_parallel = 10
 		self._active_builds = 0
 		self._build_queue = []  # list of params dicts
 		self._active_jobs = []  # running params
@@ -314,9 +314,44 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			dest = dest_dir / "LandGen.exe"
 			def _bg_download():
 				try:
-					r = requests.get(url, stream=True, timeout=60, headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"LandGen-Client"})
-					if r.status_code != 200:
-						raise RuntimeError(f"HTTP {r.status_code}")
+					# Повторяем запрос при временных ошибках (503/502/504/429) с экспоненциальным бэкоффом
+					r = None
+					attempts = 5
+					for attempt in range(1, attempts + 1):
+						try:
+							r = requests.get(
+								url,
+								stream=True,
+								timeout=60,
+								headers={
+									"Cache-Control": "no-cache",
+									"Pragma": "no-cache",
+									"User-Agent": "LandGen-Client",
+									"Accept": "application/octet-stream",
+								},
+							)
+							status = getattr(r, "status_code", 0)
+							if status == 200:
+								break
+							# Для временных ошибок — ретрай
+							if status in (429, 500, 502, 503, 504):
+								raise RuntimeError(f"HTTP {status}")
+							# Для прочих кодов — без ретраев
+							raise RuntimeError(f"HTTP {status}")
+						except Exception as req_err:
+							if attempt >= attempts:
+								raise req_err
+							wait_s = min(30, 2 ** attempt)
+							QtCore.QMetaObject.invokeMethod(
+								self.status_label,
+								"setText",
+								QtCore.Qt.QueuedConnection,
+								QtCore.Q_ARG(str, f"⏳ Сервер недоступен. Повтор {attempt}/{attempts} через {wait_s}с")
+							)
+							time.sleep(wait_s)
+							continue
+					if not r or r.status_code != 200:
+						raise RuntimeError("Не удалось скачать файл после нескольких попыток")
 					length = int(r.headers.get("Content-Length", "0") or 0)
 					written = 0
 					# Пытаемся сохранить в нескольких каталогах по очереди
@@ -1084,7 +1119,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 	def _open_grid_dialog(self):
 		try:
 			dlg = QtWidgets.QDialog(self)
-			dlg.setWindowTitle("Режим генерации сетки (5)")
+			dlg.setWindowTitle(f"Режим генерации сетки ({self.max_parallel})")
 			# Делаем окно немодальным, чтобы главное окно можно было перемещать
 			dlg.setWindowModality(QtCore.Qt.NonModal)
 			dlg.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
