@@ -785,34 +785,64 @@ class CursorManager:
                 if progress_callback:
                     progress_callback("🎨 Запуск генерации изображений...")
                 
-                # Ideogram: промпт НЕ меняется — используем theme как есть
-                # Читаем выбранную модель из настроек, по умолчанию 2a-turbo
+                # Ideogram: промпт формируем детально для каждого типа изображения
+                # Читаем выбранную модель из настроек
                 try:
                     from shared.settings_manager import SettingsManager
                     sm = SettingsManager()
                     mdl = sm.settings.get("ideogram_model", "3.0 Turbo")
-                    mpo = sm.settings.get("ideogram_magic_prompt_option", "ON")
+                    # Отключаем Magic Prompt по умолчанию, чтобы модель не уводила тему (корабли и т.п.)
+                    mpo = sm.settings.get("ideogram_magic_prompt_option", "OFF")
                 except Exception:
                     mdl = "3.0 Turbo"
-                    mpo = "ON"
+                    mpo = "OFF"
                 # Читаем API ключ
                 try:
                     key = sm.get_ideogram_api_key()
                 except Exception:
                     key = ""
                 ideogram = IdeogramGenerator(api_key=key, silent_mode=False, model=mdl, magic_prompt_option=mpo)
-                # Генерация 8 изображений: 2 запроса по 4 изображения
-                # отмена между батчами
+                # Готовим специализированные промпты
+                prompts = {}
+                try:
+                    from generators.prompt_generator import create_complete_prompts_dict  # локальный импорт
+                    prompts = create_complete_prompts_dict(theme or "") or {}
+                except Exception:
+                    prompts = {}
+
+                def _p(name: str, fallback: str) -> str:
+                    txt = (prompts.get(name) if isinstance(prompts, dict) else None) or fallback
+                    # Жёсткая анти-текст оговорка
+                    return f"{txt}, no text, no words, no letters, no watermark, no caption"
+
                 if cancel_check and cancel_check():
                     return project_path, media_path
-                results = ideogram.generate_eight_images(
-                    prompt=theme,
-                    media_dir=str(media_path),
-                    progress_callback=progress_callback,
-                )
-                
+
+                # Основные изображения — максимально релевантные
+                ideogram.generate_single_image(_p("main", f"{theme}, professional real photo, realistic lighting"), "main", str(media_path), progress_callback)
+                ideogram.generate_single_image(_p("about1", f"{theme}, team at work, realistic"), "about1", str(media_path), progress_callback)
+                ideogram.generate_single_image(_p("about2", f"{theme}, service process, realistic"), "about2", str(media_path), progress_callback)
+                ideogram.generate_single_image(_p("about3", f"{theme}, satisfied client, realistic"), "about3", str(media_path), progress_callback)
+
+                # Галерея — фокус на реальный процесс и детали, без абстракций
+                gallery_prompts = [
+                    f"{theme}, wide angle workspace view, realistic, documentary style",
+                    f"{theme}, action shot of work in progress, realistic",
+                    f"{theme}, equipment and tools close-up, product focus, realistic",
+                ]
+                ideogram.generate_single_image(_p("gallery1", gallery_prompts[0]), "gallery1", str(media_path), progress_callback)
+                ideogram.generate_single_image(_p("gallery2", gallery_prompts[1]), "gallery2", str(media_path), progress_callback)
+                ideogram.generate_single_image(_p("gallery3", gallery_prompts[2]), "gallery3", str(media_path), progress_callback)
+
+                # Favicon — минималистичный логотип
+                ideogram.generate_single_image(_p("favicon", f"{theme} minimalist icon logo, simple, flat, high contrast"), "favicon", str(media_path), progress_callback)
+
                 # Подсчитываем успешные генерации
-                successful_count = results if isinstance(results, int) else 0
+                try:
+                    files = list(media_path.glob("*.jpg")) + list(media_path.glob("*.png"))
+                    successful_count = len(files)
+                except Exception:
+                    successful_count = 0
                 
                 if progress_callback:
                     progress_callback(f"✅ Генерация изображений завершена: {successful_count}/8")
