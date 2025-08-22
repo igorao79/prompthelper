@@ -62,12 +62,18 @@ class UpdateChecker:
             data = r.json()
             version = data.get("tag_name") or data.get("name") or None
             assets = data.get("assets", [])
+            # Ищем zip-архив с exe (предпочтительно) или сам exe
+            zip_url = None
+            exe_url = None
             for a in assets:
                 url = a.get("browser_download_url")
                 name = a.get("name", "")
-                if url and name and name.lower().endswith(".exe") and "landgen" in name.lower():
-                    return url, version
-            return None, version
+                lname = name.lower()
+                if url and lname.endswith(".zip") and "landgen" in lname:
+                    zip_url = url
+                if url and lname.endswith(".exe") and "landgen" in lname:
+                    exe_url = url
+            return (zip_url or exe_url), version
         except Exception:
             return None, None
 

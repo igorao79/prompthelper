@@ -590,9 +590,16 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			checker = UpdateChecker(self.settings)
 			info = checker.check()
 			if info.available:
-				# Автопроверка: если есть изменения — качаем ZIP с EXE на Рабочий стол
-				version_str = str(VERSION)
-				self._download_binary_zip_to_desktop(getattr(info, 'binary_url', None), version_str)
+				res = QtWidgets.QMessageBox.question(
+					self,
+					"Обновление доступно",
+					"Доступно обновление. Скачать архив с обновлением на Рабочий стол?",
+					QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+					QtWidgets.QMessageBox.Yes
+				)
+				if res == QtWidgets.QMessageBox.Yes:
+					version_str = (getattr(info, 'version', '') or str(VERSION))
+					self._download_binary_zip_to_desktop(getattr(info, 'binary_url', None), version_str, getattr(info, 'zip_url', None))
 		except Exception:
 			pass
 
@@ -650,9 +657,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			checker = UpdateChecker(self.settings)
 			info = checker.check()
 			if info.available:
-				# Качаем архив с EXE на Рабочий стол, имя: LandGen_<версия>.zip из GUI
-				version_str = str(VERSION)
-				self._download_binary_zip_to_desktop(getattr(info, 'binary_url', None), version_str)
+				# Качаем архив с EXE на Рабочий стол, имя: LandGen_<версия>.zip (версии из релиза, иначе из GUI)
+				version_str = (getattr(info, 'version', '') or str(VERSION))
+				self._download_binary_zip_to_desktop(getattr(info, 'binary_url', None), version_str, getattr(info, 'zip_url', None))
 			else:
 				msg = "Обновлений нет" if not getattr(info, 'message', '') else f"Обновлений нет. {info.message}"
 				QtWidgets.QMessageBox.information(self, "Проверка обновлений", msg)
@@ -1359,7 +1366,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		except Exception:
 			pass
 
-	@QtCore.Slot(str)
+	@QtCore.Slot(str, str, str, str)
 	def _show_create_done(self, message: str, prompt: str, domain: str, theme: str):
 		QtWidgets.QMessageBox.information(self, "Готово", message)
 		# сохранение истории — для многопоточности фиксируем текущее состояние домена/темы
@@ -1377,33 +1384,50 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.status_label.setText("⚠️ Ошибка создания проекта")
 
 
-	@QtCore.Slot(str, str)
-	def _download_binary_zip_to_desktop(self, binary_url: str | None, version_str: str):
+	@QtCore.Slot(str, str, str)
+	def _download_binary_zip_to_desktop(self, binary_url: str | None, version_str: str, fallback_zip_url: str | None = None):
 		try:
-			# URL архива: если задан binary_url (релиз с EXE), используем его; иначе берём zip ветки
-			url = binary_url if binary_url else "https://github.com/igorao79/prompthelper/archive/refs/heads/linux.zip"
-			self.status_label.setText("⬇️ Скачиваем LandGen ZIP на Рабочий стол...")
-			import requests
+			url = binary_url or fallback_zip_url or "https://github.com/igorao79/prompthelper/archive/refs/heads/linux.zip"
+			self.status_label.setText("⬇️ Скачиваем LandGen архив на Рабочий стол...")
+			import requests, io, zipfile
 			desk = Path(str(get_desktop_path()))
 			desk.mkdir(parents=True, exist_ok=True)
 			clean_version = (version_str or "").lstrip("vV")
-			fname = f"LandGen_{clean_version}.zip" if clean_version else "LandGen.zip"
+			fname = f"LandGen_{clean_version}.zip" if clean_version else "LandGen_latest.zip"
 			dest = desk / fname
 			def _bg_download():
 				try:
 					r = requests.get(url, stream=True, timeout=60, headers={"User-Agent":"LandGen-Client"})
 					r.raise_for_status()
-					length = int(r.headers.get("Content-Length", "0") or 0)
-					written = 0
-					with open(dest, "wb") as f:
+					# Считываем в память первые байты для определения типа
+					buffer = io.BytesIO()
+					for chunk in r.iter_content(chunk_size=1024*64):
+						if not chunk:
+							continue
+						buffer.write(chunk)
+						if buffer.tell() > 512*1024:
+							break
+					# Определяем: zip ли это
+					magic = buffer.getvalue()[:4]
+					is_zip = magic == b"PK\x03\x04"
+					# Перекачиваем весь контент заново в конечный файл или упаковываем exe в zip
+					if is_zip:
+						with open(dest, "wb") as f:
+							f.write(buffer.getvalue())
+							for chunk in r.iter_content(chunk_size=1024*64):
+								if not chunk:
+									continue
+								f.write(chunk)
+					else:
+						# Это, вероятно, .exe — докачаем в память и запакуем в zip
+						content = buffer.getvalue()
 						for chunk in r.iter_content(chunk_size=1024*64):
 							if not chunk:
 								continue
-							f.write(chunk)
-							written += len(chunk)
-							if length:
-								pct = int(written * 100 / length)
-								QtCore.QMetaObject.invokeMethod(self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ LandGen_{clean_version}.zip... {pct}%"))
+							content += chunk
+						# Пишем zip с именем LandGen.exe внутри
+						with zipfile.ZipFile(dest, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+							zf.writestr('LandGen.exe', content)
 					QtCore.QMetaObject.invokeMethod(self, "_on_update_zip_saved", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(dest)))
 				except Exception as e:
 					QtCore.QMetaObject.invokeMethod(self, "_on_update_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e)))
