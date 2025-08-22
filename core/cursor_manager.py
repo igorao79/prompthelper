@@ -802,18 +802,10 @@ class CursorManager:
                 except Exception:
                     key = ""
                 ideogram = IdeogramGenerator(api_key=key, silent_mode=False, model=mdl, magic_prompt_option=mpo)
-                # Готовим специализированные промпты
-                prompts = {}
-                try:
-                    from generators.prompt_generator import create_complete_prompts_dict  # локальный импорт
-                    prompts = create_complete_prompts_dict(theme or "") or {}
-                except Exception:
-                    prompts = {}
-
-                def _p(name: str, fallback: str) -> str:
-                    txt = (prompts.get(name) if isinstance(prompts, dict) else None) or fallback
+                # Стабильные сфокусированные промпты без дополнительных генераторов
+                def _p(_name: str, fallback: str) -> str:
                     # Жёсткая анти-текст оговорка
-                    return f"{txt}, no text, no words, no letters, no watermark, no caption"
+                    return f"{fallback}, no text, no words, no letters, no watermark, no caption"
 
                 if cancel_check and cancel_check():
                     return project_path, media_path
