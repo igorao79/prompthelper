@@ -283,6 +283,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			# Пытаемся выбрать доступную папку: Desktop → Downloads → CWD → TEMP
 			def _candidate_dirs():
 				dirs = []
+				# Если запущены из EXE, сперва пытаемся сохранить рядом с текущей программой
+				try:
+					cur_path = Path(sys.argv[0]).resolve()
+					if cur_path.suffix.lower() == '.exe':
+						dirs.append(cur_path.parent)
+				except Exception:
+					pass
 				try:
 					dirs.append(Path(str(get_desktop_path())))
 				except Exception:
@@ -462,16 +469,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			dst = Path(current_exe_path).resolve()
 			bat_content = (
 				"@echo off\r\n"
-				"setlocal\r\n"
-				f"set SRC=\"{src}\"\r\n"
-				f"set DST=\"{dst}\"\r\n"
+				"setlocal enableextensions\r\n"
+				f"set \"SRC={src}\"\r\n"
+				f"set \"DST={dst}\"\r\n"
+				"for %I in (%SRC%) do set SRC_S=%~sI\r\n"
+				"for %I in (%DST%) do set DST_S=%~sI\r\n"
 				"echo Updating...\r\n"
 				":wait\r\n"
 				"timeout /t 1 /nobreak >nul\r\n"
-				"copy /y %SRC% %DST% >nul 2>&1\r\n"
+				"copy /y \"%SRC%\" \"%DST%\" >nul 2>&1\r\n"
+				"if errorlevel 1 copy /y %SRC_S% %DST_S% >nul 2>&1\r\n"
+				"if errorlevel 1 powershell -NoProfile -ExecutionPolicy Bypass -Command \"try{Copy-Item -LiteralPath $env:SRC -Destination $env:DST -Force -ErrorAction Stop}catch{}\" >nul 2>&1\r\n"
 				"if errorlevel 1 goto wait\r\n"
-				"start \"\" %DST%\r\n"
-				"del %SRC% >nul 2>&1\r\n"
+				"start \"\" \"%DST%\"\r\n"
+				"del \"%SRC%\" >nul 2>&1\r\n"
 				"del \"%~f0\" >nul 2>&1\r\n"
 				"endlocal\r\n"
 			)
