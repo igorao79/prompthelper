@@ -1,6 +1,7 @@
 from PySide6 import QtWidgets, QtGui, QtCore
 import sys
 import platform
+import os
 from pathlib import Path
 
 from shared.settings_manager import SettingsManager, get_desktop_path
@@ -276,7 +277,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.create_btn.clicked.connect(self._on_create)
 		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
-		# Кнопка обновления: в Windows скачиваем EXE, в других ОС — проверяем и ставим обновление исходников
+		# Кнопка обновления: в Windows скачиваем EXE, в других ОС — проверяем/ставим исходники
 		if platform.system().lower() == 'windows':
 			self.update_btn.clicked.connect(self._download_latest_program)
 		else:
@@ -299,18 +300,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			except Exception:
 				cur_exe_path = Path('.')
 			is_running_from_exe = cur_exe_path.suffix.lower() == '.exe'
-			# Папка назначения: всегда Рабочий стол, как просили
+			# Папка назначения по умолчанию — Рабочий стол. Для обхода блокировок OneDrive/CFA
+			# подготовим скрытую резервную папку в LocalAppData, если на Desktop нельзя создавать .exe
 			desktop_dir = Path(str(get_desktop_path()))
+			updates_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "LandGen" / "updates"
 			self.status_label.setText("⬇️ Скачивание LandGen.exe...")
 			# Добавляем заголовки, чтобы избежать кешей, и cache-busting параметр
 			base = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
-			import time, os
+			import time
 			url = f"{base}?t={int(time.time())}"
 			# Пытаемся выбрать доступную папку: Desktop → Downloads → CWD → TEMP
 			def _candidate_dirs():
 				dirs = []
-				# Всегда используем только Рабочий стол
-				return [desktop_dir]
+				# Сначала пробуем Рабочий стол; если доступ запрещён, используем скрытую локальную папку
+				return [desktop_dir, updates_dir]
 			def _first_writable_dir():
 				for d in _candidate_dirs():
 					try:
@@ -404,7 +407,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 										)
 							# Скрываем временный файл на рабочем столе, чтобы не было визуального дубля
 							try:
-								if is_running_from_exe and platform.system().lower() == 'windows':
+								if is_running_from_exe and platform.system().lower() == 'windows' and d == desktop_dir:
 									import ctypes
 									FILE_ATTRIBUTE_HIDDEN = 0x2
 									FILE_ATTRIBUTE_TEMPORARY = 0x100
@@ -412,6 +415,14 @@ class QtMainWindow(QtWidgets.QMainWindow):
 							except Exception:
 								pass
 							saved_path = str(cur_dest)
+							# Если сохраняем во внутреннюю папку updates, создаём маркер для последующего удаления
+							try:
+								if 'updates' in str(target_dir).lower():
+									marker = Path(target_dir) / ".landgen_updates_dir"
+									with open(marker, 'w', encoding='utf-8') as _mf:
+										_mf.write("ok")
+							except Exception:
+								pass
 							break
 						except PermissionError as pe:
 							last_err = pe
@@ -448,8 +459,14 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
 			worker.start()
 		except Exception as e:
-			QtWidgets.QMessageBox.critical(self, "Скачивание", "Не удалось скачать EXE. Проверьте интернет или повторите позже.")
-			self.status_label.setText("⚠️ Ошибка скачивания EXE")
+			# Показываем истинную причину ошибки, а не общий текст
+			try:
+				msg = self._mask_urls(str(e))
+				QtWidgets.QMessageBox.critical(self, "Скачивание", f"Не удалось скачать EXE: {msg}")
+				self.status_label.setText(f"⚠️ Ошибка скачивания EXE: {msg}")
+			except Exception:
+				QtWidgets.QMessageBox.critical(self, "Скачивание", "Не удалось скачать EXE. Проверьте параметры доступа и повторите.")
+				self.status_label.setText("⚠️ Ошибка скачивания EXE")
 
 	@QtCore.Slot(str)
 	def _on_download_done(self, dest: str):
@@ -500,14 +517,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				"for %I in (%SRC%) do set SRC_S=%~sI\r\n"
 				"for %I in (%DST%) do set DST_S=%~sI\r\n"
 				"echo Updating...\r\n"
-				":wait\r\n"
+				":kill\r\n"
+				"taskkill /f /im \"%~nx2\" >nul 2>&1\r\n"
 				"timeout /t 1 /nobreak >nul\r\n"
+				":wait\r\n"
 				"copy /y \"%SRC%\" \"%DST%\" >nul 2>&1\r\n"
 				"if errorlevel 1 copy /y %SRC_S% %DST_S% >nul 2>&1\r\n"
 				"if errorlevel 1 powershell -NoProfile -ExecutionPolicy Bypass -Command \"try{Copy-Item -LiteralPath $env:SRC -Destination $env:DST -Force -ErrorAction Stop}catch{}\" >nul 2>&1\r\n"
-				"if errorlevel 1 goto wait\r\n"
-				"start \"\" \"%DST%\"\r\n"
+				"if errorlevel 1 timeout /t 1 /nobreak >nul & goto kill\r\n"
+				":: Удаляем исходный временный файл\r\n"
 				"del \"%SRC%\" >nul 2>&1\r\n"
+				":: Если файл лежал в updates-папке с маркером — удаляем папку полностью\r\n"
+				"for %%D in (\"%SRC%\") do set SRC_DIR=%%~dpD\r\n"
+				"if exist \"%SRC_DIR%\\.landgen_updates_dir\" rd /s /q \"%SRC_DIR%\" >nul 2>&1\r\n"
+				"start \"\" \"%DST%\"\r\n"
 				"del \"%~f0\" >nul 2>&1\r\n"
 				"endlocal\r\n"
 			)
@@ -711,6 +734,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				QtWidgets.QMessageBox.information(self, "Проверка обновлений", msg)
 		except Exception as e:
 			QtWidgets.QMessageBox.warning(self, "Проверка обновлений", f"Не удалось выполнить проверку: {e}")
+
+	# Удалён режим PyUpdater
 
 	# удалены методы перегенерации изображений
 
