@@ -275,6 +275,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		try:
 			from pathlib import Path
 			import requests
+			# Определяем, запущены ли из EXE — тогда обновляемся только рядом и во временное имя
+			is_running_from_exe = False
+			try:
+				cur_exe_path = Path(sys.argv[0]).resolve()
+				is_running_from_exe = cur_exe_path.suffix.lower() == '.exe'
+			except Exception:
+				cur_exe_path = Path('.')
 			self.status_label.setText("⬇️ Скачивание LandGen.exe...")
 			# Добавляем заголовки, чтобы избежать кешей, и cache-busting параметр
 			base = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
@@ -283,13 +290,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			# Пытаемся выбрать доступную папку: Desktop → Downloads → CWD → TEMP
 			def _candidate_dirs():
 				dirs = []
-				# Если запущены из EXE, сперва пытаемся сохранить рядом с текущей программой
-				try:
-					cur_path = Path(sys.argv[0]).resolve()
-					if cur_path.suffix.lower() == '.exe':
-						dirs.append(cur_path.parent)
-				except Exception:
-					pass
+				# Если запущены из EXE — используем ТОЛЬКО папку текущего EXE
+				if is_running_from_exe:
+					return [cur_exe_path.parent]
 				try:
 					dirs.append(Path(str(get_desktop_path())))
 				except Exception:
@@ -314,11 +317,15 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						continue
 					except Exception:
 						continue
-				# Фоллбек на системный TEMP
-				import tempfile
-				return Path(tempfile.gettempdir())
+				# Фоллбек на TEMP разрешаем только если НЕ из EXE. Иначе — ошибка прав.
+				if not is_running_from_exe:
+					import tempfile
+					return Path(tempfile.gettempdir())
+				raise PermissionError("Нет прав записи в папку программы для обновления")
 			dest_dir = _first_writable_dir()
-			dest = dest_dir / "LandGen.exe"
+			# Во время автообновления сохраняем во временное имя, чтобы можно было заменить работающий EXE
+			filename = "LandGen_new.exe" if is_running_from_exe else "LandGen.exe"
+			dest = dest_dir / filename
 			def _bg_download():
 				try:
 					# Повторяем запрос при временных ошибках (503/502/504/429) с экспоненциальным бэкоффом
@@ -379,7 +386,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					last_err = None
 					for target_dir in candidates:
 						try:
-							cur_dest = target_dir / "LandGen.exe"
+							cur_dest = target_dir / filename
 							with open(cur_dest, "wb") as f:
 								for chunk in r.iter_content(chunk_size=1024 * 64):
 									if not chunk:
@@ -435,8 +442,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 	def _on_download_done(self, dest: str):
 		try:
 			QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
-			# Подсветим файл в проводнике, не блокирует UI
-			QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(Path(dest).parent)))
+			# Папку открываем только если это не автообновление из EXE
+			try:
+				cur_path = Path(sys.argv[0]).resolve()
+				if cur_path.suffix.lower() != '.exe':
+					QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(Path(dest).parent)))
+			except Exception:
+				pass
 			if getattr(self, "_pending_update_sha", None):
 				self.settings.set_last_update_sha(self._pending_update_sha)
 				self._pending_update_sha = None
