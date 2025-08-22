@@ -2,6 +2,7 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from core.version import VERSION as LOCAL_VERSION
 
 import requests
 
@@ -28,21 +29,25 @@ class UpdateChecker:
             if not self.settings.get_auto_check_updates():
                 return UpdateInfo(False, self.settings.get_last_update_sha(), message="Auto-check disabled")
 
+            # Предпочитаем релизную модель обновлений: сравнение тегов версий
+            binary_url, version = self._get_latest_release_binary_url()
+            cur_ver = (LOCAL_VERSION or "").lower().lstrip('v')
+            rel_ver = (version or "").lower().lstrip('v')
+            if rel_ver and (cur_ver != rel_ver) and ('dev' in cur_ver or cur_ver != rel_ver):
+                # Сохраняем маркер последнего известного релиза
+                return UpdateInfo(True, rel_ver, GITHUB_ZIP_URL, binary_url, rel_ver)
+
+            # Фоллбек на проверку ветки (для дев/ручных тестов)
             resp = requests.get(GITHUB_API_BRANCH, timeout=10)
             if resp.status_code != 200:
                 return UpdateInfo(False, self.settings.get_last_update_sha(), message=f"HTTP {resp.status_code}")
-
             data = resp.json()
             latest_sha = data.get("commit", {}).get("sha", "")
             prev_sha = self.settings.get_last_update_sha()
-
-            # Ищем бинарный релиз LandGen.exe (опционально)
-            binary_url, version = self._get_latest_release_binary_url()
-
             if latest_sha and latest_sha != prev_sha:
-                return UpdateInfo(True, latest_sha, GITHUB_ZIP_URL, binary_url, version or (latest_sha[:7] if latest_sha else ""))
+                return UpdateInfo(True, latest_sha, GITHUB_ZIP_URL, binary_url, rel_ver or (latest_sha[:7] if latest_sha else ""))
 
-            return UpdateInfo(False, latest_sha or prev_sha, GITHUB_ZIP_URL, binary_url, version or (latest_sha[:7] if latest_sha else ""))
+            return UpdateInfo(False, latest_sha or prev_sha, GITHUB_ZIP_URL, binary_url, rel_ver or (latest_sha[:7] if latest_sha else ""))
 
         except Exception as e:
             return UpdateInfo(False, self.settings.get_last_update_sha(), message=str(e)[:200])
