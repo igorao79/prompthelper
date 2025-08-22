@@ -62,6 +62,24 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self._load_initial_state()
 		self._init_city()
 
+	def _get_current_exe_path(self) -> Path:
+		"""Надёжно определяет путь текущего исполняемого файла на Windows (WinAPI),
+		а при запуске из исходников возвращает путь скрипта.
+		"""
+		try:
+			if platform.system().lower() == 'windows':
+				import ctypes, ctypes.wintypes as wt
+				buf = ctypes.create_unicode_buffer(32768)
+				GetModuleFileNameW = ctypes.windll.kernel32.GetModuleFileNameW
+				GetModuleFileNameW.argtypes = [wt.HMODULE, wt.LPWSTR, wt.DWORD]
+				GetModuleFileNameW.restype = wt.DWORD
+				length = GetModuleFileNameW(None, buf, len(buf))
+				if length > 0:
+					return Path(buf.value)
+			return Path(sys.argv[0]).resolve()
+		except Exception:
+			return Path(sys.argv[0]).resolve()
+
 		# Автопроверка обновлений: при старте и периодически
 		try:
 			QtCore.QTimer.singleShot(2000, self._check_updates_on_start)
@@ -276,12 +294,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			from pathlib import Path
 			import requests
 			# Определяем, запущены ли из EXE — тогда обновляемся только рядом и во временное имя
-			is_running_from_exe = False
 			try:
-				cur_exe_path = Path(sys.argv[0]).resolve()
-				is_running_from_exe = cur_exe_path.suffix.lower() == '.exe'
+				cur_exe_path = self._get_current_exe_path()
 			except Exception:
 				cur_exe_path = Path('.')
+			is_running_from_exe = cur_exe_path.suffix.lower() == '.exe'
+			# Папка назначения: всегда Рабочий стол, как просили
+			desktop_dir = Path(str(get_desktop_path()))
 			self.status_label.setText("⬇️ Скачивание LandGen.exe...")
 			# Добавляем заголовки, чтобы избежать кешей, и cache-busting параметр
 			base = "https://github.com/igorao79/prompthelper/releases/latest/download/LandGen.exe"
@@ -290,20 +309,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			# Пытаемся выбрать доступную папку: Desktop → Downloads → CWD → TEMP
 			def _candidate_dirs():
 				dirs = []
-				# Если запущены из EXE — используем ТОЛЬКО папку текущего EXE
-				if is_running_from_exe:
-					return [cur_exe_path.parent]
-				try:
-					dirs.append(Path(str(get_desktop_path())))
-				except Exception:
-					pass
-				dirs.extend([
-					Path.home() / "Downloads",
-					Path.home() / "Загрузки",
-					Path.cwd(),
-					Path(os.environ.get("TEMP", os.environ.get("TMP", str(Path.home()))))
-				])
-				return dirs
+				# Всегда используем только Рабочий стол
+				return [desktop_dir]
 			def _first_writable_dir():
 				for d in _candidate_dirs():
 					try:
@@ -317,11 +324,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						continue
 					except Exception:
 						continue
-				# Фоллбек на TEMP разрешаем только если НЕ из EXE. Иначе — ошибка прав.
-				if not is_running_from_exe:
-					import tempfile
-					return Path(tempfile.gettempdir())
-				raise PermissionError("Нет прав записи в папку программы для обновления")
+				# Не уходим никуда больше
+				raise PermissionError("Нет прав записи на Рабочем столе для сохранения обновления")
 			dest_dir = _first_writable_dir()
 			# Во время автообновления сохраняем во временное имя, чтобы можно было заменить работающий EXE
 			filename = "LandGen_new.exe" if is_running_from_exe else "LandGen.exe"
@@ -398,6 +402,15 @@ class QtMainWindow(QtWidgets.QMainWindow):
 										QtCore.QMetaObject.invokeMethod(
 											self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ Скачивание LandGen.exe... {pct}%")
 										)
+							# Скрываем временный файл на рабочем столе, чтобы не было визуального дубля
+							try:
+								if is_running_from_exe and platform.system().lower() == 'windows':
+									import ctypes
+									FILE_ATTRIBUTE_HIDDEN = 0x2
+									FILE_ATTRIBUTE_TEMPORARY = 0x100
+									ctypes.windll.kernel32.SetFileAttributesW(str(cur_dest), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY)
+							except Exception:
+								pass
 							saved_path = str(cur_dest)
 							break
 						except PermissionError as pe:
@@ -444,7 +457,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			QtWidgets.QMessageBox.information(self, "Скачано", f"Файл сохранён: {dest}")
 			# Папку открываем только если это не автообновление из EXE
 			try:
-				cur_path = Path(sys.argv[0]).resolve()
+				cur_path = self._get_current_exe_path()
 				if cur_path.suffix.lower() != '.exe':
 					QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(Path(dest).parent)))
 			except Exception:
