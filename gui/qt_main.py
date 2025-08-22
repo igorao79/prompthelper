@@ -277,11 +277,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.create_btn.clicked.connect(self._on_create)
 		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
-		# Кнопка обновления: в Windows скачиваем EXE, в других ОС — проверяем/ставим исходники
-		if platform.system().lower() == 'windows':
-			self.update_btn.clicked.connect(self._download_latest_program)
-		else:
-			self.update_btn.clicked.connect(self._manual_check_updates)
+		# Кнопка обновления: всегда используем безопасное обновление исходников (как «патч»)
+		self.update_btn.clicked.connect(self._manual_check_updates)
 		self.settings_btn.clicked.connect(self._open_settings_dialog)
 		self.grid_btn.clicked.connect(self._open_grid_dialog)
 		self.stop_btn.clicked.connect(self._stop_all)
@@ -593,93 +590,18 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			checker = UpdateChecker(self.settings)
 			info = checker.check()
 			if info.available:
-				res = QtWidgets.QMessageBox.question(
-					self,
-					"Обновление доступно",
-					"Доступно обновление. Обновить сейчас?",
-					QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-					QtWidgets.QMessageBox.Yes
-				)
-				if res == QtWidgets.QMessageBox.Yes:
-					if platform.system().lower() == 'windows':
-						self._start_windows_exe_download_for_update(info.latest_sha)
-					else:
-						self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
+				# Автопроверка: если есть изменения — качаем ZIP с EXE на Рабочий стол
+				version_str = str(VERSION)
+				self._download_binary_zip_to_desktop(getattr(info, 'binary_url', None), version_str)
 		except Exception:
 			pass
 
-	def _start_windows_exe_download_for_update(self, latest_sha: str):
-		try:
-			self._pending_update_sha = latest_sha
-			self._download_latest_program()
-		except Exception:
-			pass
+	# Удалён путь загрузки EXE для Windows
 
 	def _download_and_apply_update(self, latest_sha: str, zip_url: str, binary_url: str | None = None):
 		try:
-			self.status_label.setText("⬇️ Загружаем последнюю сборку...")
-			import requests, io, zipfile
-			def _bg_update():
-				try:
-					# 1) Windows: переключаемся на скачивание EXE через существующий механизм
-					if platform.system().lower() == 'windows':
-						QtCore.QMetaObject.invokeMethod(self, "_start_windows_exe_download_for_update", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
-						return
-					# 2) Иначе — безопасное применение zip через временную папку и бэкап
-					r = requests.get(zip_url, timeout=60)
-					r.raise_for_status()
-					zf = zipfile.ZipFile(io.BytesIO(r.content))
-					import tempfile, shutil, os, time as _time
-					with tempfile.TemporaryDirectory() as tmpdir:
-						zf.extractall(tmpdir)
-						names = zf.namelist()
-						root_name = names[0].split('/')[0] if names else ''
-						src_root = Path(tmpdir) / root_name if root_name else Path(tmpdir)
-						whitelist = {"core", "generators", "gui", "shared", "tools", "main.py", "README.md", "requirements.txt"}
-						backup_dir = Path(".backup_update") / _time.strftime("%Y%m%d_%H%M%S")
-						backup_dir.mkdir(parents=True, exist_ok=True)
-						for item in whitelist:
-							src_path = src_root / item
-							if not src_path.exists():
-								continue
-							dst_path = Path(item)
-							# Бэкап существующего
-							try:
-								if dst_path.exists():
-									if dst_path.is_dir():
-										shutil.copytree(dst_path, backup_dir / item)
-									else:
-										(backup_dir / dst_path.parent).mkdir(parents=True, exist_ok=True)
-										shutil.copy2(dst_path, backup_dir / item)
-							except Exception:
-								pass
-							# Копирование поверх
-							try:
-								if src_path.is_dir():
-									for root, dirs, files in os.walk(src_path):
-										rel_root = Path(root).relative_to(src_path)
-										target_root = dst_path / rel_root
-										target_root.mkdir(parents=True, exist_ok=True)
-										for fname in files:
-											shutil.copy2(Path(root) / fname, target_root / fname)
-								else:
-									dst_path.parent.mkdir(parents=True, exist_ok=True)
-									shutil.copy2(src_path, dst_path)
-							except Exception:
-								pass
-					QtCore.QMetaObject.invokeMethod(self, "_apply_update_mark", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, latest_sha))
-					QtCore.QMetaObject.invokeMethod(
-						self, "_on_update_sources_applied_with_backup", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(backup_dir))
-					)
-				except Exception as e:
-					QtCore.QMetaObject.invokeMethod(
-						self, "_on_update_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e))
-					)
-			worker = QtCore.QThread(self)
-			worker.run = _bg_update  # type: ignore
-			self._bg_threads.append(worker)
-			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
-			worker.start()
+			# Вместо применения обновления — сохраняем ZIP на Рабочий стол, если есть изменения
+			self._download_update_zip_to_desktop(zip_url, latest_sha)
 		except Exception as e:
 			QtWidgets.QMessageBox.critical(self, "Обновление", "Не удалось запустить обновление. Попробуйте позже.")
 			self.status_label.setText("⚠️ Ошибка обновления")
@@ -728,7 +650,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			checker = UpdateChecker(self.settings)
 			info = checker.check()
 			if info.available:
-				self._download_and_apply_update(info.latest_sha, info.zip_url, getattr(info, 'binary_url', None))
+				# Качаем архив с EXE на Рабочий стол, имя: LandGen_<версия>.zip из GUI
+				version_str = str(VERSION)
+				self._download_binary_zip_to_desktop(getattr(info, 'binary_url', None), version_str)
 			else:
 				msg = "Обновлений нет" if not getattr(info, 'message', '') else f"Обновлений нет. {info.message}"
 				QtWidgets.QMessageBox.information(self, "Проверка обновлений", msg)
@@ -1388,7 +1312,54 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		name = self._language_code_to_display.get(code, code)
 		return name if not (hasattr(self, 'custom_lang_cb') and self.custom_lang_cb.isChecked()) else f"{name} (переопределён)"
 
-	@QtCore.Slot(str, str, str, str)
+	@QtCore.Slot(str, str)
+	def _download_update_zip_to_desktop(self, zip_url: str, latest_sha: str):
+		try:
+			self.status_label.setText("⬇️ Скачиваем ZIP обновления на Рабочий стол...")
+			import requests
+			desk = Path(str(get_desktop_path()))
+			desk.mkdir(parents=True, exist_ok=True)
+			# Имя файла: LandGen_<версия>.zip; если версии нет — по SHA
+			version = getattr(self, "_latest_version", "")
+			base_name = f"LandGen_{version}" if version else f"LandGen_{(latest_sha or '')[:7]}"
+			fname = f"{base_name}.zip"
+			dest = desk / fname
+			def _bg_download():
+				try:
+					r = requests.get(zip_url, stream=True, timeout=60, headers={"User-Agent":"LandGen-Client"})
+					r.raise_for_status()
+					length = int(r.headers.get("Content-Length", "0") or 0)
+					written = 0
+					with open(dest, "wb") as f:
+						for chunk in r.iter_content(chunk_size=1024*64):
+							if not chunk:
+								continue
+							f.write(chunk)
+							written += len(chunk)
+							if length:
+								pct = int(written * 100 / length)
+								QtCore.QMetaObject.invokeMethod(self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ ZIP обновления... {pct}%"))
+					QtCore.QMetaObject.invokeMethod(self, "_on_update_zip_saved", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(dest)))
+				except Exception as e:
+					QtCore.QMetaObject.invokeMethod(self, "_on_update_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e)))
+			worker = QtCore.QThread(self)
+			worker.run = _bg_download  # type: ignore
+			self._bg_threads.append(worker)
+			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
+			worker.start()
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось начать скачивание ZIP: {e}")
+
+	@QtCore.Slot(str)
+	def _on_update_zip_saved(self, path: str):
+		try:
+			QtWidgets.QMessageBox.information(self, "Скачано", f"ZIP обновления сохранён: {path}")
+			QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(Path(path).parent)))
+			self.status_label.setText("✅ ZIP обновления сохранён на Рабочем столе")
+		except Exception:
+			pass
+
+	@QtCore.Slot(str)
 	def _show_create_done(self, message: str, prompt: str, domain: str, theme: str):
 		QtWidgets.QMessageBox.information(self, "Готово", message)
 		# сохранение истории — для многопоточности фиксируем текущее состояние домена/темы
@@ -1404,6 +1375,45 @@ class QtMainWindow(QtWidgets.QMainWindow):
 	def _show_create_error(self, message: str):
 		QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось создать проект: {message}")
 		self.status_label.setText("⚠️ Ошибка создания проекта")
+
+
+	@QtCore.Slot(str, str)
+	def _download_binary_zip_to_desktop(self, binary_url: str | None, version_str: str):
+		try:
+			# URL архива: если задан binary_url (релиз с EXE), используем его; иначе берём zip ветки
+			url = binary_url if binary_url else "https://github.com/igorao79/prompthelper/archive/refs/heads/linux.zip"
+			self.status_label.setText("⬇️ Скачиваем LandGen ZIP на Рабочий стол...")
+			import requests
+			desk = Path(str(get_desktop_path()))
+			desk.mkdir(parents=True, exist_ok=True)
+			clean_version = (version_str or "").lstrip("vV")
+			fname = f"LandGen_{clean_version}.zip" if clean_version else "LandGen.zip"
+			dest = desk / fname
+			def _bg_download():
+				try:
+					r = requests.get(url, stream=True, timeout=60, headers={"User-Agent":"LandGen-Client"})
+					r.raise_for_status()
+					length = int(r.headers.get("Content-Length", "0") or 0)
+					written = 0
+					with open(dest, "wb") as f:
+						for chunk in r.iter_content(chunk_size=1024*64):
+							if not chunk:
+								continue
+							f.write(chunk)
+							written += len(chunk)
+							if length:
+								pct = int(written * 100 / length)
+								QtCore.QMetaObject.invokeMethod(self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, f"⬇️ LandGen_{clean_version}.zip... {pct}%"))
+					QtCore.QMetaObject.invokeMethod(self, "_on_update_zip_saved", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(dest)))
+				except Exception as e:
+					QtCore.QMetaObject.invokeMethod(self, "_on_update_error", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, str(e)))
+			worker = QtCore.QThread(self)
+			worker.run = _bg_download  # type: ignore
+			self._bg_threads.append(worker)
+			worker.finished.connect(lambda: self._bg_threads.remove(worker) if worker in self._bg_threads else None)
+			worker.start()
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось начать скачивание ZIP: {e}")
 
 
 def run_qt():

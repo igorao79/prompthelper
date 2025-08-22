@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import requests
 
@@ -15,6 +15,7 @@ class UpdateInfo:
     latest_sha: str
     zip_url: str = GITHUB_ZIP_URL
     binary_url: Optional[str] = None
+    version: str = ""
     message: str = ""
 
 
@@ -36,12 +37,12 @@ class UpdateChecker:
             prev_sha = self.settings.get_last_update_sha()
 
             # Ищем бинарный релиз LandGen.exe (опционально)
-            binary_url = self._get_latest_release_binary_url()
+            binary_url, version = self._get_latest_release_binary_url()
 
             if latest_sha and latest_sha != prev_sha:
-                return UpdateInfo(True, latest_sha, GITHUB_ZIP_URL, binary_url)
+                return UpdateInfo(True, latest_sha, GITHUB_ZIP_URL, binary_url, version or (latest_sha[:7] if latest_sha else ""))
 
-            return UpdateInfo(False, latest_sha or prev_sha, GITHUB_ZIP_URL, binary_url)
+            return UpdateInfo(False, latest_sha or prev_sha, GITHUB_ZIP_URL, binary_url, version or (latest_sha[:7] if latest_sha else ""))
 
         except Exception as e:
             return UpdateInfo(False, self.settings.get_last_update_sha(), message=str(e)[:200])
@@ -52,21 +53,22 @@ class UpdateChecker:
         except Exception:
             pass
 
-    def _get_latest_release_binary_url(self) -> Optional[str]:
+    def _get_latest_release_binary_url(self) -> Tuple[Optional[str], Optional[str]]:
         try:
             releases_api = "https://api.github.com/repos/igorao79/prompthelper/releases/latest"
             r = requests.get(releases_api, timeout=10)
             if r.status_code != 200:
-                return None
+                return None, None
             data = r.json()
+            version = data.get("tag_name") or data.get("name") or None
             assets = data.get("assets", [])
             for a in assets:
                 url = a.get("browser_download_url")
                 name = a.get("name", "")
                 if url and name and name.lower().endswith(".exe") and "landgen" in name.lower():
-                    return url
-            return None
+                    return url, version
+            return None, version
         except Exception:
-            return None
+            return None, None
 
 
