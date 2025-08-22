@@ -1,4 +1,5 @@
 from PySide6 import QtWidgets, QtGui, QtCore
+import sys
 import platform
 from pathlib import Path
 
@@ -397,8 +398,63 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			if getattr(self, "_pending_update_sha", None):
 				self.settings.set_last_update_sha(self._pending_update_sha)
 				self._pending_update_sha = None
+			# Автоустановка поверх (Windows): если запущены из EXE — предложим замену и перезапуск
+			if platform.system().lower() == 'windows':
+				try:
+					cur_path = Path(sys.argv[0]).resolve()
+					if cur_path.suffix.lower() == '.exe' and Path(dest).exists():
+						res = QtWidgets.QMessageBox.question(
+							self,
+							"Установить обновление",
+							"Заменить текущую программу и перезапустить сейчас?",
+							QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+							QtWidgets.QMessageBox.Yes
+						)
+						if res == QtWidgets.QMessageBox.Yes:
+							self._install_downloaded_exe_in_place(dest, str(cur_path))
+				except Exception:
+					pass
 		except Exception:
 			pass
+
+	def _install_downloaded_exe_in_place(self, downloaded_path: str, current_exe_path: str):
+		"""Windows: заменить текущий EXE скачанным, затем перезапустить. Делается через временный .bat."""
+		try:
+			import subprocess, tempfile
+			tmpdir = Path(tempfile.gettempdir())
+			bat_path = tmpdir / "landgen_self_update.bat"
+			src = Path(downloaded_path).resolve()
+			dst = Path(current_exe_path).resolve()
+			bat_content = (
+				"@echo off\r\n"
+				"setlocal\r\n"
+				f"set SRC=\"{src}\"\r\n"
+				f"set DST=\"{dst}\"\r\n"
+				"echo Updating...\r\n"
+				":wait\r\n"
+				"timeout /t 1 /nobreak >nul\r\n"
+				"copy /y %SRC% %DST% >nul 2>&1\r\n"
+				"if errorlevel 1 goto wait\r\n"
+				"start \"\" %DST%\r\n"
+				"del %SRC% >nul 2>&1\r\n"
+				"del \"%~f0\" >nul 2>&1\r\n"
+				"endlocal\r\n"
+			)
+			with open(bat_path, 'w', encoding='utf-8') as f:
+				f.write(bat_content)
+			# Запускаем батник без окна
+			try:
+				si = subprocess.STARTUPINFO()
+				si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+				creationflags = 0x08000000
+			except Exception:
+				si = None
+				creationflags = 0
+			subprocess.Popen(["cmd", "/c", str(bat_path)], startupinfo=si, creationflags=creationflags)
+			# Завершаем приложение, чтобы можно было перезаписать файл
+			QtWidgets.QApplication.quit()
+		except Exception as e:
+			QtWidgets.QMessageBox.critical(self, "Обновление", f"Не удалось запустить установку: {e}")
 
 	@QtCore.Slot(str)
 	def _on_download_error(self, message: str):
@@ -434,6 +490,12 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 	def _check_updates_on_start(self):
 		try:
+			# В dev-режиме не показываем плашку автообновления
+			try:
+				if isinstance(VERSION, str) and 'dev' in VERSION.lower():
+					return
+			except Exception:
+				pass
 			checker = UpdateChecker(self.settings)
 			info = checker.check()
 			if info.available:
