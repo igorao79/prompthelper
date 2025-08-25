@@ -9,6 +9,8 @@ import os
 import subprocess
 import time
 import platform
+import ctypes
+from ctypes import wintypes
 from pathlib import Path
 tk = None  # Tkinter больше не используется
 
@@ -744,8 +746,13 @@ class CursorManager:
         """
         if PYAUTOGUI_AVAILABLE:
             try:
-                time.sleep(delay_seconds)
+                # Пытаемся вывести окно Cursor на передний план перед вставкой
+                self._bring_cursor_window_to_front()
+                time.sleep(max(0, delay_seconds))
                 pyautogui.hotkey('ctrl', 'v')
+                # После вставки — сразу отправляем
+                time.sleep(0.1)
+                pyautogui.press('enter')
             except Exception as e:
                 print(f"Ошибка автовставки: {e}")
         else:
@@ -810,11 +817,13 @@ class CursorManager:
                 if cancel_check and cancel_check():
                     return project_path, media_path
 
+                # Подготовка заданий
+                tasks: list[tuple[str, str]] = []
                 # Основные изображения — максимально релевантные
-                ideogram.generate_single_image(_p("main", f"{theme}, professional real photo, realistic lighting"), "main", str(media_path), progress_callback)
-                ideogram.generate_single_image(_p("about1", f"{theme}, team at work, realistic"), "about1", str(media_path), progress_callback)
-                ideogram.generate_single_image(_p("about2", f"{theme}, service process, realistic"), "about2", str(media_path), progress_callback)
-                ideogram.generate_single_image(_p("about3", f"{theme}, satisfied client, realistic"), "about3", str(media_path), progress_callback)
+                tasks.append(("main", _p("main", f"{theme}, professional real photo, realistic lighting")))
+                tasks.append(("about1", _p("about1", f"{theme}, team at work, realistic")))
+                tasks.append(("about2", _p("about2", f"{theme}, service process, realistic")))
+                tasks.append(("about3", _p("about3", f"{theme}, satisfied client, realistic")))
 
                 # Галерея — фокус на реальный процесс и детали, без абстракций
                 gallery_prompts = [
@@ -822,12 +831,30 @@ class CursorManager:
                     f"{theme}, action shot of work in progress, realistic",
                     f"{theme}, equipment and tools close-up, product focus, realistic",
                 ]
-                ideogram.generate_single_image(_p("gallery1", gallery_prompts[0]), "gallery1", str(media_path), progress_callback)
-                ideogram.generate_single_image(_p("gallery2", gallery_prompts[1]), "gallery2", str(media_path), progress_callback)
-                ideogram.generate_single_image(_p("gallery3", gallery_prompts[2]), "gallery3", str(media_path), progress_callback)
+                tasks.append(("gallery1", _p("gallery1", gallery_prompts[0])))
+                tasks.append(("gallery2", _p("gallery2", gallery_prompts[1])))
+                tasks.append(("gallery3", _p("gallery3", gallery_prompts[2])))
 
                 # Favicon — минималистичный логотип
-                ideogram.generate_single_image(_p("favicon", f"{theme} minimalist icon logo, simple, flat, high contrast"), "favicon", str(media_path), progress_callback)
+                tasks.append(("favicon", _p("favicon", f"{theme} minimalist icon logo, simple, flat, high contrast")))
+
+                # Параллельная генерация (ускорение): число воркеров из env IDEOGRAM_CONCURRENCY (по умолчанию 3)
+                try:
+                    concurrency = max(1, int(os.getenv("IDEOGRAM_CONCURRENCY", "3")))
+                except Exception:
+                    concurrency = 3
+
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                def _gen_one(name: str, prompt_text: str):
+                    if cancel_check and cancel_check():
+                        return
+                    return ideogram.generate_single_image(prompt_text, name, str(media_path), progress_callback)
+
+                with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                    futures = [pool.submit(_gen_one, name, pr) for name, pr in tasks]
+                    for _ in as_completed(futures):
+                        pass
 
                 # Подсчитываем успешные генерации
                 try:
@@ -877,11 +904,15 @@ class CursorManager:
         # Пытаемся открыть Cursor
         if self.open_cursor_with_project(project_path):
             if auto_paste:
-                # Автоматическая вставка: ждём окно и жмём Ctrl+V
+                # Автоматическая вставка: активируем окно, ждём и жмём Ctrl+V затем Enter
                 try:
+                    # Переводим окно Cursor на передний план
+                    self._bring_cursor_window_to_front()
                     time.sleep(max(1, paste_delay))
                     if PYAUTOGUI_AVAILABLE:
                         pyautogui.hotkey('ctrl', 'v')
+                        time.sleep(0.1)
+                        pyautogui.press('enter')
                     else:
                         print("⚠️ pyautogui недоступен, автовставка невозможна")
                 except Exception as e:
@@ -890,3 +921,65 @@ class CursorManager:
             return True, "Cursor AI запущен успешно"
         else:
             return False, "Cursor AI не найден. Промпт скопирован в буфер обмена"
+
+    # ===== Windows helpers =====
+    def _bring_cursor_window_to_front(self) -> bool:
+        """Выводит окно Cursor на передний план (Windows). Возвращает True при успехе."""
+        try:
+            if platform.system().lower() != 'windows':
+                return False
+
+            user32 = ctypes.windll.user32
+
+            EnumWindows = user32.EnumWindows
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            IsWindowVisible = user32.IsWindowVisible
+            GetWindowTextLengthW = user32.GetWindowTextLengthW
+            GetWindowTextW = user32.GetWindowTextW
+            SetForegroundWindow = user32.SetForegroundWindow
+            ShowWindow = user32.ShowWindow
+            SetWindowPos = user32.SetWindowPos
+
+            SW_SHOW = 5
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+
+            target_hwnd = wintypes.HWND(0)
+
+            def enum_proc(hwnd, lParam):
+                try:
+                    if not IsWindowVisible(hwnd):
+                        return True
+                    length = GetWindowTextLengthW(hwnd)
+                    if length == 0:
+                        return True
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    GetWindowTextW(hwnd, buf, length + 1)
+                    title = buf.value or ""
+                    if 'cursor' in title.lower():
+                        nonlocal target_hwnd
+                        target_hwnd = hwnd
+                        return False  # нашли, прекращаем обход
+                except Exception:
+                    return True
+                return True
+
+            EnumWindows(EnumWindowsProc(enum_proc), 0)
+
+            if not target_hwnd.value:
+                return False
+
+            # Показать, поднять над всеми и вернуть нормальный z-order
+            ShowWindow(target_hwnd, SW_SHOW)
+            SetWindowPos(target_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
+            SetWindowPos(target_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
+            SetForegroundWindow(target_hwnd)
+            return True
+        except Exception as e:
+            try:
+                print(f"Ошибка активации окна Cursor: {e}")
+            except Exception:
+                pass
+            return False

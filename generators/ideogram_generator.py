@@ -23,13 +23,20 @@ class IdeogramGenerator:
         # Приоритет: явный ключ -> ENV; если ключ отсутствует — не генерируем изображения
         self.api_key = api_key or os.getenv("IDEOGRAM_API_KEY") or ""
         self.api_url = "https://api.ideogram.ai/v1/ideogram-v3/generate"
+        # Persistent session для keep-alive/пула соединений
+        self.session = requests.Session()
+        if self.api_key:
+            self.session.headers.update({
+                "Api-Key": self.api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            })
         self.headers = {"Api-Key": self.api_key} if self.api_key else {}
         self.silent_mode = silent_mode
         # Модель: v3 API всегда использует 3.0 Turbo
         self.model = (model or os.getenv("IDEOGRAM_MODEL") or "3.0 Turbo").strip()
-        # Magic Prompt: OFF | AUTO | ON (по умолчанию OFF)
-        # Magic Prompt — по умолчанию всегда ON, если явно не задано иное
-        mpo = (magic_prompt_option or os.getenv("IDEOGRAM_MAGIC_PROMPT_OPTION") or "ON").strip().upper()
+        # Magic Prompt: OFF | AUTO | ON — для скорости по умолчанию OFF (можно задать через ENV)
+        mpo = (magic_prompt_option or os.getenv("IDEOGRAM_MAGIC_PROMPT_OPTION") or "OFF").strip().upper()
         self.magic_prompt_option = mpo if mpo in ("OFF", "AUTO", "ON") else "ON"
         # Размер батча: по умолчанию 4 (2 запроса x 4 = 8), можно переопределить для диагностики
         try:
@@ -208,9 +215,16 @@ class IdeogramGenerator:
         safe_prompt = self._augment_prompt_no_text(prompt)
         
         # v3 API структура (без model параметра - всегда 3.0 Turbo)
+        # Нормализуем скорость к допустимым значениям API: TURBO | QUALITY
+        rs = (os.getenv("IDEOGRAM_RENDERING_SPEED", "TURBO").strip().upper())
+        if rs in ("FAST", "DEFAULT"):
+            rs = "TURBO" if rs == "FAST" else "QUALITY"
+        if rs not in ("TURBO", "QUALITY"):
+            rs = "TURBO"
+
         payload = {
             "prompt": safe_prompt,
-            "rendering_speed": "TURBO",
+            "rendering_speed": rs,
             "num_images": max(1, int(num_images)),
         }
         # Параметр улучшения промпта
@@ -221,8 +235,11 @@ class IdeogramGenerator:
             pass
         try:
             if self.debug_billing and not self.silent_mode:
-                print(f"[Ideogram] v3 API payload: {{'rendering_speed': 'TURBO', 'num_images': {payload['num_images']}}}")
-            resp = requests.post(self.api_url, headers=self.headers, json=payload, timeout=60)
+                try:
+                    print(f"[Ideogram] v3 API payload: { {'rendering_speed': payload['rendering_speed'], 'num_images': payload['num_images']} }")
+                except Exception:
+                    pass
+            resp = self.session.post(self.api_url, json=payload, timeout=45)
             if resp.status_code != 200:
                 if self.debug_billing and not self.silent_mode:
                     try:
@@ -240,10 +257,15 @@ class IdeogramGenerator:
                     print(f"[Ideogram] Response json keys: {keys}")
                 except Exception:
                     pass
-            items = data.get("data") or []
+            items = data.get("data") or data.get("images") or data.get("results") or []
             urls = []
             for item in items:
-                url = item.get("url") or item.get("image_url")
+                url = item.get("url") or item.get("image_url") or item.get("imageUrl")
+                if not url:
+                    try:
+                        url = (item.get("image") or {}).get("url")
+                    except Exception:
+                        url = None
                 if url:
                     urls.append(url)
             return urls
@@ -265,7 +287,7 @@ class IdeogramGenerator:
 
     def _download_image(self, url: str) -> Optional[Image.Image]:
         try:
-            r = requests.get(url, timeout=60)
+            r = self.session.get(url, timeout=45)
             if r.status_code != 200:
                 return None
             img = Image.open(BytesIO(r.content))
@@ -281,16 +303,65 @@ class IdeogramGenerator:
             img = image
             if img.mode == "RGBA":
                 img = img.convert("RGB")
-            # Подбираем качество, чтобы не превысить размер
-            for q in [85, 75, 65, 55, 45]:
-                img.save(filepath, format="JPEG", quality=q, optimize=True)
-                size_kb = os.path.getsize(filepath) / 1024
-                if size_kb <= target_size_kb:
-                    return True
-            # Если не получилось уложиться, оставляем последнее сохранение
+            # Быстрый путь: одно сохранение с разумным качеством, без optimize (ускоряет запись)
+            q = int(os.getenv("IDEOGRAM_JPEG_QUALITY", "75"))
+            img.save(filepath, format="JPEG", quality=max(40, min(95, q)))
             return True
         except Exception:
             return False
+
+    # Батч любой длины с заданными именами файлов
+    def generate_named_images(
+        self,
+        prompt: str,
+        media_dir: str,
+        names: List[str],
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> int:
+        output_path = Path(media_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        saved = 0
+        cursor = 0
+
+        total_needed = len(names)
+        batches: List[int] = []
+        remaining = total_needed
+        while remaining > 0:
+            take = min(self.num_images_per_request, remaining)
+            batches.append(take)
+            remaining -= take
+
+        for batch_index, batch_size in enumerate(batches):
+            self._notify(progress_callback, f"🎨 Ideogram: партия {batch_index + 1}/{len(batches)} ({batch_size} изображений)")
+            urls = self._request_image_urls(prompt, num_images=batch_size)
+            if not urls:
+                self._notify(progress_callback, "⚠️ Ideogram: не удалось получить ссылки изображений")
+                continue
+            for url in urls:
+                if cursor >= len(names):
+                    break
+                name = names[cursor]
+                try:
+                    img = self._download_image(url)
+                    if img is None:
+                        self._notify(progress_callback, f"⚠️ Не удалось загрузить изображение для {name}")
+                        cursor += 1
+                        continue
+                    out_file = output_path / (f"{name}.png" if name == "favicon" else f"{name}.jpg")
+                    if name == "favicon":
+                        if img.mode != "RGBA":
+                            img = img.convert("RGBA")
+                        img = img.resize((512, 512), Image.Resampling.LANCZOS)
+                        self._save_png(img, str(out_file))
+                    else:
+                        self._save_jpeg_under_size(img, str(out_file))
+                    saved += 1
+                    self._notify(progress_callback, f"✅ {name}: сохранено")
+                except Exception as e:
+                    self._notify(progress_callback, f"⚠️ Ошибка сохранения {name}: {e}")
+                finally:
+                    cursor += 1
+        return saved
 
     def _save_png(self, image: Image.Image, filepath: str) -> bool:
         try:

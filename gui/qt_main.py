@@ -112,7 +112,6 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		header = QtWidgets.QHBoxLayout()
 		header.setSpacing(8)
 		self.edit_prompt_btn = QtWidgets.QPushButton("✏️ Промпт")
-		self.reset_prompt_btn = QtWidgets.QPushButton("🔄 Сброс")
 		self.update_btn = QtWidgets.QPushButton("⬇️ Обновить")
 		self.settings_btn = QtWidgets.QPushButton("⚙️ Настройки")
 		self.grid_btn = QtWidgets.QPushButton("🧩 Сетка")
@@ -120,7 +119,6 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.create_btn = QtWidgets.QPushButton("🚀 СОЗДАТЬ ✨")
 		self.create_btn.setObjectName("PrimaryButton")
 		header.addWidget(self.edit_prompt_btn)
-		header.addWidget(self.reset_prompt_btn)
 		header.addWidget(self.update_btn)
 		header.addWidget(self.settings_btn)
 		header.addWidget(self.grid_btn)
@@ -275,7 +273,6 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 		# Signals
 		self.create_btn.clicked.connect(self._on_create)
-		self.reset_prompt_btn.clicked.connect(self._reset_prompt)
 		self.edit_prompt_btn.clicked.connect(self._edit_prompt)
 		# Кнопка обновления: всегда используем безопасное обновление исходников (как «патч»)
 		self.update_btn.clicked.connect(self._manual_check_updates)
@@ -894,25 +891,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.fav_btn.setText("⭐" if country in favs else "☆")
 
 	def _edit_prompt(self):
+		# Разрешаем редактировать промпт в любой момент: подставляем текущие значения, пустые допускаются
 		country = self.country_combo.currentText().strip()
 		theme = self.theme_combo.currentText().strip()
 		domain = self.domain_edit.text().strip()
-		city = self.city
-		if not theme or not country or not domain or not city:
-			QtWidgets.QMessageBox.warning(self, "Предупреждение", "Заполните тематику, страну, домен и сгенерируйте город")
-			return
-		language = self._get_effective_language_code(country)
-		prompt = create_landing_prompt(country, city, language, domain, theme)
+		city = self.city or ""
+		language = self._get_effective_language_code(country) if country else "en"
+		prompt = create_landing_prompt(country or "", city, language, domain or "", theme or "")
 		text, ok = QtWidgets.QInputDialog.getMultiLineText(self, "Редактирование промпта", "Промпт:", prompt)
 		if ok:
 			self._custom_prompt = text
 			self.settings.save_prompt(text)
 			QtWidgets.QMessageBox.information(self, "Готово", "Промпт сохранён")
 
-	def _reset_prompt(self):
-		self._custom_prompt = None
-		self.settings.save_prompt("")
-		QtWidgets.QMessageBox.information(self, "Готово", "Промпт сброшен")
+    # Метод сброса удалён
 
 	def _validate(self):
 		theme = self.theme_combo.currentText().strip()
@@ -1037,17 +1029,22 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Виджет пути перегенерации был удалён; больше не обновляем
 				language = params.get("language") or get_language_by_country(params["country"]) 
 				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"])
-				# Для грид-режима ничего не вставляем и не копируем; признак origin == 'grid'
+				# Автовставка и отправка разрешены и для грид-режима
 				origin = params.get("origin", "single")
-				do_copy = origin != "grid"
-				do_auto_paste = bool(params.get("auto_paste", False)) and origin != "grid"
-				if do_copy:
+				do_auto_paste = bool(self.settings.get_auto_paste_prompt())
+				# Задержка перед вставкой (сек), чтобы успел открыться Cursor
+				try:
+					paste_delay = max(1, int(os.getenv("CURSOR_AUTO_PASTE_DELAY", "4")))
+				except Exception:
+					paste_delay = 4
+				# Буфер обмена заполняем всегда, если включена автосенда
+				if do_auto_paste or origin != "grid":
 					try:
 						QtWidgets.QApplication.clipboard().setText(prompt)
 					except Exception:
 						pass
 				success, message = self.cursor_manager.open_project_and_paste_prompt(
-					project_path, prompt, None, auto_paste=do_auto_paste
+					project_path, prompt, None, auto_paste=do_auto_paste, paste_delay=paste_delay
 				)
 				QtCore.QMetaObject.invokeMethod(
 					self, "_show_create_done", QtCore.Qt.QueuedConnection,
@@ -1369,11 +1366,19 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 	@QtCore.Slot(str, str, str, str)
 	def _show_create_done(self, message: str, prompt: str, domain: str, theme: str):
+		# Не блокируем интерфейс всплывашкой, если включена автосенда в Cursor
+		try:
+			if bool(self.settings.get_auto_paste_prompt()):
+				self.status_label.setText(message)
+				return
+		except Exception:
+			pass
 		QtWidgets.QMessageBox.information(self, "Готово", message)
 		# сохранение истории — для многопоточности фиксируем текущее состояние домена/темы
 		try:
-			self.settings.add_theme_to_history(theme)
-			self.settings.add_landing_to_history(domain, prompt)
+			from shared.settings_manager import SettingsManager
+			sm = SettingsManager()
+			sm.add_history_item(domain, theme, prompt)
 		except Exception:
 			pass
 		self._load_initial_state()
