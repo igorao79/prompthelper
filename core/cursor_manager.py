@@ -12,15 +12,28 @@ import platform
 import ctypes
 from ctypes import wintypes
 from pathlib import Path
+from typing import Optional
 tk = None  # Tkinter больше не используется
 
 # Проверяем доступность pyautogui
 try:
     import pyautogui
+    try:
+        pyautogui.FAILSAFE = False
+        pyautogui.PAUSE = 0
+    except Exception:
+        pass
     PYAUTOGUI_AVAILABLE = True
 except ImportError:
     PYAUTOGUI_AVAILABLE = False
     print("⚠️ pyautogui недоступен, автовставка промптов отключена")
+
+# UI Automation (опционально)
+try:
+    import uiautomation as auto  # type: ignore
+    UIA_AVAILABLE = True
+except Exception:
+    UIA_AVAILABLE = False
 
 # Импорт для генерации изображений (Ideogram)
 try:
@@ -41,11 +54,18 @@ class CursorManager:
         ]
         self.cached_cursor_path = None  # Кэш найденного пути
         self.os_type = platform.system().lower()
+        self._preferred_window_hint = None  # подсказка для выбора нужного окна Cursor
         
         print(f"🖥️ Определена ОС: {self.os_type}")
         
         # Генерируем пути поиска в зависимости от ОС
         self.search_paths = self._get_platform_search_paths()
+
+    def set_window_hint(self, hint: str | None):
+        try:
+            self._preferred_window_hint = (hint or "").strip().lower() or None
+        except Exception:
+            self._preferred_window_hint = None
 
     def _get_platform_search_paths(self):
         """Получает пути поиска Cursor для текущей ОС"""
@@ -746,13 +766,72 @@ class CursorManager:
         """
         if PYAUTOGUI_AVAILABLE:
             try:
+                # Запоминаем текущую позицию курсора, чтобы вернуть её после автоматизации
+                try:
+                    original_pos = pyautogui.position()
+                except Exception:
+                    original_pos = None
                 # Пытаемся вывести окно Cursor на передний план перед вставкой
-                self._bring_cursor_window_to_front()
+                hwnd = self._bring_cursor_window_to_front()
                 time.sleep(max(0, delay_seconds))
-                pyautogui.hotkey('ctrl', 'v')
-                # После вставки — сразу отправляем
-                time.sleep(0.1)
-                pyautogui.press('enter')
+                # Небольшая стабилизационная пауза после фокуса окна
+                time.sleep(0.25)
+                # Нормализуем позицию/размер, если включено
+                try:
+                    if isinstance(hwnd, int) and hwnd != 0:
+                        self._normalize_window_rect(hwnd)
+                except Exception:
+                    pass
+                # Пробуем UIA сфокусировать поле ввода
+                focused = False
+                try:
+                    if isinstance(hwnd, int) and hwnd != 0:
+                        focused = self._focus_chat_via_uia(hwnd)
+                except Exception:
+                    focused = False
+                # Если не вышло — кликаем внутрь
+                if not focused:
+                    try:
+                        if os.getenv('CURSOR_CLICK_FOCUS', '1') == '1':
+                            if isinstance(hwnd, int) and hwnd != 0:
+                                self._click_input_area(hwnd)
+                    except Exception:
+                        pass
+                retries = 1
+                try:
+                    retries = max(1, int(os.getenv('CURSOR_PASTE_RETRIES', '1')))
+                except Exception:
+                    retries = 1
+                for i in range(retries):
+                    try:
+                        pyautogui.hotkey('ctrl', 'v')
+                        time.sleep(0.12)
+                        pyautogui.press('enter')
+                        # Небольшая пауза между попытками
+                        time.sleep(0.2)
+                    except Exception:
+                        pass
+                # Необязательный запасной вариант: напечатать текст напрямую
+                try:
+                    if os.getenv('CURSOR_TYPEWRITE_FALLBACK', '0') == '1':
+                        import pyperclip  # type: ignore
+                        text = pyperclip.paste()
+                        if text:
+                            pyautogui.typewrite(text, interval=0.001)
+                            time.sleep(0.1)
+                            pyautogui.press('enter')
+                except Exception:
+                    pass
+                # Возвращаем курсор мыши на исходную позицию для фиксации
+                try:
+                    if os.getenv('CURSOR_RESTORE_MOUSE', '1') == '1' and original_pos is not None:
+                        # Жёстко возвращаем через WinAPI, чтобы избежать инерции
+                        try:
+                            ctypes.windll.user32.SetCursorPos(int(original_pos.x), int(original_pos.y))
+                        except Exception:
+                            pyautogui.moveTo(original_pos.x, original_pos.y, duration=0)
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"Ошибка автовставки: {e}")
         else:
@@ -923,8 +1002,8 @@ class CursorManager:
             return False, "Cursor AI не найден. Промпт скопирован в буфер обмена"
 
     # ===== Windows helpers =====
-    def _bring_cursor_window_to_front(self) -> bool:
-        """Выводит окно Cursor на передний план (Windows). Возвращает True при успехе."""
+    def _bring_cursor_window_to_front(self) -> int | bool:
+        """Выводит окно Cursor на передний план (Windows). Возвращает hwnd при успехе или False."""
         try:
             if platform.system().lower() != 'windows':
                 return False
@@ -939,6 +1018,7 @@ class CursorManager:
             SetForegroundWindow = user32.SetForegroundWindow
             ShowWindow = user32.ShowWindow
             SetWindowPos = user32.SetWindowPos
+            GetWindowRect = user32.GetWindowRect
 
             SW_SHOW = 5
             HWND_TOPMOST = -1
@@ -946,7 +1026,9 @@ class CursorManager:
             SWP_NOSIZE = 0x0001
             SWP_NOMOVE = 0x0002
 
-            target_hwnd = wintypes.HWND(0)
+            target_hwnd = 0
+            fallback_hwnd = 0
+            preferred = (self._preferred_window_hint or "").lower()
 
             def enum_proc(hwnd, lParam):
                 try:
@@ -958,17 +1040,26 @@ class CursorManager:
                     buf = ctypes.create_unicode_buffer(length + 1)
                     GetWindowTextW(hwnd, buf, length + 1)
                     title = buf.value or ""
-                    if 'cursor' in title.lower():
+                    tl = title.lower()
+                    if 'cursor' in tl:
                         nonlocal target_hwnd
-                        target_hwnd = hwnd
-                        return False  # нашли, прекращаем обход
+                        nonlocal fallback_hwnd
+                        # Сохраняем первое встреченное как запасной вариант
+                        if not fallback_hwnd:
+                            fallback_hwnd = int(hwnd)
+                        # Если есть подсказка и она содержится в заголовке — это наш кандидат
+                        if preferred and preferred in tl:
+                            target_hwnd = int(hwnd)
+                            return False  # нашли лучший матч
                 except Exception:
                     return True
                 return True
 
             EnumWindows(EnumWindowsProc(enum_proc), 0)
 
-            if not target_hwnd.value:
+            if not target_hwnd:
+                target_hwnd = fallback_hwnd
+            if not target_hwnd:
                 return False
 
             # Показать, поднять над всеми и вернуть нормальный z-order
@@ -976,10 +1067,144 @@ class CursorManager:
             SetWindowPos(target_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
             SetWindowPos(target_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
             SetForegroundWindow(target_hwnd)
-            return True
+            return target_hwnd
         except Exception as e:
             try:
                 print(f"Ошибка активации окна Cursor: {e}")
             except Exception:
                 pass
+            return False
+
+    def _click_input_area(self, hwnd: int) -> bool:
+        """Делает клик по нижней части окна, чтобы сфокусировать поле ввода."""
+        try:
+            if platform.system().lower() != 'windows' or not hwnd:
+                return False
+            user32 = ctypes.windll.user32
+            rect = ctypes.wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return False
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            # 1) Пытаемся найти область чата по шаблону, если указана картинка
+            try:
+                template_path = os.getenv('CURSOR_CHAT_TEMPLATE')
+                if template_path and PYAUTOGUI_AVAILABLE:
+                    region = (left, top, right - left, bottom - top)
+                    found = pyautogui.locateOnScreen(template_path, region=region, confidence=float(os.getenv('CURSOR_CHAT_CONFIDENCE', '0.8')))
+                    if found:
+                        center = pyautogui.center(found)
+                        # Клик без перемещения мыши, если разрешено
+                        if os.getenv('CURSOR_HWND_CLICK', '1') == '1':
+                            self._send_click(hwnd, center.x, center.y)
+                        elif PYAUTOGUI_AVAILABLE:
+                            pyautogui.click(center.x, center.y)
+                        time.sleep(0.05)
+                        return True
+            except Exception:
+                pass
+            try:
+                # По умолчанию кликаем ближе к правой панели (чат справа)
+                default_x = max(10, int(os.getenv('CURSOR_CLICK_OFFSET_X', '300')))
+                # Если задан процент от ширины — используем его
+                perc = os.getenv('CURSOR_CLICK_X_PERCENT')
+                if perc is not None:
+                    p = max(1, min(99, int(perc)))
+                    off_x = int((right - left) * (p / 100.0))
+                else:
+                    off_x = (right - left) - default_x
+            except Exception:
+                off_x = (right - left) - 300
+            try:
+                off_y = max(10, int(os.getenv('CURSOR_CLICK_OFFSET_Y', '160')))
+            except Exception:
+                off_y = 160
+            x = left + off_x
+            y = bottom - off_y
+            # Клик без перемещения курсора через WinAPI (по умолчанию)
+            try:
+                if os.getenv('CURSOR_HWND_CLICK', '1') == '1':
+                    self._send_click(hwnd, x, y)
+                    time.sleep(0.05)
+                    return True
+            except Exception:
+                pass
+            # Фолбек — обычный клик
+            if PYAUTOGUI_AVAILABLE:
+                try:
+                    pyautogui.click(x, y)
+                    time.sleep(0.05)
+                    return True
+                except Exception:
+                    return False
+            return False
+        except Exception:
+            return False
+
+    def _normalize_window_rect(self, hwnd: int) -> None:
+        """Принудительно ставит окно Cursor в предсказуемое место/размер (по желанию)."""
+        try:
+            if platform.system().lower() != 'windows' or not hwnd:
+                return
+            # По умолчанию включено; можно отключить переменной окружения
+            if os.getenv('CURSOR_FORCE_WINDOW_RECT', '1') == '0':
+                return
+            user32 = ctypes.windll.user32
+            SM_CXSCREEN = 0
+            SM_CYSCREEN = 1
+            sw = user32.GetSystemMetrics(SM_CXSCREEN)
+            sh = user32.GetSystemMetrics(SM_CYSCREEN)
+            try:
+                x = int(os.getenv('CURSOR_WIN_X', '80'))
+                y = int(os.getenv('CURSOR_WIN_Y', '60'))
+                w = int(os.getenv('CURSOR_WIN_W', str(int(sw * 0.6))))
+                h = int(os.getenv('CURSOR_WIN_H', str(int(sh * 0.7))))
+            except Exception:
+                x, y, w, h = 80, 60, int(sw * 0.6), int(sh * 0.7)
+            user32.MoveWindow(hwnd, x, y, w, h, True)
+            time.sleep(0.05)
+        except Exception:
+            pass
+
+    def _send_click(self, hwnd: int, screen_x: int, screen_y: int) -> None:
+        """Отправляет WM_LBUTTONDOWN/UP по координатам окна без перемещения курсора."""
+        user32 = ctypes.windll.user32
+        pt = ctypes.wintypes.POINT(screen_x, screen_y)
+        user32.ScreenToClient(hwnd, ctypes.byref(pt))
+        x, y = pt.x, pt.y
+        WM_LBUTTONDOWN = 0x0201
+        WM_LBUTTONUP = 0x0202
+        MK_LBUTTON = 0x0001
+        lparam = (y << 16) | (x & 0xFFFF)
+        try:
+            user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+            time.sleep(0.02)
+            user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+        except Exception:
+            pass
+
+    def _focus_chat_via_uia(self, hwnd: int) -> bool:
+        """Пробует сфокусировать поле ввода чата через UI Automation (если доступно)."""
+        try:
+            if not UIA_AVAILABLE or platform.system().lower() != 'windows' or not hwnd:
+                return False
+            w = auto.ControlFromHandle(hwnd)
+            if not w:
+                return False
+            # Ищем Edit в окне — предпочтительно в правой панели
+            # Можно ограничить глубину; берём первый видимый активный Edit
+            edits = w.GetDescendants(controlType=auto.ControlType.Edit)
+            for ed in edits[::-1]:  # чаще нужный ниже по дереву
+                try:
+                    if ed.IsEnabled and ed.IsOffscreen is False:
+                        # По имени можно фильтровать через env
+                        name_hint = (os.getenv('CURSOR_EDIT_NAME_HINT', '') or '').strip().lower()
+                        if name_hint and name_hint not in (ed.Name or '').lower():
+                            continue
+                        ed.SetFocus()
+                        time.sleep(0.05)
+                        return True
+                except Exception:
+                    continue
+            return False
+        except Exception:
             return False
