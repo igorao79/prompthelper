@@ -10,6 +10,7 @@ import subprocess
 import time
 import platform
 import ctypes
+import threading
 from ctypes import wintypes
 from pathlib import Path
 from typing import Optional
@@ -35,6 +36,19 @@ try:
 except Exception:
     UIA_AVAILABLE = False
 
+# Опциональные зависимости для поиска по скриншоту
+try:
+    import cv2  # type: ignore
+    import numpy as np  # type: ignore
+    CV2_AVAILABLE = True
+except Exception:
+    CV2_AVAILABLE = False
+try:
+    from PIL import Image  # type: ignore
+    PIL_AVAILABLE = True
+except Exception:
+    PIL_AVAILABLE = False
+
 # Импорт для генерации изображений (Ideogram)
 try:
     from generators.ideogram_generator import IdeogramGenerator
@@ -55,6 +69,13 @@ class CursorManager:
         self.cached_cursor_path = None  # Кэш найденного пути
         self.os_type = platform.system().lower()
         self._preferred_window_hint = None  # подсказка для выбора нужного окна Cursor
+        # Троттлинг между запусками окон Cursor
+        try:
+            self._launch_interval_sec = float(os.getenv("CURSOR_LAUNCH_INTERVAL_SEC", "3.0"))
+        except Exception:
+            self._launch_interval_sec = 3.0
+        self._launch_lock = threading.Lock()
+        self._last_launch_monotonic = 0.0
         
         print(f"🖥️ Определена ОС: {self.os_type}")
         
@@ -514,6 +535,9 @@ class CursorManager:
         Returns:
             bool: True если успешно, False иначе
         """
+        # Троттлинг перед запуском нового окна Cursor
+        self._throttle_before_launch()
+
         cursor_exe = self.find_cursor_executable()
         
         if not cursor_exe:
@@ -773,6 +797,11 @@ class CursorManager:
                     original_pos = None
                 # Пытаемся вывести окно Cursor на передний план перед вставкой
                 hwnd = self._bring_cursor_window_to_front()
+                # Гарантируем разворачивание и активность окна перед действиями
+                try:
+                    self._ensure_window_active(hwnd, timeout_s=max(1.0, float(os.getenv('CURSOR_ACTIVATE_TIMEOUT', '2.0'))))
+                except Exception:
+                    pass
                 time.sleep(max(0, delay_seconds))
                 # Небольшая стабилизационная пауза после фокуса окна
                 time.sleep(0.25)
@@ -1019,8 +1048,10 @@ class CursorManager:
             ShowWindow = user32.ShowWindow
             SetWindowPos = user32.SetWindowPos
             GetWindowRect = user32.GetWindowRect
+            IsIconic = user32.IsIconic
 
             SW_SHOW = 5
+            SW_RESTORE = 9
             HWND_TOPMOST = -1
             HWND_NOTOPMOST = -2
             SWP_NOSIZE = 0x0001
@@ -1062,8 +1093,11 @@ class CursorManager:
             if not target_hwnd:
                 return False
 
-            # Показать, поднять над всеми и вернуть нормальный z-order
-            ShowWindow(target_hwnd, SW_SHOW)
+            # Восстановить из свернутого состояния, показать и поднять над всеми
+            if IsIconic(target_hwnd):
+                ShowWindow(target_hwnd, SW_RESTORE)
+            else:
+                ShowWindow(target_hwnd, SW_SHOW)
             SetWindowPos(target_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
             SetWindowPos(target_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
             SetForegroundWindow(target_hwnd)
@@ -1085,21 +1119,35 @@ class CursorManager:
             if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
                 return False
             left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            # Если окно свернуто или вынесено за экран (типичный -32000), клики запрещаем
+            if left <= -32000 or top <= -32000 or (right - left) < 100 or (bottom - top) < 100:
+                return False
             # 1) Пытаемся найти область чата по шаблону, если указана картинка
             try:
                 template_path = os.getenv('CURSOR_CHAT_TEMPLATE')
-                if template_path and PYAUTOGUI_AVAILABLE:
-                    region = (left, top, right - left, bottom - top)
-                    found = pyautogui.locateOnScreen(template_path, region=region, confidence=float(os.getenv('CURSOR_CHAT_CONFIDENCE', '0.8')))
-                    if found:
-                        center = pyautogui.center(found)
-                        # Клик без перемещения мыши, если разрешено
+                if template_path:
+                    # Сначала пробуем более устойчивый CV2 мульти-масштабный поиск внутри окна
+                    pt = self._locate_in_window_by_template(hwnd, template_path, (left, top, right, bottom))
+                    if pt is not None:
+                        cx, cy = pt
                         if os.getenv('CURSOR_HWND_CLICK', '1') == '1':
-                            self._send_click(hwnd, center.x, center.y)
+                            self._send_click(hwnd, int(cx), int(cy))
                         elif PYAUTOGUI_AVAILABLE:
-                            pyautogui.click(center.x, center.y)
+                            pyautogui.click(int(cx), int(cy))
                         time.sleep(0.05)
                         return True
+                    # Фолбек: стандартный pyautogui.locateOnScreen по региону окна
+                    if PYAUTOGUI_AVAILABLE:
+                        region = (left, top, right - left, bottom - top)
+                        found = pyautogui.locateOnScreen(template_path, region=region, confidence=float(os.getenv('CURSOR_CHAT_CONFIDENCE', '0.8')))
+                        if found:
+                            center = pyautogui.center(found)
+                            if os.getenv('CURSOR_HWND_CLICK', '1') == '1':
+                                self._send_click(hwnd, center.x, center.y)
+                            else:
+                                pyautogui.click(center.x, center.y)
+                            time.sleep(0.05)
+                            return True
             except Exception:
                 pass
             try:
@@ -1149,6 +1197,12 @@ class CursorManager:
             if os.getenv('CURSOR_FORCE_WINDOW_RECT', '1') == '0':
                 return
             user32 = ctypes.windll.user32
+            # Перед перемещением гарантируем разворачивание окна
+            try:
+                if user32.IsIconic(hwnd):
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            except Exception:
+                pass
             SM_CXSCREEN = 0
             SM_CYSCREEN = 1
             sw = user32.GetSystemMetrics(SM_CXSCREEN)
@@ -1208,3 +1262,118 @@ class CursorManager:
             return False
         except Exception:
             return False
+
+    def _ensure_window_active(self, hwnd: int | bool, timeout_s: float = 2.0) -> bool:
+        """Ждёт, пока окно будет развернуто и станет активным (Windows)."""
+        try:
+            if platform.system().lower() != 'windows' or not isinstance(hwnd, int) or hwnd == 0:
+                return False
+            user32 = ctypes.windll.user32
+            start = time.time()
+            while time.time() - start < max(0.2, timeout_s):
+                try:
+                    # Если свернуто — разворачиваем
+                    if user32.IsIconic(hwnd):
+                        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                        time.sleep(0.05)
+                    # Поднимаем
+                    user32.SetForegroundWindow(hwnd)
+                except Exception:
+                    pass
+                time.sleep(0.05)
+                try:
+                    fg = user32.GetForegroundWindow()
+                    if int(fg) == int(hwnd):
+                        return True
+                except Exception:
+                    pass
+            return False
+        except Exception:
+            return False
+
+    def _throttle_before_launch(self) -> None:
+        """Обеспечивает паузу между запусками окон Cursor (по умолчанию 3 сек)."""
+        try:
+            with self._launch_lock:
+                now = time.monotonic()
+                elapsed = now - self._last_launch_monotonic
+                wait_for = self._launch_interval_sec - elapsed
+                if wait_for > 0:
+                    time.sleep(wait_for)
+                # фиксируем момент запуска, чтобы следующие ждали интервал
+                self._last_launch_monotonic = time.monotonic()
+        except Exception:
+            pass
+
+    def _locate_in_window_by_template(self, hwnd: int, template_path: str, rect_tuple: tuple[int, int, int, int]) -> tuple[int, int] | None:
+        """Ищет шаблон внутри окна Cursor по скриншоту окна. Возвращает центр (screen_x, screen_y) или None.
+        Использует OpenCV multi-scale matchTemplate при наличии, иначе None.
+        """
+        try:
+            if not CV2_AVAILABLE:
+                return None
+            left, top, right, bottom = rect_tuple
+            w = right - left
+            h = bottom - top
+            if w <= 0 or h <= 0:
+                return None
+            # Скриншот только области окна
+            screen_img = self._screenshot_region(left, top, w, h)
+            if screen_img is None:
+                return None
+            tpl = cv2.imread(template_path, cv2.IMREAD_COLOR)
+            if tpl is None:
+                return None
+            img = cv2.cvtColor(screen_img, cv2.COLOR_RGBA2RGB)
+            conf = 0.8
+            try:
+                conf = float(os.getenv('CURSOR_CHAT_CONFIDENCE', '0.8'))
+            except Exception:
+                conf = 0.8
+            # Масштабы можно задать через переменную окружения
+            scales_env = os.getenv('CURSOR_CHAT_SCALES', '')
+            scales = []
+            if scales_env:
+                try:
+                    scales = [max(0.5, min(2.0, float(s.strip()))) for s in scales_env.split(',') if s.strip()]
+                except Exception:
+                    scales = []
+            if not scales:
+                scales = [0.75, 0.85, 1.0, 1.15, 1.25]
+            best_val = -1.0
+            best_pt = None
+            th, tw = tpl.shape[:2]
+            for s in scales:
+                try:
+                    tpl_s = cv2.resize(tpl, (max(1, int(tw * s)), max(1, int(th * s))), interpolation=cv2.INTER_AREA)
+                    res = cv2.matchTemplate(img, tpl_s, cv2.TM_CCOEFF_NORMED)
+                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                    if max_val > best_val:
+                        best_val = max_val
+                        best_pt = (max_loc[0] + tpl_s.shape[1] // 2, max_loc[1] + tpl_s.shape[0] // 2)
+                except Exception:
+                    continue
+            if best_pt is not None and best_val >= conf:
+                cx = left + int(best_pt[0])
+                cy = top + int(best_pt[1])
+                return cx, cy
+            return None
+        except Exception:
+            return None
+
+    def _screenshot_region(self, x: int, y: int, w: int, h: int):
+        """Скриншот области экрана. Возвращает numpy array RGBA или None."""
+        try:
+            if PYAUTOGUI_AVAILABLE:
+                im = pyautogui.screenshot(region=(x, y, w, h))
+                return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2RGBA)
+        except Exception:
+            pass
+        try:
+            if PIL_AVAILABLE:
+                from PIL import ImageGrab  # type: ignore
+                im = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+                return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2RGBA)
+        except Exception:
+            pass
+        return None
