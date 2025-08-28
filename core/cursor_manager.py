@@ -835,6 +835,60 @@ class CursorManager:
                         focused = self._focus_chat_via_uia(hwnd)
                 except Exception:
                     focused = False
+                # Если удалось сфокусировать через UIA и доступны методы ввода — сразу вставляем через UIA
+                if focused and UIA_AVAILABLE:
+                    try:
+                        # Попытка найти активный Edit и вставить напрямую через ValuePattern
+                        w = auto.ControlFromHandle(hwnd)
+                        if w:
+                            edit = None
+                            edits = w.GetDescendants(controlType=auto.ControlType.Edit)
+                            for ed in edits[::-1]:
+                                try:
+                                    if ed.IsEnabled and ed.IsOffscreen is False:
+                                        edit = ed
+                                        break
+                                except Exception:
+                                    continue
+                            if edit:
+                                # Текст для вставки берём из буфера, т.к. сюда попадает актуальный промпт (загружается в вызывающем коде)
+                                # Если нужно вставить из параметра — можно переделать сигнатуру и хранить буфер в self.
+                                try:
+                                    # Попытаемся прочитать из буфера и вставить
+                                    import pyperclip  # type: ignore
+                                    text = pyperclip.paste()
+                                except Exception:
+                                    text = None
+                                if text:
+                                    try:
+                                        vp = edit.GetValuePattern()
+                                        if vp is not None:
+                                            try:
+                                                # Очищаем и устанавливаем значения
+                                                vp.SetValue("")
+                                                time.sleep(0.02)
+                                                vp.SetValue(text)
+                                            except Exception:
+                                                # Фолбек через SendKeys к активному Edit
+                                                auto.SendKeys("^a")
+                                                time.sleep(0.02)
+                                                auto.SendKeys(text)
+                                        else:
+                                            # Если ValuePattern нет, пробуем SendKeys
+                                            auto.SendKeys("^a")
+                                            time.sleep(0.02)
+                                            auto.SendKeys(text)
+                                        # Enter при необходимости
+                                        try:
+                                            if os.getenv('CURSOR_SEND_ENTER', '1') == '1':
+                                                auto.SendKeys("{ENTER}")
+                                        except Exception:
+                                            pass
+                                        return True
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
                 # Если не вышло — кликаем внутрь
                 if not focused:
                     try:
@@ -848,38 +902,25 @@ class CursorManager:
                     retries = max(1, int(os.getenv('CURSOR_PASTE_RETRIES', '1')))
                 except Exception:
                     retries = 1
-                for i in range(retries):
+                # Несколько попыток вставки через буфер обмена
+                for _ in range(retries):
                     try:
                         pyautogui.hotkey('ctrl', 'v')
-                        time.sleep(0.12)
-                        pyautogui.press('enter')
-                        # Небольшая пауза между попытками
-                        time.sleep(0.2)
-                    except Exception:
-                        pass
-                # Необязательный запасной вариант: напечатать текст напрямую
-                try:
-                    if os.getenv('CURSOR_TYPEWRITE_FALLBACK', '0') == '1':
-                        import pyperclip  # type: ignore
-                        text = pyperclip.paste()
-                        if text:
-                            pyautogui.typewrite(text, interval=0.001)
-                            time.sleep(0.1)
+                        time.sleep(0.02)
+                        if os.getenv('CURSOR_SEND_ENTER', '1') == '1':
                             pyautogui.press('enter')
-                except Exception:
-                    pass
-                # Возвращаем курсор мыши на исходную позицию для фиксации
+                        break
+                    except Exception:
+                        time.sleep(0.1)
+                # Возвращаем курсор
                 try:
-                    if os.getenv('CURSOR_RESTORE_MOUSE', '1') == '1' and original_pos is not None:
-                        # Жёстко возвращаем через WinAPI, чтобы избежать инерции
-                        try:
-                            ctypes.windll.user32.SetCursorPos(int(original_pos.x), int(original_pos.y))
-                        except Exception:
-                            pyautogui.moveTo(original_pos.x, original_pos.y, duration=0)
+                    if original_pos is not None:
+                        pyautogui.moveTo(original_pos.x, original_pos.y, duration=0)
                 except Exception:
                     pass
-            except Exception as e:
-                print(f"Ошибка автовставки: {e}")
+                return True
+            except Exception:
+                return False
         else:
             print("Автовставка промптов отключена из-за отсутствия pyautogui")
     
