@@ -16,6 +16,23 @@ from pathlib import Path
 from typing import Optional
 tk = None  # Tkinter больше не используется
 
+# Включаем DPI-осведомленность процесса (важно для корректных координат в EXE)
+if platform.system().lower() == 'windows':
+    try:
+        # PER_MONITOR_AWARE_V2 (лучше для мульти-DPI); может отсутствовать на ранних версиях
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+    except Exception:
+        try:
+            # Per-Monitor DPI Awareness (Win8.1+)
+            shcore = ctypes.windll.shcore
+            shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                # System DPI Awareness (fallback)
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
 # Проверяем доступность pyautogui
 try:
     import pyautogui
@@ -1222,17 +1239,90 @@ class CursorManager:
     def _send_click(self, hwnd: int, screen_x: int, screen_y: int) -> None:
         """Отправляет WM_LBUTTONDOWN/UP по координатам окна без перемещения курсора."""
         user32 = ctypes.windll.user32
-        pt = ctypes.wintypes.POINT(screen_x, screen_y)
-        user32.ScreenToClient(hwnd, ctypes.byref(pt))
-        x, y = pt.x, pt.y
+        pt_screen = ctypes.wintypes.POINT(screen_x, screen_y)
+        # Определяем наиболее глубокое дочернее окно под точкой
+        try:
+            child_hwnd = user32.WindowFromPoint(pt_screen)
+        except Exception:
+            child_hwnd = 0
+        target_hwnd = child_hwnd if child_hwnd else hwnd
+        # Переводим координаты в клиентские координаты target_hwnd
+        pt_client = ctypes.wintypes.POINT(screen_x, screen_y)
+        try:
+            user32.ScreenToClient(target_hwnd, ctypes.byref(pt_client))
+        except Exception:
+            # если не удалось — пробуем для главного окна
+            try:
+                user32.ScreenToClient(hwnd, ctypes.byref(pt_client))
+                target_hwnd = hwnd
+            except Exception:
+                pt_client = ctypes.wintypes.POINT(0, 0)
+                target_hwnd = hwnd
+        x, y = pt_client.x, pt_client.y
         WM_LBUTTONDOWN = 0x0201
         WM_LBUTTONUP = 0x0202
         MK_LBUTTON = 0x0001
         lparam = (y << 16) | (x & 0xFFFF)
         try:
-            user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+            user32.PostMessageW(target_hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
             time.sleep(0.02)
-            user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+            user32.PostMessageW(target_hwnd, WM_LBUTTONUP, 0, lparam)
+            return
+        except Exception:
+            pass
+        # Фолбек: имитация клика через SendInput с возвратом курсора на место
+        try:
+            if os.getenv('CURSOR_FORCE_SENDINPUT', '1') == '1':
+                self._send_click_via_sendinput(screen_x, screen_y)
+        except Exception:
+            pass
+
+    def _send_click_via_sendinput(self, screen_x: int, screen_y: int) -> None:
+        """Выполняет клик через SendInput по абсолютным координатам и возвращает курсор на место."""
+        try:
+            if platform.system().lower() != 'windows':
+                return
+            user32 = ctypes.windll.user32
+            # Сохраняем позицию
+            orig_pt = ctypes.wintypes.POINT()
+            user32.GetCursorPos(ctypes.byref(orig_pt))
+            sw = user32.GetSystemMetrics(0)
+            sh = user32.GetSystemMetrics(1)
+            # Преобразуем в абсолютные координаты (0..65535)
+            abs_x = int(screen_x * 65535 / max(1, sw - 1))
+            abs_y = int(screen_y * 65535 / max(1, sh - 1))
+
+            class MOUSEINPUT(ctypes.Structure):
+                _fields_ = (
+                    ("dx", wintypes.LONG),
+                    ("dy", wintypes.LONG),
+                    ("mouseData", wintypes.DWORD),
+                    ("dwFlags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                )
+
+            class INPUT(ctypes.Structure):
+                _fields_ = (("type", wintypes.DWORD), ("mi", MOUSEINPUT))
+
+            MOUSEEVENTF_MOVE = 0x0001
+            MOUSEEVENTF_ABSOLUTE = 0x8000
+            MOUSEEVENTF_LEFTDOWN = 0x0002
+            MOUSEEVENTF_LEFTUP = 0x0004
+
+            def send(mi: MOUSEINPUT):
+                inp = INPUT(type=0, mi=mi)
+                ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+
+            # Перемещаем, кликаем, возвращаем
+            send(MOUSEINPUT(abs_x, abs_y, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, 0, None))
+            time.sleep(0.01)
+            send(MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, None))
+            time.sleep(0.01)
+            send(MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, None))
+            time.sleep(0.01)
+            # Возврат курсора
+            user32.SetCursorPos(orig_pt.x, orig_pt.y)
         except Exception:
             pass
 
@@ -1269,6 +1359,7 @@ class CursorManager:
             if platform.system().lower() != 'windows' or not isinstance(hwnd, int) or hwnd == 0:
                 return False
             user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
             start = time.time()
             while time.time() - start < max(0.2, timeout_s):
                 try:
@@ -1276,8 +1367,15 @@ class CursorManager:
                     if user32.IsIconic(hwnd):
                         user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                         time.sleep(0.05)
-                    # Поднимаем
-                    user32.SetForegroundWindow(hwnd)
+                    # Поднимаем с привязкой ввода потоков (повышает шанс сфокусировать)
+                    try:
+                        current_tid = kernel32.GetCurrentThreadId()
+                        target_tid = user32.GetWindowThreadProcessId(hwnd, None)
+                        user32.AttachThreadInput(current_tid, target_tid, True)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.AttachThreadInput(current_tid, target_tid, False)
+                    except Exception:
+                        user32.SetForegroundWindow(hwnd)
                 except Exception:
                     pass
                 time.sleep(0.05)
