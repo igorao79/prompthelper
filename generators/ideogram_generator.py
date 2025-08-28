@@ -14,6 +14,7 @@ from typing import Callable, List, Optional, Tuple
 
 import requests
 from PIL import Image
+import random
 
 
 class IdeogramGenerator:
@@ -45,6 +46,20 @@ class IdeogramGenerator:
             self.num_images_per_request = 4
         # Отладка биллинга/запросов
         self.debug_billing = str(os.getenv("IDEOGRAM_DEBUG_BILLING", "0")).lower() in ("1", "true", "yes")
+        # Ретраи HTTP
+        try:
+            self.max_http_retries = max(1, int(os.getenv("IDEOGRAM_HTTP_RETRIES", "4")))
+        except Exception:
+            self.max_http_retries = 4
+        try:
+            self.http_backoff_base = max(0.25, float(os.getenv("IDEOGRAM_BACKOFF_BASE", "1.5")))
+        except Exception:
+            self.http_backoff_base = 1.5
+        try:
+            self.http_backoff_cap = max(1.0, float(os.getenv("IDEOGRAM_BACKOFF_CAP", "12")))
+        except Exception:
+            self.http_backoff_cap = 12.0
+        self.retry_statuses = {429, 500, 502, 503, 504}
 
     def generate_eight_images(
         self,
@@ -233,44 +248,62 @@ class IdeogramGenerator:
                 payload["magic_prompt_option"] = self.magic_prompt_option
         except Exception:
             pass
-        try:
-            if self.debug_billing and not self.silent_mode:
-                try:
-                    print(f"[Ideogram] v3 API payload: { {'rendering_speed': payload['rendering_speed'], 'num_images': payload['num_images']} }")
-                except Exception:
-                    pass
-            resp = self.session.post(self.api_url, json=payload, timeout=45)
-            if resp.status_code != 200:
+        attempt = 0
+        while attempt < self.max_http_retries:
+            attempt += 1
+            try:
                 if self.debug_billing and not self.silent_mode:
                     try:
-                        print(f"[Ideogram] HTTP {resp.status_code}. Body: {resp.text[:500]}")
+                        print(f"[Ideogram] v3 payload: speed={payload['rendering_speed']} num={payload['num_images']} try={attempt}/{self.max_http_retries}")
                     except Exception:
                         pass
-                return []
-            data = resp.json() or {}
-            if self.debug_billing and not self.silent_mode:
-                try:
-                    # Выведем ключевые заголовки/поля для сверки тарифа
-                    interesting_headers = {k: v for k, v in resp.headers.items() if k.lower().startswith(('x-', 'rate', 'billing', 'cost'))}
-                    print(f"[Ideogram] Response headers (partial): {interesting_headers}")
-                    keys = list(data.keys())
-                    print(f"[Ideogram] Response json keys: {keys}")
-                except Exception:
-                    pass
-            items = data.get("data") or data.get("images") or data.get("results") or []
-            urls = []
-            for item in items:
-                url = item.get("url") or item.get("image_url") or item.get("imageUrl")
-                if not url:
+                resp = self.session.post(self.api_url, json=payload, timeout=45)
+                if resp.status_code != 200:
+                    if self.debug_billing and not self.silent_mode:
+                        try:
+                            print(f"[Ideogram] HTTP {resp.status_code}. Body: {resp.text[:300]}")
+                        except Exception:
+                            pass
+                    if resp.status_code in self.retry_statuses and attempt < self.max_http_retries:
+                        delay = min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempt - 1)))
+                        delay += random.uniform(0, 0.3)
+                        time.sleep(delay)
+                        continue
+                    return []
+                data = resp.json() or {}
+                if self.debug_billing and not self.silent_mode:
                     try:
-                        url = (item.get("image") or {}).get("url")
+                        interesting_headers = {k: v for k, v in resp.headers.items() if k.lower().startswith(('x-', 'rate', 'billing', 'cost'))}
+                        print(f"[Ideogram] Resp hdr (partial): {interesting_headers}")
+                        keys = list(data.keys())
+                        print(f"[Ideogram] Resp keys: {keys}")
                     except Exception:
-                        url = None
-                if url:
-                    urls.append(url)
-            return urls
-        except Exception:
-            return []
+                        pass
+                items = data.get("data") or data.get("images") or data.get("results") or []
+                urls = []
+                for item in items:
+                    url = item.get("url") or item.get("image_url") or item.get("imageUrl")
+                    if not url:
+                        try:
+                            url = (item.get("image") or {}).get("url")
+                        except Exception:
+                            url = None
+                    if url:
+                        urls.append(url)
+                if urls:
+                    return urls
+                # Пустые urls — пробуем один раз повторить (на случай отложенной готовности)
+                if attempt < self.max_http_retries:
+                    time.sleep(min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempt - 1))))
+                    continue
+                return []
+            except Exception:
+                if attempt < self.max_http_retries:
+                    delay = min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempt - 1)))
+                    delay += random.uniform(0, 0.3)
+                    time.sleep(delay)
+                    continue
+                return []
 
     def _augment_prompt_no_text(self, prompt: str) -> str:
         try:
@@ -286,17 +319,29 @@ class IdeogramGenerator:
             return prompt
 
     def _download_image(self, url: str) -> Optional[Image.Image]:
-        try:
-            r = self.session.get(url, timeout=45)
-            if r.status_code != 200:
+        attempt = 0
+        while attempt < self.max_http_retries:
+            attempt += 1
+            try:
+                r = self.session.get(url, timeout=45)
+                if r.status_code != 200:
+                    if r.status_code in self.retry_statuses and attempt < self.max_http_retries:
+                        delay = min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempt - 1)))
+                        delay += random.uniform(0, 0.3)
+                        time.sleep(delay)
+                        continue
+                    return None
+                img = Image.open(BytesIO(r.content))
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
+                return img
+            except Exception:
+                if attempt < self.max_http_retries:
+                    delay = min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempt - 1)))
+                    delay += random.uniform(0, 0.3)
+                    time.sleep(delay)
+                    continue
                 return None
-            img = Image.open(BytesIO(r.content))
-            # Приводим к RGB для JPEG-сохранения при необходимости
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGB")
-            return img
-        except Exception:
-            return None
 
     def _save_jpeg_under_size(self, image: Image.Image, filepath: str, target_size_kb: int = 150) -> bool:
         try:
