@@ -798,7 +798,7 @@ class CursorManager:
 
         return False
     
-    def auto_paste_prompt(self, delay_seconds=3):
+    def auto_paste_prompt(self, delay_seconds=5):
         """
         Автоматически вставляет промпт в Cursor AI
         
@@ -819,7 +819,12 @@ class CursorManager:
                     self._ensure_window_active(hwnd, timeout_s=max(1.0, float(os.getenv('CURSOR_ACTIVATE_TIMEOUT', '2.0'))))
                 except Exception:
                     pass
-                time.sleep(max(0, delay_seconds))
+                # Даём окну прогрузиться перед вставкой
+                try:
+                    env_delay = int(os.getenv('CURSOR_PASTE_DELAY_SEC', str(delay_seconds)))
+                except Exception:
+                    env_delay = delay_seconds
+                time.sleep(max(0, env_delay))
                 # Небольшая стабилизационная пауза после фокуса окна
                 time.sleep(0.25)
                 # Нормализуем позицию/размер, если включено
@@ -828,13 +833,20 @@ class CursorManager:
                         self._normalize_window_rect(hwnd)
                 except Exception:
                     pass
-                # Пробуем UIA сфокусировать поле ввода
+                # Сначала пробуем найти плейсхолдер чата и кликнуть по нему (точный таргет)
                 focused = False
                 try:
                     if isinstance(hwnd, int) and hwnd != 0:
-                        focused = self._focus_chat_via_uia(hwnd)
+                        focused = self._focus_chat_by_placeholder(hwnd)
                 except Exception:
                     focused = False
+                # Если не удалось — пробуем сфокусировать поле ввода через UIA по типу Edit
+                if not focused:
+                    try:
+                        if isinstance(hwnd, int) and hwnd != 0:
+                            focused = self._focus_chat_via_uia(hwnd)
+                    except Exception:
+                        focused = False
                 # Если удалось сфокусировать через UIA и доступны методы ввода — сразу вставляем через UIA
                 if focused and UIA_AVAILABLE:
                     try:
@@ -897,21 +909,17 @@ class CursorManager:
                                 self._click_input_area(hwnd)
                     except Exception:
                         pass
-                retries = 1
+                # Задержка перед вставкой уже выполнена выше; просто вставляем
+                # Вставка через буфер обмена
+                                # Задержка перед вставкой уже выполнена выше; просто вставляем
+                # Вставка через буфер обмена
                 try:
-                    retries = max(1, int(os.getenv('CURSOR_PASTE_RETRIES', '1')))
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.02)
+                    if os.getenv('CURSOR_SEND_ENTER', '1') == '1':
+                        pyautogui.press('enter')
                 except Exception:
-                    retries = 1
-                # Несколько попыток вставки через буфер обмена
-                for _ in range(retries):
-                    try:
-                        pyautogui.hotkey('ctrl', 'v')
-                        time.sleep(0.02)
-                        if os.getenv('CURSOR_SEND_ENTER', '1') == '1':
-                            pyautogui.press('enter')
-                        break
-                    except Exception:
-                        time.sleep(0.1)
+                    time.sleep(0.1)
                 # Возвращаем курсор
                 try:
                     if original_pos is not None:
@@ -1021,7 +1029,7 @@ class CursorManager:
                     futures = [pool.submit(_gen_one, name, pr) for name, pr in tasks]
                     for _ in as_completed(futures):
                         pass
-
+                
                 # Подсчитываем успешные генерации
                 try:
                     files = list(media_path.glob("*.jpg")) + list(media_path.glob("*.png"))
@@ -1394,6 +1402,60 @@ class CursorManager:
         except Exception:
             return False
 
+    def _focus_chat_by_placeholder(self, hwnd: int) -> bool:
+        """Находит поле ввода по плейсхолдеру "Plan, search, build anything" и кликает по центру."""
+        try:
+            if not UIA_AVAILABLE or platform.system().lower() != 'windows' or not hwnd:
+                return False
+            w = auto.ControlFromHandle(hwnd)
+            if not w:
+                return False
+            # Тексты-подсказки, по которым можно найти чат
+            phints = [
+                os.getenv('CURSOR_CHAT_PLACEHOLDER', 'Plan, search, build anything').strip(),
+                'Plan, search, build anything',
+            ]
+            # Обход всех Text/Edit для поиска совпадений по Name/LegacyIAccessibleName/Value/HelpText
+            candidates = w.GetDescendants()
+            for c in candidates:
+                try:
+                    name = (c.Name or '').strip()
+                    if not name and hasattr(c, 'LegacyIAccessiblePattern'):
+                        try:
+                            name = (c.LegacyIAccessiblePattern.Value or '').strip()
+                        except Exception:
+                            pass
+                    if not name and hasattr(c, 'GetValuePattern'):
+                        try:
+                            vp = c.GetValuePattern()
+                            if vp is not None:
+                                name = (vp.Value or '').strip()
+                        except Exception:
+                            pass
+                    if name:
+                        for p in phints:
+                            if p and p.lower() in name.lower():
+                                try:
+                                    rect = c.BoundingRectangle
+                                    # BoundingRectangle: (l, t, r, b)
+                                    l, t, r, b = int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+                                    if r > l and b > t:
+                                        cx = l + (r - l) // 2
+                                        cy = t + (b - t) // 2
+                                        if os.getenv('CURSOR_HWND_CLICK', '1') == '1':
+                                            self._send_click(hwnd, cx, cy)
+                                        elif PYAUTOGUI_AVAILABLE:
+                                            pyautogui.click(cx, cy)
+                                        time.sleep(0.05)
+                                        return True
+                                except Exception:
+                                    continue
+                except Exception:
+                    continue
+            return False
+        except Exception:
+            return False
+
     def _ensure_window_active(self, hwnd: int | bool, timeout_s: float = 2.0) -> bool:
         """Ждёт, пока окно будет развернуто и станет активным (Windows)."""
         try:
@@ -1441,6 +1503,13 @@ class CursorManager:
                     time.sleep(wait_for)
                 # фиксируем момент запуска, чтобы следующие ждали интервал
                 self._last_launch_monotonic = time.monotonic()
+                # Дополнительная пауза перед открытием следующего окна для стабильности загрузки UI
+                try:
+                    extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '3.0'))
+                except Exception:
+                    extra_gap = 3.0
+                if extra_gap > 0:
+                    time.sleep(extra_gap)
         except Exception:
             pass
 
