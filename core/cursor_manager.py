@@ -96,18 +96,20 @@ class CursorManager:
         self.cached_cursor_path = None  # Кэш найденного пути
         self.os_type = platform.system().lower()
         self._preferred_window_hint = None  # подсказка для выбора нужного окна Cursor
-        # Троттлинг между запусками окон Cursor
-        try:
-            self._launch_interval_sec = float(os.getenv("CURSOR_LAUNCH_INTERVAL_SEC", "3.0"))
-        except Exception:
-            self._launch_interval_sec = 3.0
-        self._launch_lock = threading.Lock()
-        self._last_launch_monotonic = 0.0
-        
         # Проверяем, запущен ли как EXE
         self._is_exe = self._detect_exe_mode()
         if self._is_exe:
             print("🔧 Обнаружен запуск через EXE - активирована улучшенная совместимость")
+        
+        # Троттлинг между запусками окон Cursor
+        try:
+            # Увеличиваем интервал для EXE режима
+            default_interval = "8.0" if self._is_exe else "3.0"
+            self._launch_interval_sec = float(os.getenv("CURSOR_LAUNCH_INTERVAL_SEC", default_interval))
+        except Exception:
+            self._launch_interval_sec = 8.0 if self._is_exe else 3.0
+        self._launch_lock = threading.Lock()
+        self._last_launch_monotonic = 0.0
         
         print(f"🖥️ Определена ОС: {self.os_type}")
         
@@ -798,36 +800,53 @@ class CursorManager:
             return False
     
     def copy_to_clipboard(self, text, root_widget):
-        """Копирует текст в буфер обмена (Tkinter/Qt/pyperclip/OS clip)."""
+        """Копирует текст в буфер обмена с исправлением COM ошибок для EXE."""
+        
+        # Специальная обработка для EXE режима на Windows
+        if self._is_exe and platform.system().lower() == 'windows':
+            # Метод 1: Инициализируем COM и используем win32clipboard
+            success = self._copy_to_clipboard_win32_com(text)
+            if success:
+                return True
+        
         # 1) Если передан Tk root
         try:
             if root_widget is not None:
                 root_widget.clipboard_clear()
                 root_widget.clipboard_append(text)
                 root_widget.update()
+                print("✅ Текст скопирован через Tkinter")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Ошибка копирования через Tkinter: {e}")
 
-        # 2) Пытаемся через Qt (PySide6)
+        # 2) Windows: Улучшенная работа с COM для Qt
+        if platform.system().lower() == 'windows':
+            success = self._copy_to_clipboard_qt_with_com_init(text)
+            if success:
+                return True
+
+        # 3) Стандартная попытка через Qt (без COM инициализации)
         try:
             from PySide6 import QtWidgets  # type: ignore
             cb = QtWidgets.QApplication.clipboard()
             if cb is not None:
                 cb.setText(text)
+                print("✅ Текст скопирован через Qt")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Ошибка копирования через Qt: {e}")
 
-        # 3) Пытаемся через pyperclip
+        # 4) Пытаемся через pyperclip
         try:
             import pyperclip  # type: ignore
             pyperclip.copy(text)
+            print("✅ Текст скопирован через pyperclip")
             return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Ошибка копирования через pyperclip: {e}")
 
-        # 4) Windows: clip
+        # 5) Windows: командная строка clip
         try:
             if platform.system().lower() == 'windows':
                 si = subprocess.STARTUPINFO()
@@ -837,12 +856,82 @@ class CursorManager:
                 if p.stdin:
                     p.stdin.write(text.encode('utf-8'))
                     p.stdin.close()
+                print("✅ Текст скопирован через clip")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Ошибка копирования через clip: {e}")
 
+        print("❌ Все методы копирования в буфер обмена не сработали")
         return False
-    
+
+    def _copy_to_clipboard_win32_com(self, text: str) -> bool:
+        """
+        Копирует текст в буфер обмена через win32clipboard с инициализацией COM.
+        Исправляет ошибку CO_E_NOTINITIALIZED для EXE режима.
+        """
+        try:
+            # Пытаемся импортировать win32clipboard
+            import win32clipboard
+            import win32api
+            import win32con
+            
+            # Инициализируем COM для данного потока
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                print("✅ COM инициализирован для win32clipboard")
+            except Exception as e:
+                print(f"⚠️ Не удалось инициализировать COM: {e}")
+            
+            # Открываем буфер обмена
+            win32clipboard.OpenClipboard()
+            try:
+                # Очищаем буфер
+                win32clipboard.EmptyClipboard()
+                # Устанавливаем текст
+                win32clipboard.SetClipboardText(text, win32con.CF_UNICODETEXT)
+                print("✅ Текст скопирован через win32clipboard")
+                return True
+            finally:
+                # Обязательно закрываем буфер
+                win32clipboard.CloseClipboard()
+                
+        except ImportError:
+            print("⚠️ win32clipboard недоступен")
+            return False
+        except Exception as e:
+            print(f"❌ Ошибка копирования через win32clipboard: {e}")
+            return False
+
+    def _copy_to_clipboard_qt_with_com_init(self, text: str) -> bool:
+        """
+        Копирует текст в буфер обмена через Qt с предварительной инициализацией COM.
+        """
+        try:
+            # Инициализируем COM перед работой с Qt
+            if platform.system().lower() == 'windows':
+                try:
+                    import pythoncom
+                    pythoncom.CoInitialize()
+                    print("✅ COM инициализирован для Qt clipboard")
+                except Exception as e:
+                    print(f"⚠️ Не удалось инициализировать COM для Qt: {e}")
+            
+            # Теперь пытаемся работать с Qt
+            from PySide6 import QtWidgets
+            cb = QtWidgets.QApplication.clipboard()
+            if cb is not None:
+                cb.setText(text)
+                print("✅ Текст скопирован через Qt с COM инициализацией")
+                return True
+            else:
+                print("⚠️ Qt clipboard недоступен")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Ошибка копирования через Qt с COM: {e}")
+            return False
+
     def auto_paste_prompt(self, delay_seconds=5):
         """
         Автоматически вставляет промпт в Cursor AI
@@ -1140,20 +1229,25 @@ class CursorManager:
                             pyautogui.PAUSE = 0.5  # Увеличиваем паузы между действиями
                             pyautogui.FAILSAFE = False  # Отключаем failsafe для надежности
                         
-                        # Находим и кликаем по области чата для надежности
-                        self._click_on_chat_area()
-                        time.sleep(1.5 if self._is_exe else 1)
+                        # ОДИН РАЗ находим и кликаем по области чата
+                        chat_clicked = self._click_on_chat_area()
+                        if chat_clicked:
+                            print("✅ Область чата найдена и активирована")
+                        else:
+                            print("⚠️ Не удалось активировать область чата")
                         
-                        # Несколько попыток вставки для надежности
-                        max_attempts = 5 if self._is_exe else 3
+                        # Большая задержка для стабилизации после клика
+                        time.sleep(3 if self._is_exe else 2)
+                        
+                        # Несколько попыток вставки БЕЗ повторных кликов по чату
+                        max_attempts = 3  # Уменьшаем количество попыток
                         for attempt in range(max_attempts):
                             try:
                                 print(f"🔄 Попытка вставки #{attempt + 1}")
                                 
-                                # Дополнительная проверка фокуса для EXE
-                                if self._is_exe and attempt > 0:
-                                    self._click_on_chat_area()
-                                    time.sleep(0.5)
+                                # Небольшая пауза между попытками
+                                if attempt > 0:
+                                    time.sleep(1)
                                 
                                 pyautogui.hotkey('ctrl', 'a')  # Выделяем все (если что-то есть)
                                 time.sleep(0.3 if self._is_exe else 0.2)
@@ -1269,9 +1363,16 @@ class CursorManager:
         try:
             print("🔧 Альтернативный метод: посимвольная вставка")
             
-            # Получаем текст из буфера обмена
+            # Получаем текст из буфера обмена с инициализацией COM
             if self.os_type == 'windows':
                 try:
+                    # Инициализируем COM для надежности
+                    try:
+                        import pythoncom
+                        pythoncom.CoInitialize()
+                    except Exception:
+                        pass
+                    
                     import win32clipboard
                     win32clipboard.OpenClipboard()
                     text = win32clipboard.GetClipboardData()
@@ -1337,37 +1438,38 @@ class CursorManager:
             
             print("🎯 Начинаем поиск области чата...")
             
-            # Метод 1: Поиск по тексту "Plan, search, build anything"
-            chat_pos = self._find_chat_by_text(hwnd)
-            if chat_pos:
-                print("✅ Найдена область чата по тексту!")
-                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+            # Пробуем методы по очереди, останавливаемся на первом успешном
+            methods = [
+                ("поиск по тексту", self._find_chat_by_text),
+                ("OCR поиск", self._find_chat_by_ocr), 
+                ("поиск по шаблону", self._find_chat_by_template),
+                ("расчет координат", self._calculate_chat_coordinates)
+            ]
             
-            # Метод 2: OCR поиск текста в интерфейсе
-            chat_pos = self._find_chat_by_ocr(hwnd)
-            if chat_pos:
-                print("✅ Найдена область чата через OCR!")
-                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+            for method_name, method_func in methods:
+                try:
+                    print(f"🔍 Пробуем метод: {method_name}")
+                    chat_pos = method_func(hwnd)
+                    if chat_pos:
+                        print(f"✅ Найдена область чата через {method_name}!")
+                        success = self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+                        if success:
+                            return True  # Успешно нашли и кликнули
+                        else:
+                            print(f"⚠️ Клик не удался для {method_name}, пробуем следующий метод")
+                    else:
+                        print(f"❌ {method_name} не нашел область чата")
+                except Exception as e:
+                    print(f"❌ Ошибка в методе {method_name}: {e}")
+                    continue
             
-            # Метод 3: Поиск по изображению шаблона
-            chat_pos = self._find_chat_by_template(hwnd)
-            if chat_pos:
-                print("✅ Найдена область чата по шаблону!")
-                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
-            
-            # Метод 4: Умный расчет координат (нижняя центральная область)
-            chat_pos = self._calculate_chat_coordinates(hwnd)
-            if chat_pos:
-                print("✅ Используем расчетные координаты области чата!")
-                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
-            
-            # Метод 5: Запасной - используем старую функцию
-            print("🔄 Используем запасной метод...")
+            # Если все методы не сработали - используем запасной
+            print("🔄 Все умные методы не сработали, используем запасной метод...")
             success = self._click_input_area(hwnd)
             if success:
                 print("✅ Клик по области чата выполнен (запасной метод)")
             else:
-                print("⚠️ Все методы поиска области чата не сработали")
+                print("❌ Все методы поиска области чата не сработали")
             return success
             
         except Exception as e:
@@ -1580,19 +1682,13 @@ class CursorManager:
             
             # Дополнительная активация окна перед кликом
             self._bring_cursor_window_to_front()
-            time.sleep(0.2)
+            time.sleep(0.5)  # Увеличиваем задержку
             
-            # Выполняем клик
-            if self._is_exe:
-                # Для EXE используем более надежный метод
-                pyautogui.click(x, y)
-                time.sleep(0.3)
-                # Дублируем клик для надежности
-                pyautogui.click(x, y)
-            else:
-                pyautogui.click(x, y)
+            # Выполняем ОДИН точный клик
+            pyautogui.click(x, y)
             
-            time.sleep(0.2)
+            # Небольшая пауза для обработки клика
+            time.sleep(0.5)
             print(f"🎯 Клик выполнен в позиции ({x}, {y})")
             return True
             
@@ -1967,22 +2063,33 @@ class CursorManager:
             return False
 
     def _throttle_before_launch(self) -> None:
-        """Обеспечивает паузу между запусками окон Cursor (по умолчанию 3 сек)."""
+        """Обеспечивает паузу между запусками окон Cursor (8 сек для EXE, 3 сек для обычного)."""
         try:
             with self._launch_lock:
                 now = time.monotonic()
                 elapsed = now - self._last_launch_monotonic
                 wait_for = self._launch_interval_sec - elapsed
+                
                 if wait_for > 0:
+                    if self._is_exe:
+                        print(f"⏳ EXE режим: ожидание {wait_for:.1f} сек до следующего запуска Cursor...")
                     time.sleep(wait_for)
+                
                 # фиксируем момент запуска, чтобы следующие ждали интервал
                 self._last_launch_monotonic = time.monotonic()
-                # Дополнительная пауза перед открытием следующего окна для стабильности загрузки UI
+                
+                # Дополнительная пауза для EXE режима
                 try:
-                    extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '3.0'))
+                    if self._is_exe:
+                        extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '5.0'))  # Больше для EXE
+                    else:
+                        extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '2.0'))
                 except Exception:
-                    extra_gap = 3.0
+                    extra_gap = 5.0 if self._is_exe else 2.0
+                
                 if extra_gap > 0:
+                    if self._is_exe:
+                        print(f"⏳ EXE режим: дополнительная пауза {extra_gap} сек для стабильности...")
                     time.sleep(extra_gap)
         except Exception:
             pass

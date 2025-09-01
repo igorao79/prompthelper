@@ -27,3 +27,7 @@ pyinstaller>=6.0.0
 # Утилиты
 pathlib2>=2.3.7
 chardet>=5.2.0
+
+# Windows COM и буфер обмена (для исправления ошибок в EXE)
+pywin32>=306;platform_system=="Windows"
+pyperclip>=1.8.2
