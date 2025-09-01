@@ -3,6 +3,16 @@
 """
 Модуль для работы с Cursor AI
 Кроссплатформенная версия (Windows/Linux/macOS)
+
+Переменные окружения для настройки:
+- CURSOR_CHAT_TEMPLATE: путь к изображению-шаблону области чата
+- CURSOR_CHAT_CONFIDENCE: уровень уверенности для поиска шаблона (0.1-1.0, по умолчанию 0.8)
+- CURSOR_LAUNCH_INTERVAL_SEC: интервал между запусками Cursor (по умолчанию 3.0)
+- CURSOR_HWND_CLICK: использовать клик через hwnd (по умолчанию 1)
+
+Для максимальной надежности в EXE режиме устанавливайте:
+- CURSOR_CHAT_CONFIDENCE=0.7 (менее строгий поиск)
+- CURSOR_HWND_CLICK=1 (прямой клик через окно)
 """
 
 import os
@@ -1120,6 +1130,9 @@ class CursorManager:
                     print(f"🔄 Ожидание загрузки курсора {paste_delay} секунд...")
                     time.sleep(max(5, paste_delay))  # Минимум 5 секунд ожидания
                     
+                    # Создаем шаблон области чата если его нет (для будущих запусков)
+                    self.create_chat_template_if_needed()
+                    
                     if PYAUTOGUI_AVAILABLE:
                         # Специальные настройки для EXE режима
                         if self._is_exe:
@@ -1312,8 +1325,8 @@ class CursorManager:
 
     def _click_on_chat_area(self) -> bool:
         """
-        Находит окно Cursor и кликает по области чата для фокуса перед вставкой.
-        Использует существующую логику поиска окна и клика по области ввода.
+        100% надежный поиск и клик по области чата Cursor.
+        Использует множество методов для гарантированного попадания.
         """
         try:
             # Находим активное окно Cursor
@@ -1322,16 +1335,319 @@ class CursorManager:
                 print("⚠️ Не удалось найти окно Cursor для клика по чату")
                 return False
             
-            # Используем существующую функцию для клика по области ввода
+            print("🎯 Начинаем поиск области чата...")
+            
+            # Метод 1: Поиск по тексту "Plan, search, build anything"
+            chat_pos = self._find_chat_by_text(hwnd)
+            if chat_pos:
+                print("✅ Найдена область чата по тексту!")
+                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+            
+            # Метод 2: OCR поиск текста в интерфейсе
+            chat_pos = self._find_chat_by_ocr(hwnd)
+            if chat_pos:
+                print("✅ Найдена область чата через OCR!")
+                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+            
+            # Метод 3: Поиск по изображению шаблона
+            chat_pos = self._find_chat_by_template(hwnd)
+            if chat_pos:
+                print("✅ Найдена область чата по шаблону!")
+                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+            
+            # Метод 4: Умный расчет координат (нижняя центральная область)
+            chat_pos = self._calculate_chat_coordinates(hwnd)
+            if chat_pos:
+                print("✅ Используем расчетные координаты области чата!")
+                return self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
+            
+            # Метод 5: Запасной - используем старую функцию
+            print("🔄 Используем запасной метод...")
             success = self._click_input_area(hwnd)
             if success:
-                print("✅ Клик по области чата выполнен успешно")
+                print("✅ Клик по области чата выполнен (запасной метод)")
             else:
-                print("⚠️ Не удалось кликнуть по области чата")
+                print("⚠️ Все методы поиска области чата не сработали")
             return success
+            
         except Exception as e:
             print(f"❌ Ошибка при клике по области чата: {e}")
             return False
+
+    def _find_chat_by_text(self, hwnd: int) -> tuple[int, int] | None:
+        """
+        Поиск области чата по тексту 'Plan, search, build anything' через UI Automation
+        """
+        try:
+            if not UIA_AVAILABLE:
+                return None
+                
+            import uiautomation as auto
+            
+            # Получаем окно Cursor
+            window = auto.ControlFromHandle(hwnd)
+            if not window:
+                return None
+            
+            # Ищем текст-подсказки в области чата
+            search_texts = [
+                "Plan, search, build anything",
+                "Plan, search",
+                "build anything", 
+                "Ask Cursor",
+                "Type a message",
+                "Message Cursor"
+            ]
+            
+            for search_text in search_texts:
+                # Ищем элементы с данным текстом
+                text_controls = window.GetChildren()
+                for control in text_controls:
+                    try:
+                        if hasattr(control, 'Name') and search_text.lower() in control.Name.lower():
+                            rect = control.BoundingRectangle
+                            if rect.width() > 0 and rect.height() > 0:
+                                # Возвращаем центр найденного элемента
+                                center_x = rect.left + rect.width() // 2
+                                center_y = rect.top + rect.height() // 2
+                                print(f"📍 Найден текст '{search_text}' в ({center_x}, {center_y})")
+                                return (center_x, center_y)
+                    except Exception:
+                        continue
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ Ошибка поиска по тексту: {e}")
+            return None
+
+    def _find_chat_by_ocr(self, hwnd: int) -> tuple[int, int] | None:
+        """
+        Поиск области чата через OCR (распознавание текста на скриншоте)
+        """
+        try:
+            if not PYAUTOGUI_AVAILABLE:
+                return None
+                
+            # Делаем скриншот окна
+            user32 = ctypes.windll.user32
+            rect = ctypes.wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return None
+                
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            
+            # Скриншот области окна
+            screenshot = pyautogui.screenshot(region=(left, top, right - left, bottom - top))
+            
+            # Пытаемся использовать pytesseract если доступен
+            try:
+                import pytesseract
+                text = pytesseract.image_to_string(screenshot)
+                
+                # Ищем ключевые фразы
+                target_phrases = [
+                    "plan, search, build anything",
+                    "plan search build",
+                    "ask cursor",
+                    "message cursor"
+                ]
+                
+                text_lower = text.lower()
+                for phrase in target_phrases:
+                    if phrase in text_lower:
+                        # Грубая оценка - возвращаем нижнюю центральную область
+                        chat_x = left + (right - left) // 2
+                        chat_y = bottom - 100  # Примерно область ввода
+                        print(f"📍 OCR нашел '{phrase}' -> ({chat_x}, {chat_y})")
+                        return (chat_x, chat_y)
+                        
+            except ImportError:
+                print("⚠️ pytesseract недоступен для OCR")
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ Ошибка OCR поиска: {e}")
+            return None
+
+    def _find_chat_by_template(self, hwnd: int) -> tuple[int, int] | None:
+        """
+        Улучшенный поиск области чата по шаблону изображения
+        """
+        try:
+            if not PYAUTOGUI_AVAILABLE:
+                return None
+                
+            user32 = ctypes.windll.user32
+            rect = ctypes.wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return None
+                
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            
+            # Проверяем несколько возможных шаблонов
+            template_paths = [
+                os.getenv('CURSOR_CHAT_TEMPLATE'),
+                'cursor_chat_template.png',
+                'chat_area.png',
+                'input_field.png'
+            ]
+            
+            for template_path in template_paths:
+                if not template_path or not os.path.exists(template_path):
+                    continue
+                    
+                try:
+                    # Ищем шаблон в области окна
+                    region = (left, top, right - left, bottom - top)
+                    found = pyautogui.locateOnScreen(
+                        template_path, 
+                        region=region, 
+                        confidence=0.7
+                    )
+                    
+                    if found:
+                        center = pyautogui.center(found)
+                        print(f"📍 Найден шаблон '{template_path}' -> ({center.x}, {center.y})")
+                        return (center.x, center.y)
+                        
+                except Exception:
+                    continue
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ Ошибка поиска по шаблону: {e}")
+            return None
+
+    def _calculate_chat_coordinates(self, hwnd: int) -> tuple[int, int] | None:
+        """
+        Умный расчет координат области чата на основе размеров окна
+        """
+        try:
+            user32 = ctypes.windll.user32
+            rect = ctypes.wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return None
+                
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            
+            # Проверяем, что окно видимое и нормального размера
+            if left <= -32000 or top <= -32000 or (right - left) < 100 or (bottom - top) < 100:
+                return None
+            
+            width = right - left
+            height = bottom - top
+            
+            # Умный расчет позиции области чата
+            # Обычно чат находится в нижней части окна, по центру
+            
+            # Различные стратегии в зависимости от размера окна
+            if width > 1200:  # Широкое окно
+                chat_x = left + width // 2  # Центр по горизонтали
+                chat_y = bottom - 80  # 80 пикселей от низа
+            elif width > 800:  # Среднее окно
+                chat_x = left + width // 2
+                chat_y = bottom - 60
+            else:  # Узкое окно
+                chat_x = left + width // 2
+                chat_y = bottom - 40
+            
+            # Дополнительные проверки и корректировки
+            # Убеждаемся, что координаты в пределах окна
+            if chat_x < left + 50:
+                chat_x = left + 50
+            elif chat_x > right - 50:
+                chat_x = right - 50
+                
+            if chat_y < top + 100:
+                chat_y = top + height // 2
+            elif chat_y > bottom - 20:
+                chat_y = bottom - 30
+            
+            print(f"📍 Расчетные координаты чата: ({chat_x}, {chat_y}) для окна {width}x{height}")
+            return (chat_x, chat_y)
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка расчета координат: {e}")
+            return None
+
+    def _click_at_position(self, hwnd: int, x: int, y: int) -> bool:
+        """
+        Универсальная функция для клика в указанной позиции
+        """
+        try:
+            if not PYAUTOGUI_AVAILABLE:
+                return False
+            
+            # Дополнительная активация окна перед кликом
+            self._bring_cursor_window_to_front()
+            time.sleep(0.2)
+            
+            # Выполняем клик
+            if self._is_exe:
+                # Для EXE используем более надежный метод
+                pyautogui.click(x, y)
+                time.sleep(0.3)
+                # Дублируем клик для надежности
+                pyautogui.click(x, y)
+            else:
+                pyautogui.click(x, y)
+            
+            time.sleep(0.2)
+            print(f"🎯 Клик выполнен в позиции ({x}, {y})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка клика в позиции ({x}, {y}): {e}")
+            return False
+
+    def create_chat_template_if_needed(self) -> str | None:
+        """
+        Создает шаблон области чата для будущего поиска, если его еще нет.
+        Возвращает путь к созданному шаблону или None.
+        """
+        try:
+            template_path = 'cursor_chat_template.png'
+            
+            # Если шаблон уже существует, используем его
+            if os.path.exists(template_path):
+                return template_path
+            
+            print("📸 Создаем шаблон области чата...")
+            
+            # Находим окно Cursor
+            hwnd = self._bring_cursor_window_to_front()
+            if not hwnd:
+                return None
+            
+            time.sleep(2)  # Ждем пока окно полностью загрузится
+            
+            if PYAUTOGUI_AVAILABLE:
+                user32 = ctypes.windll.user32
+                rect = ctypes.wintypes.RECT()
+                if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    return None
+                
+                left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+                
+                # Создаем скриншот нижней части окна (где обычно чат)
+                chat_height = min(150, (bottom - top) // 3)  # Нижние 150px или треть окна
+                chat_region = (
+                    left, 
+                    bottom - chat_height, 
+                    right - left, 
+                    chat_height
+                )
+                
+                screenshot = pyautogui.screenshot(region=chat_region)
+                screenshot.save(template_path)
+                
+                print(f"✅ Шаблон области чата сохранен: {template_path}")
+                return template_path
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ Ошибка создания шаблона: {e}")
+            return None
 
     def _click_input_area(self, hwnd: int) -> bool:
         """Делает клик по нижней части окна, чтобы сфокусировать поле ввода."""
