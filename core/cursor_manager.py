@@ -94,10 +94,45 @@ class CursorManager:
         self._launch_lock = threading.Lock()
         self._last_launch_monotonic = 0.0
         
+        # Проверяем, запущен ли как EXE
+        self._is_exe = self._detect_exe_mode()
+        if self._is_exe:
+            print("🔧 Обнаружен запуск через EXE - активирована улучшенная совместимость")
+        
         print(f"🖥️ Определена ОС: {self.os_type}")
         
         # Генерируем пути поиска в зависимости от ОС
         self.search_paths = self._get_platform_search_paths()
+
+    def _detect_exe_mode(self) -> bool:
+        """
+        Определяет, запущено ли приложение как EXE файл.
+        Это помогает настроить дополнительные параметры для лучшей совместимости.
+        """
+        try:
+            import sys
+            # Проверяем несколько признаков EXE:
+            # 1. sys.frozen (PyInstaller, cx_Freeze)
+            # 2. sys.executable заканчивается на .exe
+            # 3. __file__ не определен или путь к .exe
+            
+            is_frozen = getattr(sys, 'frozen', False)
+            if is_frozen:
+                return True
+                
+            if sys.executable.lower().endswith('.exe') and 'python' not in sys.executable.lower():
+                return True
+                
+            # Проверяем __main__ модуль
+            main_module = sys.modules.get('__main__')
+            if main_module and hasattr(main_module, '__file__'):
+                main_file = main_module.__file__
+                if main_file and main_file.lower().endswith('.exe'):
+                    return True
+            
+            return False
+        except Exception:
+            return False
 
     def set_window_hint(self, hint: str | None):
         try:
@@ -1078,19 +1113,57 @@ class CursorManager:
         # Пытаемся открыть Cursor
         if self.open_cursor_with_project(project_path):
             if auto_paste:
-                # Автоматическая вставка: активируем окно, ждём и жмём Ctrl+V затем Enter
+                # Автоматическая вставка с улучшенной надежностью для EXE
                 try:
                     # Переводим окно Cursor на передний план
                     self._bring_cursor_window_to_front()
-                    time.sleep(max(1, paste_delay))
+                    print(f"🔄 Ожидание загрузки курсора {paste_delay} секунд...")
+                    time.sleep(max(5, paste_delay))  # Минимум 5 секунд ожидания
+                    
                     if PYAUTOGUI_AVAILABLE:
-                        pyautogui.hotkey('ctrl', 'v')
-                        time.sleep(0.1)
-                        pyautogui.press('enter')
+                        # Специальные настройки для EXE режима
+                        if self._is_exe:
+                            print("🔧 Применяем специальные настройки для EXE")
+                            pyautogui.PAUSE = 0.5  # Увеличиваем паузы между действиями
+                            pyautogui.FAILSAFE = False  # Отключаем failsafe для надежности
+                        
+                        # Находим и кликаем по области чата для надежности
+                        self._click_on_chat_area()
+                        time.sleep(1.5 if self._is_exe else 1)
+                        
+                        # Несколько попыток вставки для надежности
+                        max_attempts = 5 if self._is_exe else 3
+                        for attempt in range(max_attempts):
+                            try:
+                                print(f"🔄 Попытка вставки #{attempt + 1}")
+                                
+                                # Дополнительная проверка фокуса для EXE
+                                if self._is_exe and attempt > 0:
+                                    self._click_on_chat_area()
+                                    time.sleep(0.5)
+                                
+                                pyautogui.hotkey('ctrl', 'a')  # Выделяем все (если что-то есть)
+                                time.sleep(0.3 if self._is_exe else 0.2)
+                                pyautogui.hotkey('ctrl', 'v')  # Вставляем
+                                time.sleep(0.8 if self._is_exe else 0.5)
+                                pyautogui.press('enter')  # Отправляем
+                                print("✅ Промпт вставлен успешно")
+                                break
+                            except Exception as e:
+                                print(f"⚠️ Ошибка попытки {attempt + 1}: {e}")
+                                if attempt < max_attempts - 1:  # Не последняя попытка
+                                    time.sleep(2 if self._is_exe else 1)
+                                else:
+                                    # Последняя попытка - пробуем альтернативный метод
+                                    if self._is_exe:
+                                        print("🔄 Пробуем альтернативный метод вставки для EXE...")
+                                        self._paste_using_alternative_method()
+                                    else:
+                                        raise e
                     else:
                         print("⚠️ pyautogui недоступен, автовставка невозможна")
                 except Exception as e:
-                    print(f"Ошибка автовставки: {e}")
+                    print(f"❌ Ошибка автовставки: {e}")
             
             return True, "Cursor AI запущен успешно"
         else:
@@ -1173,6 +1246,91 @@ class CursorManager:
                 print(f"Ошибка активации окна Cursor: {e}")
             except Exception:
                 pass
+            return False
+
+    def _paste_using_alternative_method(self) -> bool:
+        """
+        Альтернативный метод вставки текста для EXE режима.
+        Использует посимвольный ввод и различные методы активации окна.
+        """
+        try:
+            print("🔧 Альтернативный метод: посимвольная вставка")
+            
+            # Получаем текст из буфера обмена
+            if self.os_type == 'windows':
+                try:
+                    import win32clipboard
+                    win32clipboard.OpenClipboard()
+                    text = win32clipboard.GetClipboardData()
+                    win32clipboard.CloseClipboard()
+                except ImportError:
+                    # Используем tkinter если win32clipboard недоступен
+                    try:
+                        import tkinter as tk
+                        root = tk.Tk()
+                        root.withdraw()
+                        text = root.clipboard_get()
+                        root.destroy()
+                    except Exception:
+                        print("❌ Не удалось получить текст из буфера обмена")
+                        return False
+            else:
+                return False  # Пока только для Windows
+            
+            if not text:
+                print("❌ Буфер обмена пуст")
+                return False
+            
+            # Дополнительное ожидание и активация
+            time.sleep(2)
+            self._bring_cursor_window_to_front()
+            time.sleep(1)
+            
+            # Очищаем поле и вводим текст посимвольно
+            if PYAUTOGUI_AVAILABLE:
+                pyautogui.hotkey('ctrl', 'a')
+                time.sleep(0.5)
+                pyautogui.press('delete')
+                time.sleep(0.5)
+                
+                # Печатаем текст небольшими частями для надежности
+                chunk_size = 50
+                for i in range(0, len(text), chunk_size):
+                    chunk = text[i:i+chunk_size]
+                    pyautogui.write(chunk, interval=0.01)
+                    time.sleep(0.1)
+                
+                time.sleep(1)
+                pyautogui.press('enter')
+                print("✅ Альтернативная вставка выполнена")
+                return True
+            
+            return False
+        except Exception as e:
+            print(f"❌ Ошибка альтернативной вставки: {e}")
+            return False
+
+    def _click_on_chat_area(self) -> bool:
+        """
+        Находит окно Cursor и кликает по области чата для фокуса перед вставкой.
+        Использует существующую логику поиска окна и клика по области ввода.
+        """
+        try:
+            # Находим активное окно Cursor
+            hwnd = self._bring_cursor_window_to_front()
+            if not hwnd:
+                print("⚠️ Не удалось найти окно Cursor для клика по чату")
+                return False
+            
+            # Используем существующую функцию для клика по области ввода
+            success = self._click_input_area(hwnd)
+            if success:
+                print("✅ Клик по области чата выполнен успешно")
+            else:
+                print("⚠️ Не удалось кликнуть по области чата")
+            return success
+        except Exception as e:
+            print(f"❌ Ошибка при клике по области чата: {e}")
             return False
 
     def _click_input_area(self, hwnd: int) -> bool:

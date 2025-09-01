@@ -96,6 +96,9 @@ IMPORTANT – FILESYSTEM RULES (STRICT):
 - However, in all internal links, always reference the file as `index.php`  
   ❌ Do not use: `href=\"index.html\"`  
   ✅ Only use: `href=\"index.php\"` or `href=\"index.php#section\"`
+- Header navigation menu links MUST use anchor format to sections on the homepage:
+  - Use only: `href=\"index.php#section-id\"`
+  - Do NOT use: `href=\"#section-id\"`, `href=\"/#section-id\"`, absolute URLs, or leading slashes
 
 ### 3. Content:
 - Fill the site with detailed, rich content:

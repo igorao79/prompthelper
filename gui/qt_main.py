@@ -1058,10 +1058,10 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					)
 				except Exception:
 					pass
-				# Для грид-режима ничего не вставляем и не копируем; признак origin == 'grid'
+				# Включаем автовставку и для грид-режима для корректной работы в EXE
 				origin = params.get("origin", "single")
-				do_copy = origin != "grid"
-				do_auto_paste = bool(params.get("auto_paste", False)) and origin != "grid"
+				do_copy = True  # Всегда копируем в буфер для надежности
+				do_auto_paste = bool(params.get("auto_paste", True))  # Включаем автовставку по умолчанию
 				if do_copy:
 					try:
 						QtWidgets.QApplication.clipboard().setText(prompt)
