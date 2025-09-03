@@ -88,10 +88,10 @@ class IdeogramGenerator:
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> int:
         """
-        Генерирует 8 изображений одним сценарием (2 батча по 4) без изменения промпта.
+        Генерирует гарантированно 8 изображений, повторяя запросы, пока все не будут сохранены.
 
         Returns:
-            int: количество успешно сохраненных изображений
+            int: количество успешно сохраненных изображений (целится в 8)
         """
         output_path = Path(media_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -101,51 +101,69 @@ class IdeogramGenerator:
             "main", "about1", "about2", "about3",
             "gallery1", "gallery2", "gallery3", "favicon",
         ]
-
+        from collections import deque
+        remaining = deque(image_names)
         saved = 0
-        cursor = 0
+        attempts = 0
+        try:
+            max_attempts = max(8, int(os.getenv("IDEOGRAM_MAX_TOTAL_ATTEMPTS", "50")))
+        except Exception:
+            max_attempts = 50
+        base_sleep = 1.0
+        backoff = 1.5
+        cap_sleep = 10.0
 
-        # Строго два запроса по 4 изображения
-        for batch_index in range(2):
-            self._notify(progress_callback, f"🎨 Ideogram: партия {batch_index + 1}/2 (4 изображения)")
-            urls = self._request_image_urls(prompt, num_images=4)
+        while remaining and attempts < max_attempts:
+            attempts += 1
+            batch_size = min(self.num_images_per_request, len(remaining))
+            self._notify(progress_callback, f"🎨 Ideogram: попытка {attempts}, запрашиваем {batch_size} (осталось {len(remaining)})")
+            urls = self._request_image_urls(prompt, num_images=batch_size)
             if not urls:
-                self._notify(progress_callback, "⚠️ Ideogram: не удалось получить ссылки изображений")
+                delay = min(cap_sleep, base_sleep * (backoff ** (attempts - 1)))
+                delay += random.uniform(0.0, 0.3)
+                self._notify(progress_callback, f"⏳ Пустой ответ, ожидание {delay:.1f}с и повтор")
+                time.sleep(delay)
                 continue
 
-            for i, url in enumerate(urls):
-                if cursor >= len(image_names):
+            for url in urls:
+                if not remaining:
                     break
-                name = image_names[cursor]
+                name = remaining[0]
                 try:
                     img = self._download_image(url)
                     if img is None:
-                        self._notify(progress_callback, f"⚠️ Не удалось загрузить изображение для {name}")
-                        cursor += 1
+                        self._notify(progress_callback, f"⚠️ Загрузка не удалась для {name}, повторим позже")
                         continue
-
                     if name == "favicon":
-                        # Приводим к 512x512 и сохраняем PNG
                         if img.mode != "RGBA":
                             img = img.convert("RGBA")
                         img = img.resize((512, 512), Image.Resampling.LANCZOS)
                         out_file = output_path / f"{name}.png"
-                        self._save_png(img, str(out_file))
-                        saved += 1
-                        self._notify(progress_callback, f"✅ {name}: сохранено (PNG)")
+                        if self._save_png(img, str(out_file)):
+                            remaining.popleft()
+                            saved += 1
+                            self._notify(progress_callback, f"✅ {name}: сохранено (PNG)")
+                        else:
+                            self._notify(progress_callback, f"⚠️ {name}: ошибка сохранения, повторим")
                     else:
                         out_file = output_path / f"{name}.jpg"
-                        # Сжимаем до ~150 КБ
                         if self._save_jpeg_under_size(img, str(out_file), target_size_kb=150):
+                            remaining.popleft()
                             saved += 1
                             self._notify(progress_callback, f"✅ {name}: сохранено (JPEG)")
                         else:
-                            self._notify(progress_callback, f"⚠️ {name}: не удалось сжать/сохранить")
+                            self._notify(progress_callback, f"⚠️ {name}: не удалось сжать/сохранить, повторим")
                 except Exception as e:
                     self._notify(progress_callback, f"⚠️ Ошибка сохранения {name}: {e}")
-                finally:
-                    cursor += 1
 
+            if remaining:
+                delay = min(cap_sleep, base_sleep * (backoff ** (attempts - 1)))
+                delay += random.uniform(0.0, 0.3)
+                self._notify(progress_callback, f"⏳ Осталось {len(remaining)} файлов, ожидание {delay:.1f}с и повтор")
+                time.sleep(delay)
+
+        if remaining:
+            self._notify(progress_callback, f"⚠️ Не все изображения сохранены: осталось {len(remaining)}")
         return saved
 
     def generate_four_images(
@@ -210,12 +228,18 @@ class IdeogramGenerator:
         media_dir: str,
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> Optional[str]:
-        """Генерирует одно изображение (num_images=1) без изменения промпта."""
+        """Генерирует одно изображение (num_images=1) без изменения промпта. С ретраями URL и скачивания."""
         output_path = Path(media_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
         self._notify(progress_callback, f"🎨 Ideogram: генерация {image_name}")
-        urls = self._request_image_urls(prompt, num_images=1)
+        # Несколько попыток получить URL
+        urls = []
+        for attempt in range(self.max_http_retries):
+            urls = self._request_image_urls(prompt, num_images=1)
+            if urls:
+                break
+            time.sleep(min(self.http_backoff_cap, self.http_backoff_base * (2 ** attempt)))
         if not urls:
             self._notify(progress_callback, "⚠️ Ideogram: не удалось получить ссылку изображения")
             return None
@@ -223,7 +247,16 @@ class IdeogramGenerator:
         try:
             img = self._download_image(urls[0])
             if img is None:
-                return None
+                # Повторно пробуем получить новый URL и скачать
+                for attempt in range(self.max_http_retries):
+                    urls = self._request_image_urls(prompt, num_images=1)
+                    if urls:
+                        img = self._download_image(urls[0])
+                        if img is not None:
+                            break
+                    time.sleep(min(self.http_backoff_cap, self.http_backoff_base * (2 ** attempt)))
+                if img is None:
+                    return None
             if image_name == "favicon":
                 if img.mode != "RGBA":
                     img = img.convert("RGBA")
@@ -364,7 +397,7 @@ class IdeogramGenerator:
             if img.mode == "RGBA":
                 img = img.convert("RGB")
             # Быстрый путь: одно сохранение с разумным качеством, без optimize (ускоряет запись)
-            q = int(os.getenv("IDEOGRAM_JPEG_QUALITY", "75"))
+            q = int(os.getenv("IDEOGRAM_JPEG_QUALITY", "70"))
             img.save(filepath, format="JPEG", quality=max(40, min(95, q)))
             return True
         except Exception:
@@ -391,36 +424,47 @@ class IdeogramGenerator:
             batches.append(take)
             remaining -= take
 
-        for batch_index, batch_size in enumerate(batches):
-            self._notify(progress_callback, f"🎨 Ideogram: партия {batch_index + 1}/{len(batches)} ({batch_size} изображений)")
+        attempts = 0
+        max_attempts = max(8, int(os.getenv("IDEOGRAM_MAX_TOTAL_ATTEMPTS", "50")))
+        remaining = names[:]
+        while remaining and attempts < max_attempts:
+            attempts += 1
+            batch_size = min(self.num_images_per_request, len(remaining))
+            self._notify(progress_callback, f"🎨 Ideogram: попытка {attempts}, запрашиваем {batch_size} (осталось {len(remaining)})")
             urls = self._request_image_urls(prompt, num_images=batch_size)
             if not urls:
-                self._notify(progress_callback, "⚠️ Ideogram: не удалось получить ссылки изображений")
+                time.sleep(min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempts - 1))))
                 continue
-            for url in urls:
-                if cursor >= len(names):
-                    break
-                name = names[cursor]
+            new_remaining = []
+            i = 0
+            for name in remaining:
+                if i >= len(urls):
+                    new_remaining.append(name)
+                    continue
+                url = urls[i]
+                i += 1
                 try:
                     img = self._download_image(url)
                     if img is None:
-                        self._notify(progress_callback, f"⚠️ Не удалось загрузить изображение для {name}")
-                        cursor += 1
+                        new_remaining.append(name)
                         continue
                     out_file = output_path / (f"{name}.png" if name == "favicon" else f"{name}.jpg")
                     if name == "favicon":
                         if img.mode != "RGBA":
                             img = img.convert("RGBA")
                         img = img.resize((512, 512), Image.Resampling.LANCZOS)
-                        self._save_png(img, str(out_file))
+                        ok = self._save_png(img, str(out_file))
                     else:
-                        self._save_jpeg_under_size(img, str(out_file))
-                    saved += 1
-                    self._notify(progress_callback, f"✅ {name}: сохранено")
+                        ok = self._save_jpeg_under_size(img, str(out_file))
+                    if ok:
+                        saved += 1
+                        self._notify(progress_callback, f"✅ {name}: сохранено")
+                    else:
+                        new_remaining.append(name)
                 except Exception as e:
                     self._notify(progress_callback, f"⚠️ Ошибка сохранения {name}: {e}")
-                finally:
-                    cursor += 1
+                    new_remaining.append(name)
+            remaining = new_remaining
         return saved
 
     def _save_png(self, image: Image.Image, filepath: str) -> bool:
@@ -436,7 +480,8 @@ class IdeogramGenerator:
                 cb(message)
             except Exception:
                 pass
-        if not self.silent_mode:
+        # Тише в продакшене (по умолчанию не печатаем), включается через IDEOGRAM_VERBOSE
+        if not self.silent_mode and str(os.getenv("IDEOGRAM_VERBOSE", "0")).lower() in ("1", "true", "yes"):
             print(message)
 
 

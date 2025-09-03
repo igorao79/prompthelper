@@ -1138,10 +1138,28 @@ class CursorManager:
             if auto_paste:
                 # Автоматическая вставка с улучшенной надежностью для EXE
                 try:
-                    # Переводим окно Cursor на передний план
-                    self._bring_cursor_window_to_front()
-                    print(f"🔄 Ожидание загрузки курсора {paste_delay} секунд...")
-                    time.sleep(max(5, paste_delay))  # Минимум 5 секунд ожидания
+                    # Ждём загрузку приложения Cursor (стабильное окно)
+                    try:
+                        try:
+                            app_ready_to = int(os.getenv('CURSOR_APP_READY_TIMEOUT_SEC', '30'))
+                        except Exception:
+                            app_ready_to = 30
+                        hwnd_ready = self._wait_for_cursor_app_ready(timeout_sec=app_ready_to)
+                        if hwnd_ready:
+                            print("✅ Окно Cursor готово")
+                            # Доп. пауза после готовности (конфигурируемая)
+                            try:
+                                extra_delay = int(os.getenv('CURSOR_APP_EXTRA_DELAY_SEC', '2' if self._is_exe else '1'))
+                            except Exception:
+                                extra_delay = 2 if self._is_exe else 1
+                            if extra_delay > 0:
+                                time.sleep(extra_delay)
+                        else:
+                            # Фолбек: старая пауза
+                            print(f"⚠️ Не дождались готовности окна за {app_ready_to}с, используем паузу")
+                            time.sleep(max(5, paste_delay))
+                    except Exception:
+                        time.sleep(max(5, paste_delay))
                     
                     # Сокращённая логика: без шаблонов/скриншотов
                     
@@ -1159,23 +1177,37 @@ class CursorManager:
                         else:
                             print("⚠️ Не удалось активировать область чата")
                         
-                        # Большая задержка для стабилизации после клика
-                        time.sleep(3 if self._is_exe else 2)
+                        # Большая задержка для стабилизации после клика/активации чата (конфигурируемая)
+                        try:
+                            ready_delay_env = int(os.getenv('CURSOR_CHAT_READY_DELAY_SEC', '7' if self._is_exe else '3'))
+                        except Exception:
+                            ready_delay_env = 7 if self._is_exe else 3
+                        time.sleep(max(2, ready_delay_env))
+
+                        # Дополнительная стабилизация: лёгкая проверка ввода (печатаем и удаляем символ)
+                        try:
+                            for _ in range(2):
+                                pyautogui.write('.')
+                                time.sleep(0.15)
+                                pyautogui.press('backspace')
+                                time.sleep(0.15)
+                        except Exception:
+                            pass
                         
                         # Несколько попыток вставки БЕЗ повторных кликов по чату
-                        max_attempts = 2  # Ещё меньше попыток для скорости
+                        max_attempts = 3  # Чуть больше попыток, с увеличенными паузами
                         for attempt in range(max_attempts):
                             try:
                                 print(f"🔄 Попытка вставки #{attempt + 1}")
                                 
                                 # Небольшая пауза между попытками
                                 if attempt > 0:
-                                    time.sleep(1)
+                                    time.sleep(1.2 if self._is_exe else 0.8)
                                 
                                 pyautogui.hotkey('ctrl', 'a')  # Выделяем все (если что-то есть)
-                                time.sleep(0.3 if self._is_exe else 0.2)
+                                time.sleep(0.5 if self._is_exe else 0.25)
                                 pyautogui.hotkey('ctrl', 'v')  # Вставляем
-                                time.sleep(0.8 if self._is_exe else 0.5)
+                                time.sleep(1.0 if self._is_exe else 0.5)
                                 pyautogui.press('enter')  # Отправляем
                                 print("✅ Промпт вставлен успешно")
                                 break
@@ -1749,6 +1781,54 @@ class CursorManager:
                         return True
                 except Exception:
                     pass
+            return False
+        except Exception:
+            return False
+
+    def _wait_for_cursor_app_ready(self, timeout_sec: int = 30) -> int | bool:
+        """Ждёт, пока окно Cursor будет готово: найдено, показано, не меняет размеры резко.
+        Возвращает hwnd или False по таймауту.
+        """
+        try:
+            if platform.system().lower() != 'windows':
+                # На других ОС — простой фолбек
+                self._bring_cursor_window_to_front()
+                time.sleep(2)
+                return True
+            user32 = ctypes.windll.user32
+            start = time.time()
+            last_rect = None
+            stable_count = 0
+            while time.time() - start < max(5, timeout_sec):
+                hwnd = self._bring_cursor_window_to_front()
+                if not hwnd:
+                    time.sleep(0.3)
+                    continue
+                rect = ctypes.wintypes.RECT()
+                if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    time.sleep(0.2)
+                    continue
+                l, t, r, b = rect.left, rect.top, rect.right, rect.bottom
+                w, h = r - l, b - t
+                if w < 200 or h < 200:
+                    time.sleep(0.3)
+                    continue
+                current = (l, t, r, b)
+                if last_rect is None:
+                    last_rect = current
+                    stable_count = 1
+                else:
+                    # считаем окно стабильным, если 3 цикла подряд размеры идентичны
+                    if current == last_rect:
+                        stable_count += 1
+                    else:
+                        stable_count = 1
+                        last_rect = current
+                if stable_count >= 3:
+                    # финальная активация
+                    self._ensure_window_active(hwnd, timeout_s=2.0)
+                    return hwnd
+                time.sleep(0.3)
             return False
         except Exception:
             return False
