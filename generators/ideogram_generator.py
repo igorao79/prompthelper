@@ -61,6 +61,26 @@ class IdeogramGenerator:
             self.http_backoff_cap = 12.0
         self.retry_statuses = {429, 500, 502, 503, 504}
 
+        # Пул соединений для ускорения параллельных загрузок
+        try:
+            pool_size = max(8, int(os.getenv("IDEOGRAM_HTTP_POOL", "20")))
+        except Exception:
+            pool_size = 20
+        try:
+            from requests.adapters import HTTPAdapter
+            from urllib3.util.retry import Retry  # type: ignore
+            adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size, max_retries=0)
+            self.session.mount("http://", adapter)
+            self.session.mount("https://", adapter)
+        except Exception:
+            pass
+
+        # Глобальная скорость рендеринга (FAST/DEFAULT/QUALITY) => (TURBO/QUALITY)
+        rs = (os.getenv("IDEOGRAM_RENDERING_SPEED", "FAST").strip().upper())
+        if rs in ("FAST", "DEFAULT"):
+            rs = "TURBO" if rs == "FAST" else "QUALITY"
+        self.rendering_speed = rs if rs in ("TURBO", "QUALITY") else "TURBO"
+
     def generate_eight_images(
         self,
         prompt: str,
@@ -229,13 +249,8 @@ class IdeogramGenerator:
             return []
         safe_prompt = self._augment_prompt_no_text(prompt)
         
-        # v3 API структура (без model параметра - всегда 3.0 Turbo)
-        # Нормализуем скорость к допустимым значениям API: TURBO | QUALITY
-        rs = (os.getenv("IDEOGRAM_RENDERING_SPEED", "TURBO").strip().upper())
-        if rs in ("FAST", "DEFAULT"):
-            rs = "TURBO" if rs == "FAST" else "QUALITY"
-        if rs not in ("TURBO", "QUALITY"):
-            rs = "TURBO"
+        # v3 API структура: используем сохранённую глобальную скорость
+        rs = self.rendering_speed
 
         payload = {
             "prompt": safe_prompt,
@@ -257,7 +272,7 @@ class IdeogramGenerator:
                         print(f"[Ideogram] v3 payload: speed={payload['rendering_speed']} num={payload['num_images']} try={attempt}/{self.max_http_retries}")
                     except Exception:
                         pass
-                resp = self.session.post(self.api_url, json=payload, timeout=45)
+                resp = self.session.post(self.api_url, json=payload, timeout=30)
                 if resp.status_code != 200:
                     if self.debug_billing and not self.silent_mode:
                         try:
@@ -323,7 +338,7 @@ class IdeogramGenerator:
         while attempt < self.max_http_retries:
             attempt += 1
             try:
-                r = self.session.get(url, timeout=45)
+                r = self.session.get(url, timeout=20)
                 if r.status_code != 200:
                     if r.status_code in self.retry_statuses and attempt < self.max_http_retries:
                         delay = min(self.http_backoff_cap, self.http_backoff_base * (2 ** (attempt - 1)))

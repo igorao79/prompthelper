@@ -4,15 +4,10 @@
 Модуль для работы с Cursor AI
 Кроссплатформенная версия (Windows/Linux/macOS)
 
-Переменные окружения для настройки:
-- CURSOR_CHAT_TEMPLATE: путь к изображению-шаблону области чата
-- CURSOR_CHAT_CONFIDENCE: уровень уверенности для поиска шаблона (0.1-1.0, по умолчанию 0.8)
-- CURSOR_LAUNCH_INTERVAL_SEC: интервал между запусками Cursor (по умолчанию 3.0)
-- CURSOR_HWND_CLICK: использовать клик через hwnd (по умолчанию 1)
-
-Для максимальной надежности в EXE режиме устанавливайте:
-- CURSOR_CHAT_CONFIDENCE=0.7 (менее строгий поиск)
-- CURSOR_HWND_CLICK=1 (прямой клик через окно)
+Переменные окружения:
+- CURSOR_LAUNCH_INTERVAL_SEC: интервал между запусками Cursor (секунды)
+- CURSOR_EXTRA_LAUNCH_GAP_SEC: дополнительная пауза после запуска (секунды)
+- CURSOR_HWND_CLICK: использовать клик через hwnd (1/0)
 """
 
 import os
@@ -56,25 +51,7 @@ except ImportError:
     PYAUTOGUI_AVAILABLE = False
     print("⚠️ pyautogui недоступен, автовставка промптов отключена")
 
-# UI Automation (опционально)
-try:
-    import uiautomation as auto  # type: ignore
-    UIA_AVAILABLE = True
-except Exception:
-    UIA_AVAILABLE = False
-
-# Опциональные зависимости для поиска по скриншоту
-try:
-    import cv2  # type: ignore
-    import numpy as np  # type: ignore
-    CV2_AVAILABLE = True
-except Exception:
-    CV2_AVAILABLE = False
-try:
-    from PIL import Image  # type: ignore
-    PIL_AVAILABLE = True
-except Exception:
-    PIL_AVAILABLE = False
+# Убраны тяжёлые опциональные зависимости (UI Automation / OCR / шаблоны)
 
 # Импорт для генерации изображений (Ideogram)
 try:
@@ -103,11 +80,11 @@ class CursorManager:
         
         # Троттлинг между запусками окон Cursor
         try:
-            # Увеличиваем интервал для EXE режима
-            default_interval = "8.0" if self._is_exe else "3.0"
+            # Умеренный интервал: быстрее генерация, но без гонок
+            default_interval = "4.0" if self._is_exe else "2.0"
             self._launch_interval_sec = float(os.getenv("CURSOR_LAUNCH_INTERVAL_SEC", default_interval))
         except Exception:
-            self._launch_interval_sec = 8.0 if self._is_exe else 3.0
+            self._launch_interval_sec = 4.0 if self._is_exe else 2.0
         self._launch_lock = threading.Lock()
         self._last_launch_monotonic = 0.0
         
@@ -930,8 +907,8 @@ class CursorManager:
                 
         except Exception as e:
             print(f"❌ Ошибка копирования через Qt с COM: {e}")
-            return False
-
+        return False
+    
     def auto_paste_prompt(self, delay_seconds=5):
         """
         Автоматически вставляет промпт в Cursor AI
@@ -981,60 +958,7 @@ class CursorManager:
                             focused = self._focus_chat_via_uia(hwnd)
                     except Exception:
                         focused = False
-                # Если удалось сфокусировать через UIA и доступны методы ввода — сразу вставляем через UIA
-                if focused and UIA_AVAILABLE:
-                    try:
-                        # Попытка найти активный Edit и вставить напрямую через ValuePattern
-                        w = auto.ControlFromHandle(hwnd)
-                        if w:
-                            edit = None
-                            edits = w.GetDescendants(controlType=auto.ControlType.Edit)
-                            for ed in edits[::-1]:
-                                try:
-                                    if ed.IsEnabled and ed.IsOffscreen is False:
-                                        edit = ed
-                                        break
-                                except Exception:
-                                    continue
-                            if edit:
-                                # Текст для вставки берём из буфера, т.к. сюда попадает актуальный промпт (загружается в вызывающем коде)
-                                # Если нужно вставить из параметра — можно переделать сигнатуру и хранить буфер в self.
-                                try:
-                                    # Попытаемся прочитать из буфера и вставить
-                                    import pyperclip  # type: ignore
-                                    text = pyperclip.paste()
-                                except Exception:
-                                    text = None
-                                if text:
-                                    try:
-                                        vp = edit.GetValuePattern()
-                                        if vp is not None:
-                                            try:
-                                                # Очищаем и устанавливаем значения
-                                                vp.SetValue("")
-                                                time.sleep(0.02)
-                                                vp.SetValue(text)
-                                            except Exception:
-                                                # Фолбек через SendKeys к активному Edit
-                                                auto.SendKeys("^a")
-                                                time.sleep(0.02)
-                                                auto.SendKeys(text)
-                                        else:
-                                            # Если ValuePattern нет, пробуем SendKeys
-                                            auto.SendKeys("^a")
-                                            time.sleep(0.02)
-                                            auto.SendKeys(text)
-                                        # Enter при необходимости
-                                        try:
-                                            if os.getenv('CURSOR_SEND_ENTER', '1') == '1':
-                                                auto.SendKeys("{ENTER}")
-                                        except Exception:
-                                            pass
-                                        return True
-                                    except Exception:
-                                        pass
-                    except Exception:
-                        pass
+                # Убрана ветка вставки через UIAutomation
                 # Если не вышло — кликаем внутрь
                 if not focused:
                     try:
@@ -1146,11 +1070,11 @@ class CursorManager:
                 # Favicon — минималистичный логотип
                 tasks.append(("favicon", _p("favicon", f"{theme} minimalist icon logo, simple, flat, high contrast")))
 
-                # Параллельная генерация (ускорение): число воркеров из env IDEOGRAM_CONCURRENCY (по умолчанию 3)
+                # Параллельная генерация (ускорение): число воркеров из env IDEOGRAM_CONCURRENCY (по умолчанию 6)
                 try:
-                    concurrency = max(1, int(os.getenv("IDEOGRAM_CONCURRENCY", "3")))
+                    concurrency = max(1, int(os.getenv("IDEOGRAM_CONCURRENCY", "6")))
                 except Exception:
-                    concurrency = 3
+                    concurrency = 6
 
                 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1219,8 +1143,7 @@ class CursorManager:
                     print(f"🔄 Ожидание загрузки курсора {paste_delay} секунд...")
                     time.sleep(max(5, paste_delay))  # Минимум 5 секунд ожидания
                     
-                    # Создаем шаблон области чата если его нет (для будущих запусков)
-                    self.create_chat_template_if_needed()
+                    # Сокращённая логика: без шаблонов/скриншотов
                     
                     if PYAUTOGUI_AVAILABLE:
                         # Специальные настройки для EXE режима
@@ -1229,7 +1152,7 @@ class CursorManager:
                             pyautogui.PAUSE = 0.5  # Увеличиваем паузы между действиями
                             pyautogui.FAILSAFE = False  # Отключаем failsafe для надежности
                         
-                        # ОДИН РАЗ находим и кликаем по области чата
+                        # ОДИН РАЗ активируем чат (Ctrl+I) либо запасной клик
                         chat_clicked = self._click_on_chat_area()
                         if chat_clicked:
                             print("✅ Область чата найдена и активирована")
@@ -1240,7 +1163,7 @@ class CursorManager:
                         time.sleep(3 if self._is_exe else 2)
                         
                         # Несколько попыток вставки БЕЗ повторных кликов по чату
-                        max_attempts = 3  # Уменьшаем количество попыток
+                        max_attempts = 2  # Ещё меньше попыток для скорости
                         for attempt in range(max_attempts):
                             try:
                                 print(f"🔄 Попытка вставки #{attempt + 1}")
@@ -1261,28 +1184,8 @@ class CursorManager:
                                 if attempt < max_attempts - 1:  # Не последняя попытка
                                     time.sleep(2 if self._is_exe else 1)
                                 else:
-                                    # Последняя попытка - пробуем все доступные методы для EXE
-                                    if self._is_exe:
-                                        print("🔥 Пробуем все резервные методы для EXE...")
-                                        
-                                        # Сохраняем отладочный скриншот
-                                        hwnd = self._bring_cursor_window_to_front()
-                                        if hwnd:
-                                            self._save_debug_screenshot(hwnd, "failed_standard_paste")
-                                        
-                                        # Пробуем принудительную вставку
-                                        if hwnd and self._try_force_paste_method(hwnd):
-                                            print("✅ Принудительная вставка сработала!")
-                                            break
-                                        
-                                        # Альтернативный метод (посимвольный)
-                                        if self._paste_using_alternative_method():
-                                            print("✅ Альтернативная вставка сработала!")
-                                            break
-                                        
-                                        print("❌ Все методы вставки для EXE не сработали")
-                                    else:
-                                        raise e
+                                    # Последняя попытка - не плодим тяжёлые ветки
+                                    raise e
                     else:
                         print("⚠️ pyautogui недоступен, автовставка невозможна")
                 except Exception as e:
@@ -1371,144 +1274,20 @@ class CursorManager:
                 pass
             return False
 
-    def _paste_using_alternative_method(self) -> bool:
-        """
-        Альтернативный метод вставки текста для EXE режима.
-        Использует посимвольный ввод и различные методы активации окна.
-        """
-        try:
-            print("🔧 Альтернативный метод: посимвольная вставка")
-            
-            # Получаем текст из буфера обмена с инициализацией COM
-            if self.os_type == 'windows':
-                try:
-                    # Инициализируем COM для надежности
-                    try:
-                        import pythoncom
-                        pythoncom.CoInitialize()
-                    except Exception:
-                        pass
-                    
-                    import win32clipboard
-                    win32clipboard.OpenClipboard()
-                    text = win32clipboard.GetClipboardData()
-                    win32clipboard.CloseClipboard()
-                except ImportError:
-                    # Используем tkinter если win32clipboard недоступен
-                    try:
-                        import tkinter as tk
-                        root = tk.Tk()
-                        root.withdraw()
-                        text = root.clipboard_get()
-                        root.destroy()
-                    except Exception:
-                        print("❌ Не удалось получить текст из буфера обмена")
-                        return False
-            else:
-                return False  # Пока только для Windows
-            
-            if not text:
-                print("❌ Буфер обмена пуст")
-                return False
-            
-            # Дополнительное ожидание и активация
-            time.sleep(2)
-            self._bring_cursor_window_to_front()
-            time.sleep(1)
-            
-            # Очищаем поле и вводим текст посимвольно
-            if PYAUTOGUI_AVAILABLE:
-                pyautogui.hotkey('ctrl', 'a')
-                time.sleep(0.5)
-                pyautogui.press('delete')
-                time.sleep(0.5)
-                
-                # Печатаем текст небольшими частями для надежности
-                chunk_size = 50
-                for i in range(0, len(text), chunk_size):
-                    chunk = text[i:i+chunk_size]
-                    pyautogui.write(chunk, interval=0.01)
-                    time.sleep(0.1)
-                
-                time.sleep(1)
-                pyautogui.press('enter')
-                print("✅ Альтернативная вставка выполнена")
-                return True
-            
-            return False
-        except Exception as e:
-            print(f"❌ Ошибка альтернативной вставки: {e}")
-            return False
+    # Убран альтернативный посимвольный метод вставки (ускорение и упрощение)
 
     def _click_on_chat_area(self) -> bool:
-        """
-        100% надежный поиск и клик по области чата Cursor.
-        Использует множество методов для гарантированного попадания.
-        """
+        """Активирует чат: Ctrl+I (приоритет), затем простой клик внизу окна."""
         try:
-            # Находим активное окно Cursor
             hwnd = self._bring_cursor_window_to_front()
             if not hwnd:
-                print("⚠️ Не удалось найти окно Cursor для клика по чату")
                 return False
-            
-            print("🎯 Начинаем поиск области чата...")
-            
-            # ДЛЯ EXE: Сначала пробуем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I
-            if self._is_exe:
-                print("🔧 EXE режим: используем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I")
-                success = self._try_guaranteed_chat_activation(hwnd)
-                if success:
-                    return True
-                    
-                print("🔄 Ctrl+I не сработал, пробуем полную клавиатурную навигацию...")
-                success = self._activate_chat_by_keyboard(hwnd)
-                if success:
-                    return True
-            
-            # Пробуем методы по очереди, останавливаемся на первом успешном
-            methods = [
-                ("поиск по тексту", self._find_chat_by_text),
-                ("OCR поиск", self._find_chat_by_ocr), 
-                ("поиск по шаблону", self._find_chat_by_template),
-                ("расчет координат", self._calculate_chat_coordinates)
-            ]
-            
-            for method_name, method_func in methods:
-                try:
-                    print(f"🔍 Пробуем метод: {method_name}")
-                    chat_pos = method_func(hwnd)
-                    if chat_pos:
-                        print(f"✅ Найдена область чата через {method_name}!")
-                        success = self._click_at_position(hwnd, chat_pos[0], chat_pos[1])
-                        if success:
-                            return True  # Успешно нашли и кликнули
-                        else:
-                            print(f"⚠️ Клик не удался для {method_name}, пробуем следующий метод")
-                    else:
-                        print(f"❌ {method_name} не нашел область чата")
-                except Exception as e:
-                    print(f"❌ Ошибка в методе {method_name}: {e}")
-                    continue
-            
-            # Если все методы не сработали - используем запасной
-            print("🔄 Все умные методы не сработали, используем запасной метод...")
-            
-            # Сохраняем отладочный скриншот при неудаче
-            if self._is_exe:
-                self._save_debug_screenshot(hwnd, "chat_search_failed")
-            
-            success = self._click_input_area(hwnd)
-            if success:
-                print("✅ Клик по области чата выполнен (запасной метод)")
-            else:
-                print("❌ Все методы поиска области чата не сработали")
-                if self._is_exe:
-                    self._save_debug_screenshot(hwnd, "all_methods_failed")
-            return success
-            
-        except Exception as e:
-            print(f"❌ Ошибка при клике по области чата: {e}")
+            # 1) Приоритетный способ — гарантированная горячая клавиша
+            if self._try_guaranteed_chat_activation(hwnd):
+                return True
+            # 2) Запасной — клик по нижней части окна
+            return self._click_input_area(hwnd)
+        except Exception:
             return False
 
     def _try_guaranteed_chat_activation(self, hwnd: int) -> bool:
@@ -1694,201 +1473,13 @@ class CursorManager:
             print(f"❌ Ошибка клавиатурной навигации: {e}")
             return False
 
-    def _find_chat_by_text(self, hwnd: int) -> tuple[int, int] | None:
-        """
-        Поиск области чата по тексту 'Plan, search, build anything' через UI Automation
-        """
-        try:
-            if not UIA_AVAILABLE:
-                return None
-                
-            import uiautomation as auto
-            
-            # Получаем окно Cursor
-            window = auto.ControlFromHandle(hwnd)
-            if not window:
-                return None
-            
-            # Ищем текст-подсказки в области чата
-            search_texts = [
-                "Plan, search, build anything",
-                "Plan, search",
-                "build anything", 
-                "Ask Cursor",
-                "Type a message",
-                "Message Cursor"
-            ]
-            
-            for search_text in search_texts:
-                # Ищем элементы с данным текстом
-                text_controls = window.GetChildren()
-                for control in text_controls:
-                    try:
-                        if hasattr(control, 'Name') and search_text.lower() in control.Name.lower():
-                            rect = control.BoundingRectangle
-                            if rect.width() > 0 and rect.height() > 0:
-                                # Возвращаем центр найденного элемента
-                                center_x = rect.left + rect.width() // 2
-                                center_y = rect.top + rect.height() // 2
-                                print(f"📍 Найден текст '{search_text}' в ({center_x}, {center_y})")
-                                return (center_x, center_y)
-                    except Exception:
-                        continue
-            
-            return None
-        except Exception as e:
-            print(f"⚠️ Ошибка поиска по тексту: {e}")
-            return None
+    # Убран поиск по тексту через UI Automation
 
-    def _find_chat_by_ocr(self, hwnd: int) -> tuple[int, int] | None:
-        """
-        Поиск области чата через OCR (распознавание текста на скриншоте)
-        """
-        try:
-            if not PYAUTOGUI_AVAILABLE:
-                return None
-                
-            # Делаем скриншот окна
-            user32 = ctypes.windll.user32
-            rect = ctypes.wintypes.RECT()
-            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                return None
-                
-            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
-            
-            # Скриншот области окна
-            screenshot = pyautogui.screenshot(region=(left, top, right - left, bottom - top))
-            
-            # Пытаемся использовать pytesseract если доступен
-            try:
-                import pytesseract
-                text = pytesseract.image_to_string(screenshot)
-                
-                # Ищем ключевые фразы
-                target_phrases = [
-                    "plan, search, build anything",
-                    "plan search build",
-                    "ask cursor",
-                    "message cursor"
-                ]
-                
-                text_lower = text.lower()
-                for phrase in target_phrases:
-                    if phrase in text_lower:
-                        # Грубая оценка - возвращаем нижнюю центральную область
-                        chat_x = left + (right - left) // 2
-                        chat_y = bottom - 100  # Примерно область ввода
-                        print(f"📍 OCR нашел '{phrase}' -> ({chat_x}, {chat_y})")
-                        return (chat_x, chat_y)
-                        
-            except ImportError:
-                print("⚠️ pytesseract недоступен для OCR")
-            
-            return None
-        except Exception as e:
-            print(f"⚠️ Ошибка OCR поиска: {e}")
-            return None
+    # Убран поиск через OCR
 
-    def _find_chat_by_template(self, hwnd: int) -> tuple[int, int] | None:
-        """
-        Улучшенный поиск области чата по шаблону изображения
-        """
-        try:
-            if not PYAUTOGUI_AVAILABLE:
-                return None
-                
-            user32 = ctypes.windll.user32
-            rect = ctypes.wintypes.RECT()
-            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                return None
-                
-            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
-            
-            # Проверяем несколько возможных шаблонов
-            template_paths = [
-                os.getenv('CURSOR_CHAT_TEMPLATE'),
-                'cursor_chat_template.png',
-                'chat_area.png',
-                'input_field.png'
-            ]
-            
-            for template_path in template_paths:
-                if not template_path or not os.path.exists(template_path):
-                    continue
-                    
-                try:
-                    # Ищем шаблон в области окна
-                    region = (left, top, right - left, bottom - top)
-                    found = pyautogui.locateOnScreen(
-                        template_path, 
-                        region=region, 
-                        confidence=0.7
-                    )
-                    
-                    if found:
-                        center = pyautogui.center(found)
-                        print(f"📍 Найден шаблон '{template_path}' -> ({center.x}, {center.y})")
-                        return (center.x, center.y)
-                        
-                except Exception:
-                    continue
-            
-            return None
-        except Exception as e:
-            print(f"⚠️ Ошибка поиска по шаблону: {e}")
-            return None
+    # Убран поиск по шаблону изображения
 
-    def _calculate_chat_coordinates(self, hwnd: int) -> tuple[int, int] | None:
-        """
-        Умный расчет координат области чата на основе размеров окна
-        """
-        try:
-            user32 = ctypes.windll.user32
-            rect = ctypes.wintypes.RECT()
-            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                return None
-                
-            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
-            
-            # Проверяем, что окно видимое и нормального размера
-            if left <= -32000 or top <= -32000 or (right - left) < 100 or (bottom - top) < 100:
-                return None
-            
-            width = right - left
-            height = bottom - top
-            
-            # Умный расчет позиции области чата
-            # Обычно чат находится в нижней части окна, по центру
-            
-            # Различные стратегии в зависимости от размера окна
-            if width > 1200:  # Широкое окно
-                chat_x = left + width // 2  # Центр по горизонтали
-                chat_y = bottom - 80  # 80 пикселей от низа
-            elif width > 800:  # Среднее окно
-                chat_x = left + width // 2
-                chat_y = bottom - 60
-            else:  # Узкое окно
-                chat_x = left + width // 2
-                chat_y = bottom - 40
-            
-            # Дополнительные проверки и корректировки
-            # Убеждаемся, что координаты в пределах окна
-            if chat_x < left + 50:
-                chat_x = left + 50
-            elif chat_x > right - 50:
-                chat_x = right - 50
-                
-            if chat_y < top + 100:
-                chat_y = top + height // 2
-            elif chat_y > bottom - 20:
-                chat_y = bottom - 30
-            
-            print(f"📍 Расчетные координаты чата: ({chat_x}, {chat_y}) для окна {width}x{height}")
-            return (chat_x, chat_y)
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка расчета координат: {e}")
-            return None
+    # Убран «умный» расчет координат
 
     def _click_at_position(self, hwnd: int, x: int, y: int) -> bool:
         """
@@ -1914,194 +1505,13 @@ class CursorManager:
             print(f"❌ Ошибка клика в позиции ({x}, {y}): {e}")
             return False
 
-    def _save_debug_screenshot(self, hwnd: int, suffix: str = "") -> str | None:
-        """
-        Сохраняет отладочный скриншот окна Cursor для диагностики проблем.
-        """
-        try:
-            if not PYAUTOGUI_AVAILABLE:
-                return None
-                
-            import datetime
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"cursor_debug_{timestamp}_{suffix}.png"
-            
-            # Получаем размеры окна
-            user32 = ctypes.windll.user32
-            rect = ctypes.wintypes.RECT()
-            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                return None
-                
-            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
-            
-            # Делаем скриншот области окна
-            screenshot = pyautogui.screenshot(region=(left, top, right - left, bottom - top))
-            screenshot.save(filename)
-            
-            print(f"📸 Отладочный скриншот сохранен: {filename}")
-            return filename
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка сохранения скриншота: {e}")
-            return None
+    # Убраны отладочные скриншоты
 
-    def _try_force_paste_method(self, hwnd: int) -> bool:
-        """
-        Принудительный метод вставки для случаев когда все остальные не работают.
-        Использует низкоуровневые Windows API для прямой отправки сообщений.
-        """
-        try:
-            if not self._is_exe or platform.system().lower() != 'windows':
-                return False
-                
-            print("🔥 Пробуем принудительную вставку через Windows API...")
-            
-            # Убеждаемся что окно активно
-            self._bring_cursor_window_to_front()
-            time.sleep(1)
-            
-            # Сохраняем отладочный скриншот
-            self._save_debug_screenshot(hwnd, "before_force_paste")
-            
-            # Метод 1: Отправляем WM_CHAR сообщения напрямую
-            try:
-                import ctypes
-                from ctypes import wintypes
-                
-                user32 = ctypes.windll.user32
-                
-                # Получаем текст из буфера обмена
-                text = self._get_text_from_clipboard()
-                if text:
-                    print(f"📝 Получен текст из буфера: {len(text)} символов")
-                    
-                    # Отправляем каждый символ как WM_CHAR
-                    WM_CHAR = 0x0102
-                    for char in text[:100]:  # Ограничиваем первыми 100 символами для теста
-                        char_code = ord(char)
-                        user32.SendMessageW(hwnd, WM_CHAR, char_code, 0)
-                        time.sleep(0.01)  # Небольшая пауза между символами
-                    
-                    # Отправляем Enter
-                    user32.SendMessageW(hwnd, WM_CHAR, 13, 0)  # Enter = 13
-                    
-                    print("✅ Принудительная вставка через WM_CHAR завершена")
-                    return True
-                    
-            except Exception as e:
-                print(f"⚠️ WM_CHAR метод не сработал: {e}")
-            
-            # Метод 2: Использование SendInput 
-            try:
-                # Очень простая отправка Ctrl+V + Enter
-                pyautogui.hotkey('ctrl', 'v')
-                time.sleep(0.5)
-                pyautogui.press('enter')
-                
-                print("✅ Принудительная вставка через SendInput")
-                return True
-                
-            except Exception as e:
-                print(f"⚠️ SendInput метод не сработал: {e}")
-            
-            return False
-            
-        except Exception as e:
-            print(f"❌ Ошибка принудительной вставки: {e}")
-            return False
+    # Убран принудительный метод вставки через Windows API (ускорение и упрощение)
 
-    def _get_text_from_clipboard(self) -> str | None:
-        """
-        Получает текст из буфера обмена с обработкой COM ошибок.
-        """
-        try:
-            # Инициализируем COM
-            try:
-                import pythoncom
-                pythoncom.CoInitialize()
-            except Exception:
-                pass
-            
-            # Пытаемся получить через win32clipboard
-            try:
-                import win32clipboard
-                win32clipboard.OpenClipboard()
-                text = win32clipboard.GetClipboardData()
-                win32clipboard.CloseClipboard()
-                return text
-            except ImportError:
-                pass
-            except Exception:
-                try:
-                    win32clipboard.CloseClipboard()
-                except:
-                    pass
-            
-            # Запасной метод через tkinter
-            try:
-                import tkinter as tk
-                root = tk.Tk()
-                root.withdraw()
-                text = root.clipboard_get()
-                root.destroy()
-                return text
-            except Exception:
-                pass
-                
-            return None
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка получения текста из буфера: {e}")
-            return None
+    # Убраны вспомогательные методы буфера обмена для принудительной вставки
 
-    def create_chat_template_if_needed(self) -> str | None:
-        """
-        Создает шаблон области чата для будущего поиска, если его еще нет.
-        Возвращает путь к созданному шаблону или None.
-        """
-        try:
-            template_path = 'cursor_chat_template.png'
-            
-            # Если шаблон уже существует, используем его
-            if os.path.exists(template_path):
-                return template_path
-            
-            print("📸 Создаем шаблон области чата...")
-            
-            # Находим окно Cursor
-            hwnd = self._bring_cursor_window_to_front()
-            if not hwnd:
-                return None
-            
-            time.sleep(2)  # Ждем пока окно полностью загрузится
-            
-            if PYAUTOGUI_AVAILABLE:
-                user32 = ctypes.windll.user32
-                rect = ctypes.wintypes.RECT()
-                if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                    return None
-                
-                left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
-                
-                # Создаем скриншот нижней части окна (где обычно чат)
-                chat_height = min(150, (bottom - top) // 3)  # Нижние 150px или треть окна
-                chat_region = (
-                    left, 
-                    bottom - chat_height, 
-                    right - left, 
-                    chat_height
-                )
-                
-                screenshot = pyautogui.screenshot(region=chat_region)
-                screenshot.save(template_path)
-                
-                print(f"✅ Шаблон области чата сохранен: {template_path}")
-                return template_path
-            
-            return None
-        except Exception as e:
-            print(f"⚠️ Ошибка создания шаблона: {e}")
-            return None
+    # Убрано создание шаблона области чата
 
     def _click_input_area(self, hwnd: int) -> bool:
         """Делает клик по нижней части окна, чтобы сфокусировать поле ввода."""
@@ -2303,86 +1713,9 @@ class CursorManager:
         except Exception:
             pass
 
-    def _focus_chat_via_uia(self, hwnd: int) -> bool:
-        """Пробует сфокусировать поле ввода чата через UI Automation (если доступно)."""
-        try:
-            if not UIA_AVAILABLE or platform.system().lower() != 'windows' or not hwnd:
-                return False
-            w = auto.ControlFromHandle(hwnd)
-            if not w:
-                return False
-            # Ищем Edit в окне — предпочтительно в правой панели
-            # Можно ограничить глубину; берём первый видимый активный Edit
-            edits = w.GetDescendants(controlType=auto.ControlType.Edit)
-            for ed in edits[::-1]:  # чаще нужный ниже по дереву
-                try:
-                    if ed.IsEnabled and ed.IsOffscreen is False:
-                        # По имени можно фильтровать через env
-                        name_hint = (os.getenv('CURSOR_EDIT_NAME_HINT', '') or '').strip().lower()
-                        if name_hint and name_hint not in (ed.Name or '').lower():
-                            continue
-                        ed.SetFocus()
-                        time.sleep(0.05)
-                        return True
-                except Exception:
-                    continue
-            return False
-        except Exception:
-            return False
+    # Убран UI Automation фокус
 
-    def _focus_chat_by_placeholder(self, hwnd: int) -> bool:
-        """Находит поле ввода по плейсхолдеру "Plan, search, build anything" и кликает по центру."""
-        try:
-            if not UIA_AVAILABLE or platform.system().lower() != 'windows' or not hwnd:
-                return False
-            w = auto.ControlFromHandle(hwnd)
-            if not w:
-                return False
-            # Тексты-подсказки, по которым можно найти чат
-            phints = [
-                os.getenv('CURSOR_CHAT_PLACEHOLDER', 'Plan, search, build anything').strip(),
-                'Plan, search, build anything',
-            ]
-            # Обход всех Text/Edit для поиска совпадений по Name/LegacyIAccessibleName/Value/HelpText
-            candidates = w.GetDescendants()
-            for c in candidates:
-                try:
-                    name = (c.Name or '').strip()
-                    if not name and hasattr(c, 'LegacyIAccessiblePattern'):
-                        try:
-                            name = (c.LegacyIAccessiblePattern.Value or '').strip()
-                        except Exception:
-                            pass
-                    if not name and hasattr(c, 'GetValuePattern'):
-                        try:
-                            vp = c.GetValuePattern()
-                            if vp is not None:
-                                name = (vp.Value or '').strip()
-                        except Exception:
-                            pass
-                    if name:
-                        for p in phints:
-                            if p and p.lower() in name.lower():
-                                try:
-                                    rect = c.BoundingRectangle
-                                    # BoundingRectangle: (l, t, r, b)
-                                    l, t, r, b = int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
-                                    if r > l and b > t:
-                                        cx = l + (r - l) // 2
-                                        cy = t + (b - t) // 2
-                                        if os.getenv('CURSOR_HWND_CLICK', '1') == '1':
-                                            self._send_click(hwnd, cx, cy)
-                                        elif PYAUTOGUI_AVAILABLE:
-                                            pyautogui.click(cx, cy)
-                                        time.sleep(0.05)
-                                        return True
-                                except Exception:
-                                    continue
-                except Exception:
-                    continue
-            return False
-        except Exception:
-            return False
+    # Убран поиск по плейсхолдеру через UI Automation
 
     def _ensure_window_active(self, hwnd: int | bool, timeout_s: float = 2.0) -> bool:
         """Ждёт, пока окно будет развернуто и станет активным (Windows)."""
@@ -2436,14 +1769,14 @@ class CursorManager:
                 # фиксируем момент запуска, чтобы следующие ждали интервал
                 self._last_launch_monotonic = time.monotonic()
                 
-                # Дополнительная пауза для EXE режима
+                # Дополнительная пауза (умеренная)
                 try:
                     if self._is_exe:
-                        extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '5.0'))  # Больше для EXE
-                    else:
                         extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '2.0'))
+                    else:
+                        extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '1.0'))
                 except Exception:
-                    extra_gap = 5.0 if self._is_exe else 2.0
+                    extra_gap = 2.0 if self._is_exe else 1.0
                 
                 if extra_gap > 0:
                     if self._is_exe:
@@ -2452,75 +1785,6 @@ class CursorManager:
         except Exception:
             pass
 
-    def _locate_in_window_by_template(self, hwnd: int, template_path: str, rect_tuple: tuple[int, int, int, int]) -> tuple[int, int] | None:
-        """Ищет шаблон внутри окна Cursor по скриншоту окна. Возвращает центр (screen_x, screen_y) или None.
-        Использует OpenCV multi-scale matchTemplate при наличии, иначе None.
-        """
-        try:
-            if not CV2_AVAILABLE:
-                return None
-            left, top, right, bottom = rect_tuple
-            w = right - left
-            h = bottom - top
-            if w <= 0 or h <= 0:
-                return None
-            # Скриншот только области окна
-            screen_img = self._screenshot_region(left, top, w, h)
-            if screen_img is None:
-                return None
-            tpl = cv2.imread(template_path, cv2.IMREAD_COLOR)
-            if tpl is None:
-                return None
-            img = cv2.cvtColor(screen_img, cv2.COLOR_RGBA2RGB)
-            conf = 0.8
-            try:
-                conf = float(os.getenv('CURSOR_CHAT_CONFIDENCE', '0.8'))
-            except Exception:
-                conf = 0.8
-            # Масштабы можно задать через переменную окружения
-            scales_env = os.getenv('CURSOR_CHAT_SCALES', '')
-            scales = []
-            if scales_env:
-                try:
-                    scales = [max(0.5, min(2.0, float(s.strip()))) for s in scales_env.split(',') if s.strip()]
-                except Exception:
-                    scales = []
-            if not scales:
-                scales = [0.75, 0.85, 1.0, 1.15, 1.25]
-            best_val = -1.0
-            best_pt = None
-            th, tw = tpl.shape[:2]
-            for s in scales:
-                try:
-                    tpl_s = cv2.resize(tpl, (max(1, int(tw * s)), max(1, int(th * s))), interpolation=cv2.INTER_AREA)
-                    res = cv2.matchTemplate(img, tpl_s, cv2.TM_CCOEFF_NORMED)
-                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-                    if max_val > best_val:
-                        best_val = max_val
-                        best_pt = (max_loc[0] + tpl_s.shape[1] // 2, max_loc[1] + tpl_s.shape[0] // 2)
-                except Exception:
-                    continue
-            if best_pt is not None and best_val >= conf:
-                cx = left + int(best_pt[0])
-                cy = top + int(best_pt[1])
-                return cx, cy
-            return None
-        except Exception:
-            return None
+    # Убран поиск шаблона внутри окна
 
-    def _screenshot_region(self, x: int, y: int, w: int, h: int):
-        """Скриншот области экрана. Возвращает numpy array RGBA или None."""
-        try:
-            if PYAUTOGUI_AVAILABLE:
-                im = pyautogui.screenshot(region=(x, y, w, h))
-                return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2RGBA)
-        except Exception:
-            pass
-        try:
-            if PIL_AVAILABLE:
-                from PIL import ImageGrab  # type: ignore
-                im = ImageGrab.grab(bbox=(x, y, x + w, y + h))
-                return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2RGBA)
-        except Exception:
-            pass
-        return None
+    # Убран скриншот области экрана (OCR/шаблоны не используются)
