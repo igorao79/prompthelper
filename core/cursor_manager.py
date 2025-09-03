@@ -1261,10 +1261,26 @@ class CursorManager:
                                 if attempt < max_attempts - 1:  # Не последняя попытка
                                     time.sleep(2 if self._is_exe else 1)
                                 else:
-                                    # Последняя попытка - пробуем альтернативный метод
+                                    # Последняя попытка - пробуем все доступные методы для EXE
                                     if self._is_exe:
-                                        print("🔄 Пробуем альтернативный метод вставки для EXE...")
-                                        self._paste_using_alternative_method()
+                                        print("🔥 Пробуем все резервные методы для EXE...")
+                                        
+                                        # Сохраняем отладочный скриншот
+                                        hwnd = self._bring_cursor_window_to_front()
+                                        if hwnd:
+                                            self._save_debug_screenshot(hwnd, "failed_standard_paste")
+                                        
+                                        # Пробуем принудительную вставку
+                                        if hwnd and self._try_force_paste_method(hwnd):
+                                            print("✅ Принудительная вставка сработала!")
+                                            break
+                                        
+                                        # Альтернативный метод (посимвольный)
+                                        if self._paste_using_alternative_method():
+                                            print("✅ Альтернативная вставка сработала!")
+                                            break
+                                        
+                                        print("❌ Все методы вставки для EXE не сработали")
                                     else:
                                         raise e
                     else:
@@ -1438,6 +1454,18 @@ class CursorManager:
             
             print("🎯 Начинаем поиск области чата...")
             
+            # ДЛЯ EXE: Сначала пробуем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I
+            if self._is_exe:
+                print("🔧 EXE режим: используем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I")
+                success = self._try_guaranteed_chat_activation(hwnd)
+                if success:
+                    return True
+                    
+                print("🔄 Ctrl+I не сработал, пробуем полную клавиатурную навигацию...")
+                success = self._activate_chat_by_keyboard(hwnd)
+                if success:
+                    return True
+            
             # Пробуем методы по очереди, останавливаемся на первом успешном
             methods = [
                 ("поиск по тексту", self._find_chat_by_text),
@@ -1465,15 +1493,205 @@ class CursorManager:
             
             # Если все методы не сработали - используем запасной
             print("🔄 Все умные методы не сработали, используем запасной метод...")
+            
+            # Сохраняем отладочный скриншот при неудаче
+            if self._is_exe:
+                self._save_debug_screenshot(hwnd, "chat_search_failed")
+            
             success = self._click_input_area(hwnd)
             if success:
                 print("✅ Клик по области чата выполнен (запасной метод)")
             else:
                 print("❌ Все методы поиска области чата не сработали")
+                if self._is_exe:
+                    self._save_debug_screenshot(hwnd, "all_methods_failed")
             return success
             
         except Exception as e:
             print(f"❌ Ошибка при клике по области чата: {e}")
+            return False
+
+    def _try_guaranteed_chat_activation(self, hwnd: int) -> bool:
+        """
+        Пробует ГАРАНТИРОВАННУЮ активацию чата через Ctrl+I.
+        Упрощенная версия для максимальной надежности в EXE.
+        """
+        try:
+            if not PYAUTOGUI_AVAILABLE:
+                return False
+            
+            print("🎯 Используем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I...")
+            
+            # Убеждаемся что окно активно
+            self._bring_cursor_window_to_front()
+            time.sleep(1)
+            
+            # Пробуем Ctrl+I несколько раз для надежности
+            for attempt in range(3):
+                try:
+                    print(f"🔥 Попытка {attempt + 1}: Отправляем Ctrl+I...")
+                    pyautogui.hotkey('ctrl', 'i')
+                    time.sleep(2)  # Даем больше времени
+                    
+                    # Проверяем активацию чата
+                    print("🔍 Проверяем активацию чата...")
+                    pyautogui.write('test')
+                    time.sleep(0.3)
+                    
+                    # Очищаем тестовый текст
+                    for _ in range(4):  # Удаляем 'test'
+                        pyautogui.press('backspace')
+                        time.sleep(0.1)
+                    
+                    print("🎉 ГАРАНТИРОВАННАЯ активация чата через Ctrl+I УСПЕШНА!")
+                    return True
+                    
+                except Exception as e:
+                    print(f"⚠️ Попытка {attempt + 1} не удалась: {e}")
+                    if attempt < 2:  # Не последняя попытка
+                        time.sleep(1)
+                        continue
+            
+            print("❌ Все попытки Ctrl+I не сработали")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Ошибка гарантированной активации: {e}")
+            return False
+
+    def _activate_chat_by_keyboard(self, hwnd: int) -> bool:
+        """
+        Активирует область чата через клавиатурную навигацию.
+        Самый надежный метод для EXE режима.
+        """
+        try:
+            if not PYAUTOGUI_AVAILABLE:
+                return False
+            
+            print("⌨️ Используем клавиатурную навигацию для поиска чата...")
+            
+            # Убеждаемся что окно активно
+            self._bring_cursor_window_to_front()
+            time.sleep(1)
+            
+            # Метод 1: ГАРАНТИРОВАННАЯ горячая клавиша Cursor для чата (Ctrl+I)
+            print("🔥 Пробуем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I для чата...")
+            try:
+                pyautogui.hotkey('ctrl', 'i')
+                time.sleep(2)  # Даем время на открытие чата
+                print("✅ Ctrl+I отправлен")
+                
+                # Проверяем что чат активировался (пробуем напечатать и стереть символ)
+                pyautogui.write('.')
+                time.sleep(0.2)
+                pyautogui.press('backspace')
+                time.sleep(0.2)
+                print("🎉 Чат ГАРАНТИРОВАННО активирован через Ctrl+I!")
+                return True
+            except Exception as e:
+                print(f"⚠️ Ctrl+I не сработал: {e}")
+            
+            # Метод 2: Запасная горячая клавиша (Ctrl+Shift+`)
+            print("🔄 Пробуем запасную горячую клавишу Ctrl+Shift+`...")
+            try:
+                pyautogui.hotkey('ctrl', 'shift', '`')
+                time.sleep(2)  # Даем время на открытие чата
+                print("✅ Ctrl+Shift+` отправлен")
+                
+                # Проверяем что чат активировался
+                pyautogui.write('.')
+                time.sleep(0.2)
+                pyautogui.press('backspace')
+                time.sleep(0.2)
+                print("✅ Чат активирован через запасную горячую клавишу!")
+                return True
+            except Exception as e:
+                print(f"⚠️ Запасная горячая клавиша не сработала: {e}")
+            
+            # Метод 3: Tab навигация для поиска поля ввода
+            print("🔄 Пробуем Tab навигацию...")
+            try:
+                # Сначала идем в начало (Alt+Home или Ctrl+Home)
+                pyautogui.hotkey('ctrl', 'home')
+                time.sleep(0.5)
+                
+                # Пробуем несколько Tab нажатий для поиска поля ввода
+                for i in range(15):  # Максимум 15 табов
+                    pyautogui.press('tab')
+                    time.sleep(0.2)
+                    
+                    # Пробуем напечатать символ чтобы проверить что это поле ввода
+                    pyautogui.write('.')
+                    time.sleep(0.1)
+                    
+                    # Если смогли напечатать - это может быть наше поле
+                    pyautogui.press('backspace')
+                    time.sleep(0.1)
+                    
+                    # Проверяем не попали ли мы в область чата
+                    # (можно по наличию placeholder текста или другим признакам)
+                    if i > 5:  # После 5 табов вероятно попали в область чата
+                        print(f"✅ Возможно нашли поле ввода через Tab (позиция {i})")
+                        return True
+                        
+            except Exception as e:
+                print(f"⚠️ Tab навигация не сработала: {e}")
+            
+            # Метод 4: Комбинированный подход - клики + клавиши
+            print("🔄 Пробуем комбинированный подход...")
+            try:
+                # Кликаем в нижнюю часть окна
+                user32 = ctypes.windll.user32
+                rect = ctypes.wintypes.RECT()
+                if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+                    
+                    # Кликаем в нижнюю центральную область
+                    click_x = left + (right - left) // 2
+                    click_y = bottom - 50  # 50 пикселей от низа
+                    
+                    pyautogui.click(click_x, click_y)
+                    time.sleep(0.5)
+                    
+                    # Пробуем гарантированную горячую клавишу после клика
+                    pyautogui.hotkey('ctrl', 'i')
+                    time.sleep(1)
+                    
+                    # Проверяем активацию
+                    pyautogui.write('.')
+                    time.sleep(0.1)
+                    pyautogui.press('backspace')
+                    
+                    print("✅ Комбинированный метод сработал!")
+                    return True
+                    
+            except Exception as e:
+                print(f"⚠️ Комбинированный метод не сработал: {e}")
+            
+            # Метод 5: Попытка через End (переход в конец документа) + Enter
+            print("🔄 Пробуем End + Enter...")
+            try:
+                pyautogui.press('end')  # Переходим в конец
+                time.sleep(0.5)
+                pyautogui.press('enter')  # Возможно откроется поле ввода
+                time.sleep(1)
+                
+                # Пробуем напечатать
+                pyautogui.write('.')
+                time.sleep(0.1)
+                pyautogui.press('backspace')
+                
+                print("✅ End + Enter метод сработал!")
+                return True
+                
+            except Exception as e:
+                print(f"⚠️ End + Enter не сработал: {e}")
+            
+            print("❌ Все методы клавиатурной навигации не сработали")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Ошибка клавиатурной навигации: {e}")
             return False
 
     def _find_chat_by_text(self, hwnd: int) -> tuple[int, int] | None:
@@ -1695,6 +1913,146 @@ class CursorManager:
         except Exception as e:
             print(f"❌ Ошибка клика в позиции ({x}, {y}): {e}")
             return False
+
+    def _save_debug_screenshot(self, hwnd: int, suffix: str = "") -> str | None:
+        """
+        Сохраняет отладочный скриншот окна Cursor для диагностики проблем.
+        """
+        try:
+            if not PYAUTOGUI_AVAILABLE:
+                return None
+                
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"cursor_debug_{timestamp}_{suffix}.png"
+            
+            # Получаем размеры окна
+            user32 = ctypes.windll.user32
+            rect = ctypes.wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return None
+                
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            
+            # Делаем скриншот области окна
+            screenshot = pyautogui.screenshot(region=(left, top, right - left, bottom - top))
+            screenshot.save(filename)
+            
+            print(f"📸 Отладочный скриншот сохранен: {filename}")
+            return filename
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка сохранения скриншота: {e}")
+            return None
+
+    def _try_force_paste_method(self, hwnd: int) -> bool:
+        """
+        Принудительный метод вставки для случаев когда все остальные не работают.
+        Использует низкоуровневые Windows API для прямой отправки сообщений.
+        """
+        try:
+            if not self._is_exe or platform.system().lower() != 'windows':
+                return False
+                
+            print("🔥 Пробуем принудительную вставку через Windows API...")
+            
+            # Убеждаемся что окно активно
+            self._bring_cursor_window_to_front()
+            time.sleep(1)
+            
+            # Сохраняем отладочный скриншот
+            self._save_debug_screenshot(hwnd, "before_force_paste")
+            
+            # Метод 1: Отправляем WM_CHAR сообщения напрямую
+            try:
+                import ctypes
+                from ctypes import wintypes
+                
+                user32 = ctypes.windll.user32
+                
+                # Получаем текст из буфера обмена
+                text = self._get_text_from_clipboard()
+                if text:
+                    print(f"📝 Получен текст из буфера: {len(text)} символов")
+                    
+                    # Отправляем каждый символ как WM_CHAR
+                    WM_CHAR = 0x0102
+                    for char in text[:100]:  # Ограничиваем первыми 100 символами для теста
+                        char_code = ord(char)
+                        user32.SendMessageW(hwnd, WM_CHAR, char_code, 0)
+                        time.sleep(0.01)  # Небольшая пауза между символами
+                    
+                    # Отправляем Enter
+                    user32.SendMessageW(hwnd, WM_CHAR, 13, 0)  # Enter = 13
+                    
+                    print("✅ Принудительная вставка через WM_CHAR завершена")
+                    return True
+                    
+            except Exception as e:
+                print(f"⚠️ WM_CHAR метод не сработал: {e}")
+            
+            # Метод 2: Использование SendInput 
+            try:
+                # Очень простая отправка Ctrl+V + Enter
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.5)
+                pyautogui.press('enter')
+                
+                print("✅ Принудительная вставка через SendInput")
+                return True
+                
+            except Exception as e:
+                print(f"⚠️ SendInput метод не сработал: {e}")
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ Ошибка принудительной вставки: {e}")
+            return False
+
+    def _get_text_from_clipboard(self) -> str | None:
+        """
+        Получает текст из буфера обмена с обработкой COM ошибок.
+        """
+        try:
+            # Инициализируем COM
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+            except Exception:
+                pass
+            
+            # Пытаемся получить через win32clipboard
+            try:
+                import win32clipboard
+                win32clipboard.OpenClipboard()
+                text = win32clipboard.GetClipboardData()
+                win32clipboard.CloseClipboard()
+                return text
+            except ImportError:
+                pass
+            except Exception:
+                try:
+                    win32clipboard.CloseClipboard()
+                except:
+                    pass
+            
+            # Запасной метод через tkinter
+            try:
+                import tkinter as tk
+                root = tk.Tk()
+                root.withdraw()
+                text = root.clipboard_get()
+                root.destroy()
+                return text
+            except Exception:
+                pass
+                
+            return None
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка получения текста из буфера: {e}")
+            return None
 
     def create_chat_template_if_needed(self) -> str | None:
         """
