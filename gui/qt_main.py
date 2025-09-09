@@ -31,11 +31,12 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.domain = ""
 
 		self._bg_threads = []
-		self.max_parallel = 10
+		self.max_parallel = 15  # Увеличенный лимит параллельности
 		self._active_builds = 0
 		self._build_queue = []  # list of params dicts
 		self._active_jobs = []  # running params
 		self._job_seq = 1
+		self._last_build_start_time = 0  # Для троттлинга между задачами
 		self._last_city_by_country = {}
 		self._pending_update_sha = None
 		# Сопоставление кодов языков для человеко-читаемого отображения
@@ -1010,9 +1011,22 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			return
 		if not self._build_queue:
 			return
+
+		# Троттлинг между запусками задач
+		import time
+		current_time = time.time()
+		time_since_last_build = current_time - self._last_build_start_time
+		min_interval = 5.0  # увеличено до 5 секунд между задачами
+
+		if time_since_last_build < min_interval:
+			wait_time = min_interval - time_since_last_build
+			print(f"⏳ Ожидание {wait_time:.1f} сек перед следующей задачей...")
+			time.sleep(wait_time)
+
 		params = self._build_queue.pop(0)
 		self._active_builds += 1
 		self._active_jobs.append(params)
+		self._last_build_start_time = time.time()
 		self.status_label.setText("🚧 Создание проекта и изображений...")
 
 		def task():

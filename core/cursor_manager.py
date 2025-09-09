@@ -8,6 +8,17 @@
 - CURSOR_LAUNCH_INTERVAL_SEC: интервал между запусками Cursor (секунды)
 - CURSOR_EXTRA_LAUNCH_GAP_SEC: дополнительная пауза после запуска (секунды)
 - CURSOR_HWND_CLICK: использовать клик через hwnd (1/0)
+- CURSOR_APP_READY_TIMEOUT_SEC: таймаут ожидания готовности окна Cursor (секунды, по умолчанию 10)
+- CURSOR_INTERFACE_READY_DELAY_SEC: пауза после готовности окна для загрузки интерфейса (секунды, по умолчанию 5.0)
+- CURSOR_FALLBACK_DELAY_SEC: резервная пауза если окно не готово (секунды, по умолчанию 12.0)
+- CURSOR_CHAT_READY_DELAY_SEC: пауза после активации чата для готовности курсора (секунды, по умолчанию 4.0)
+- CURSOR_STABILIZATION_CHECKS: количество проверок стабилизации ввода (по умолчанию 3)
+- CURSOR_STABILIZATION_DELAY_SEC: задержка между проверками стабилизации (секунды, по умолчанию 0.25)
+- CURSOR_PASTE_ENTER_DELAY_SEC: задержка между вставкой промпта и нажатием Enter (секунды, по умолчанию 1.0)
+- CURSOR_CURSOR_READY_CHECKS: количество попыток проверки готовности курсора (по умолчанию 5)
+- CURSOR_PASTE_RETRY_ATTEMPTS: количество попыток вставки промпта (по умолчанию 3)
+- CURSOR_CURSOR_READY_CHECK_DELAY: задержка между проверками готовности курсора (секунды, по умолчанию 0.5)
+- CURSOR_DIAGNOSTIC_MODE: включить подробную диагностику проблем (1/0, по умолчанию 0)
 """
 
 import os
@@ -80,13 +91,23 @@ class CursorManager:
         
         # Троттлинг между запусками окон Cursor
         try:
-            # Умеренный интервал: быстрее генерация, но без гонок
-            default_interval = "4.0" if self._is_exe else "2.0"
+            # Жесткий троттлинг - 5 секунд минимум между запусками
+            default_interval = "5.0"
             self._launch_interval_sec = float(os.getenv("CURSOR_LAUNCH_INTERVAL_SEC", default_interval))
         except Exception:
-            self._launch_interval_sec = 4.0 if self._is_exe else 2.0
+            self._launch_interval_sec = 5.0
         self._launch_lock = threading.Lock()
         self._last_launch_monotonic = 0.0
+
+        # Дополнительный троттлинг для предотвращения смешивания проектов
+        self._project_launch_times = {}  # словарь для отслеживания времени запуска по проектам
+        self._min_project_interval_sec = 3.0  # минимум 3 секунды между проектами
+        
+        # Управление позиционированием окон
+        self._window_position_offset = 0  # Смещение для каждого нового окна
+        self._base_window_x = 100  # Базовая позиция X
+        self._base_window_y = 100  # Базовая позиция Y
+        self._window_cascade_step = 30  # Шаг каскадного смещения
         
         print(f"🖥️ Определена ОС: {self.os_type}")
         
@@ -125,7 +146,16 @@ class CursorManager:
 
     def set_window_hint(self, hint: str | None):
         try:
-            self._preferred_window_hint = (hint or "").strip().lower() or None
+            clean_hint = (hint or "").strip()
+            if clean_hint:
+                # Убираем расширение файла если есть
+                clean_hint = clean_hint.replace('.exe', '').replace('.lnk', '')
+                # Берем только имя папки/проекта
+                clean_hint = clean_hint.split('/')[-1].split('\\')[-1]
+                self._preferred_window_hint = clean_hint.lower()
+                print(f"🎯 Установлена подсказка окна: '{self._preferred_window_hint}'")
+            else:
+                self._preferred_window_hint = None
         except Exception:
             self._preferred_window_hint = None
 
@@ -576,14 +606,20 @@ class CursorManager:
         Returns:
             bool: True если успешно, False иначе
         """
-        # Троттлинг перед запуском нового окна Cursor
-        self._throttle_before_launch()
+        # Троттлинг перед запуском нового окна Cursor с учётом проекта
+        project_hint = str(project_path).split('/')[-1] if '/' in str(project_path) else str(project_path).split('\\')[-1]
+        self._throttle_before_launch(project_hint)
 
         cursor_exe = self.find_cursor_executable()
         
         if not cursor_exe:
             return False
         
+        # Дополнительная валидация перед запуском
+        if not self._validate_pre_launch_conditions(project_path):
+            print(f"❌ Предварительные условия запуска не соблюдены для: {project_path}")
+            return False
+
         # Универсальная проверка на уже запущенный Cursor (для всех ОС)
         if self._is_cursor_already_running_with_project(project_path):
             print(f"Cursor уже запущен с проектом: {project_path}")
@@ -621,6 +657,11 @@ class CursorManager:
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Cursor AI запущен (Windows): {cursor_exe}")
+            
+            # Даем время на запуск, затем принудительно позиционируем окно
+            time.sleep(2)
+            self._position_new_cursor_window()
+            
             return True
         except Exception as e:
             print(f"Ошибка запуска Cursor в Windows: {e}")
@@ -658,11 +699,104 @@ class CursorManager:
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Cursor AI запущен (Linux): {cursor_exe}")
+            
+            # Даем время на запуск, затем принудительно позиционируем окно
+            time.sleep(2)
+            self._position_new_cursor_window()
+            
             return True
         except Exception as e:
             print(f"Ошибка запуска Cursor в Linux: {e}")
             return False
     
+    def _validate_pre_launch_conditions(self, project_path):
+        """
+        Проверяет предварительные условия перед запуском Cursor
+
+        Args:
+            project_path: Путь к проекту
+
+        Returns:
+            bool: True если условия соблюдены
+        """
+        try:
+            # Проверяем существование пути к проекту
+            if not os.path.exists(project_path):
+                print(f"⚠️ Путь к проекту не существует: {project_path}")
+                return False
+
+            # Проверяем, что путь является директорией
+            if not os.path.isdir(project_path):
+                print(f"⚠️ Путь к проекту не является директорией: {project_path}")
+                return False
+
+            # Проверяем права доступа к директории
+            try:
+                test_file = os.path.join(project_path, ".cursor_test")
+                with open(test_file, 'w') as f:
+                    f.write("test")
+                os.remove(test_file)
+            except Exception as e:
+                print(f"⚠️ Нет прав доступа к директории проекта: {e}")
+                return False
+
+            # Проверяем, что подсказка проекта установлена
+            if not self._preferred_window_hint:
+                print("⚠️ Не установлена подсказка проекта")
+                return False
+
+            print(f"✅ Предварительные условия запуска соблюдены для: {project_path}")
+            return True
+
+        except Exception as e:
+            print(f"⚠️ Ошибка валидации предварительных условий: {e}")
+            return False
+
+    def _validate_project_window_match(self, project_path, hwnd):
+        """
+        Проверяет, соответствует ли окно Cursor данному проекту
+
+        Args:
+            project_path: Путь к проекту
+            hwnd: Handle окна Cursor
+
+        Returns:
+            bool: True если окно соответствует проекту
+        """
+        try:
+            if not self._preferred_window_hint or not hwnd:
+                return True  # Если нет подсказки или hwnd, считаем что подходит
+
+            # Получаем заголовок окна
+            user32 = ctypes.windll.user32
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length == 0:
+                return False
+
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = buf.value or ""
+            tl = title.lower()
+
+            preferred = self._preferred_window_hint.lower()
+
+            # Проверяем точное совпадение
+            if preferred in tl:
+                return True
+
+            # Проверяем частичные совпадения
+            hint_parts = preferred.replace('_', ' ').replace('-', ' ').split()
+            for part in hint_parts:
+                if len(part) > 3 and part in tl:
+                    return True
+
+            print(f"⚠️ Окно Cursor '{title}' не соответствует проекту '{preferred}'")
+            return False
+
+        except Exception as e:
+            print(f"⚠️ Ошибка валидации окна проекта: {e}")
+            return True  # В случае ошибки считаем что подходит
+
     def _is_cursor_already_running_with_project(self, project_path):
         """Проверяет, запущен ли уже Cursor с данным проектом"""
         try:
@@ -760,6 +894,11 @@ class CursorManager:
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Cursor AI запущен (macOS): {cursor_exe}")
+            
+            # Даем время на запуск, затем принудительно позиционируем окно
+            time.sleep(2)
+            self._position_new_cursor_window()
+            
             return True
         except Exception as e:
             print(f"Ошибка запуска Cursor в macOS: {e}")
@@ -771,6 +910,11 @@ class CursorManager:
             subprocess.Popen([cursor_exe, str(project_path)],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print(f"Cursor AI запущен (generic): {cursor_exe}")
+            
+            # Даем время на запуск, затем принудительно позиционируем окно
+            time.sleep(2)
+            self._position_new_cursor_window()
+            
             return True
         except Exception as e:
             print(f"Ошибка универсального запуска Cursor: {e}")
@@ -923,8 +1067,28 @@ class CursorManager:
                     original_pos = pyautogui.position()
                 except Exception:
                     original_pos = None
-                # Пытаемся вывести окно Cursor на передний план перед вставкой
-                hwnd = self._bring_cursor_window_to_front()
+                # ГИБРИДНЫЙ ПОДХОД: Сначала пробуем новый (точный), если не получилось - старый (по заголовкам)
+                print(f"🔍 Начинаем поиск окна Cursor для проекта: '{self._preferred_window_hint}'")
+                hwnd = self._find_cursor_process_for_project(project_path)
+
+                if not hwnd:
+                    print("⚠️ Новый метод не нашел процесс, пробуем старый метод (по заголовкам окон)...")
+                    hwnd = self._bring_cursor_window_to_front_old()
+
+                    if not hwnd:
+                        print("❌ СТАРЫЙ МЕТОД ТОЖЕ НЕ НАШЕЛ окно Cursor!")
+                        print("📋 ДИАГНОСТИКА: Проверьте, что у вас открыт Cursor с этим проектом")
+                        print(f"   Ожидаемый проект: '{self._preferred_window_hint}'")
+                        print("   Советы:")
+                        print("   1. Откройте проект в Cursor")
+                        print("   2. Убедитесь что окно Cursor не свернуто")
+                        print("   3. Проверьте заголовок окна в диспетчере задач")
+                        return False, "Не найдено окно Cursor для проекта"
+                    else:
+                        print(f"✅ Старый метод нашел окно: HWND={hwnd}")
+                else:
+                    print(f"✅ Новый метод нашел процесс: HWND={hwnd}")
+                    
                 # Гарантируем разворачивание и активность окна перед действиями
                 try:
                     self._ensure_window_active(hwnd, timeout_s=max(1.0, float(os.getenv('CURSOR_ACTIVATE_TIMEOUT', '2.0'))))
@@ -1139,27 +1303,29 @@ class CursorManager:
                 # Автоматическая вставка с улучшенной надежностью для EXE
                 try:
                     # Ждём загрузку приложения Cursor (стабильное окно)
+                    print("⏳ Ожидание полного запуска Cursor...")
                     try:
-                        try:
-                            app_ready_to = int(os.getenv('CURSOR_APP_READY_TIMEOUT_SEC', '30'))
-                        except Exception:
-                            app_ready_to = 30
-                        hwnd_ready = self._wait_for_cursor_app_ready(timeout_sec=app_ready_to)
-                        if hwnd_ready:
-                            print("✅ Окно Cursor готово")
-                            # Доп. пауза после готовности (конфигурируемая)
-                            try:
-                                extra_delay = int(os.getenv('CURSOR_APP_EXTRA_DELAY_SEC', '2' if self._is_exe else '1'))
-                            except Exception:
-                                extra_delay = 2 if self._is_exe else 1
-                            if extra_delay > 0:
-                                time.sleep(extra_delay)
-                        else:
-                            # Фолбек: старая пауза
-                            print(f"⚠️ Не дождались готовности окна за {app_ready_to}с, используем паузу")
-                            time.sleep(max(5, paste_delay))
+                        app_ready_to = int(os.getenv('CURSOR_APP_READY_TIMEOUT_SEC', '10'))
                     except Exception:
-                        time.sleep(max(5, paste_delay))
+                        app_ready_to = 10
+                    
+                    hwnd_ready = self._wait_for_cursor_app_ready(timeout_sec=app_ready_to)
+                    if hwnd_ready:
+                        print("✅ Окно Cursor готово")
+                        # Увеличенная пауза для полной загрузки интерфейса и курсора
+                        try:
+                            interface_ready_delay = float(os.getenv('CURSOR_INTERFACE_READY_DELAY_SEC', '8.0'))
+                        except Exception:
+                            interface_ready_delay = 8.0
+                        print(f"⏳ Ждем полной загрузки интерфейса и курсора ({interface_ready_delay} сек)...")
+                        time.sleep(interface_ready_delay)
+                    else:
+                        print(f"⚠️ Не дождались готовности окна за {app_ready_to}с, используем стандартную паузу")
+                        try:
+                            fallback_delay = float(os.getenv('CURSOR_FALLBACK_DELAY_SEC', '12.0'))
+                        except Exception:
+                            fallback_delay = 12.0
+                        time.sleep(max(fallback_delay, paste_delay))
                     
                     # Сокращённая логика: без шаблонов/скриншотов
                     
@@ -1170,54 +1336,123 @@ class CursorManager:
                             pyautogui.PAUSE = 0.5  # Увеличиваем паузы между действиями
                             pyautogui.FAILSAFE = False  # Отключаем failsafe для надежности
                         
-                        # ОДИН РАЗ активируем чат (Ctrl+I) либо запасной клик
-                        chat_clicked = self._click_on_chat_area()
-                        if chat_clicked:
-                            print("✅ Область чата найдена и активирована")
+                        # Активируем чат через Ctrl+Shift+Y
+                        print("🚀 Активация чата через Ctrl+Shift+Y...")
+                        chat_activated = self._click_on_chat_area()
+                        if chat_activated:
+                            print("✅ Чат активирован через Ctrl+Shift+Y")
                         else:
-                            print("⚠️ Не удалось активировать область чата")
+                            print("⚠️ Не удалось активировать чат через Ctrl+Shift+Y")
+                            return True, "Cursor AI запущен, но чат не активирован"
                         
-                        # Большая задержка для стабилизации после клика/активации чата (конфигурируемая)
+                        # Увеличенная пауза для готовности чата и курсора
                         try:
-                            ready_delay_env = int(os.getenv('CURSOR_CHAT_READY_DELAY_SEC', '7' if self._is_exe else '3'))
+                            chat_ready_delay = float(os.getenv('CURSOR_CHAT_READY_DELAY_SEC', '6.0'))
                         except Exception:
-                            ready_delay_env = 7 if self._is_exe else 3
-                        time.sleep(max(2, ready_delay_env))
+                            chat_ready_delay = 6.0
+                        print(f"⏳ Ожидание готовности чата и курсора ({chat_ready_delay} сек)...")
+                        time.sleep(chat_ready_delay)
 
-                        # Дополнительная стабилизация: лёгкая проверка ввода (печатаем и удаляем символ)
-                        try:
-                            for _ in range(2):
-                                pyautogui.write('.')
-                                time.sleep(0.15)
-                                pyautogui.press('backspace')
-                                time.sleep(0.15)
-                        except Exception:
-                            pass
-                        
-                        # Несколько попыток вставки БЕЗ повторных кликов по чату
-                        max_attempts = 3  # Чуть больше попыток, с увеличенными паузами
-                        for attempt in range(max_attempts):
+                        # Диагностический режим
+                        diagnostic_mode = str(os.getenv('CURSOR_DIAGNOSTIC_MODE', '0')).lower() in ('1', 'true', 'yes')
+
+                        # Улучшенная стабилизация: проверка ввода с retry-логикой
+                        def _check_cursor_ready(max_attempts=5):
+                            """Проверяет готовность курсора к вводу с повторными попытками"""
                             try:
-                                print(f"🔄 Попытка вставки #{attempt + 1}")
-                                
-                                # Небольшая пауза между попытками
-                                if attempt > 0:
-                                    time.sleep(1.2 if self._is_exe else 0.8)
-                                
-                                pyautogui.hotkey('ctrl', 'a')  # Выделяем все (если что-то есть)
-                                time.sleep(0.5 if self._is_exe else 0.25)
-                                pyautogui.hotkey('ctrl', 'v')  # Вставляем
-                                time.sleep(1.0 if self._is_exe else 0.5)
-                                pyautogui.press('enter')  # Отправляем
-                                print("✅ Промпт вставлен успешно")
-                                break
-                            except Exception as e:
-                                print(f"⚠️ Ошибка попытки {attempt + 1}: {e}")
-                                if attempt < max_attempts - 1:  # Не последняя попытка
-                                    time.sleep(2 if self._is_exe else 1)
-                                else:
-                                    # Последняя попытка - не плодим тяжёлые ветки
-                                    raise e
+                                check_delay = float(os.getenv('CURSOR_CURSOR_READY_CHECK_DELAY', '0.5'))
+                            except Exception:
+                                check_delay = 0.5
+
+                            for attempt in range(max_attempts):
+                                try:
+                                    if diagnostic_mode:
+                                        print(f"🔍 [Диагностика] Попытка проверки курсора {attempt + 1}/{max_attempts}")
+                                        print(f"🔍 [Диагностика] Пишем тестовый символ '.'")
+
+                                    # Пишем тестовый символ
+                                    pyautogui.write('.')
+
+                                    # Небольшая пауза для обработки
+                                    time.sleep(0.1)
+
+                                    if diagnostic_mode:
+                                        print(f"🔍 [Диагностика] Удаляем тестовый символ")
+
+                                    # Удаляем тестовый символ
+                                    pyautogui.press('backspace')
+                                    time.sleep(0.1)
+
+                                    # Если дошли до сюда без ошибок - курсор готов
+                                    if diagnostic_mode:
+                                        print(f"🔍 [Диагностика] Курсор успешно прошел проверку")
+                                    print(f"✅ Курсор готов к вводу (попытка {attempt + 1})")
+                                    return True
+
+                                except Exception as e:
+                                    if diagnostic_mode:
+                                        print(f"🔍 [Диагностика] Ошибка при проверке курсора: {str(e)}")
+                                    print(f"⚠️ Проверка курсора неудачна (попытка {attempt + 1}/{max_attempts}): {e}")
+                                    if attempt < max_attempts - 1:
+                                        if diagnostic_mode:
+                                            print(f"🔍 [Диагностика] Ждем {check_delay} сек перед следующей попыткой")
+                                        time.sleep(check_delay)  # Пауза перед следующей попыткой
+                                    continue
+
+                            print("❌ Курсор не готов к вводу после всех попыток")
+                            return False
+
+                        # Выполняем проверку готовности курсора
+                        try:
+                            cursor_ready_checks = int(os.getenv('CURSOR_CURSOR_READY_CHECKS', '5'))
+                        except Exception:
+                            cursor_ready_checks = 5
+
+                        cursor_ready = _check_cursor_ready(cursor_ready_checks)
+                        if not cursor_ready:
+                            print("⚠️ Продолжаем несмотря на проблемы с курсором...")
+
+                        # Вставка промпта с retry-логикой
+                        def _paste_prompt_with_retry(max_attempts=3):
+                            """Вставляет промпт с повторными попытками"""
+                            for attempt in range(max_attempts):
+                                try:
+                                    print(f"📝 Попытка вставки промпта {attempt + 1}/{max_attempts}...")
+                                    pyautogui.hotkey('ctrl', 'v')  # Вставляем
+
+                                    try:
+                                        paste_enter_delay = float(os.getenv('CURSOR_PASTE_ENTER_DELAY_SEC', '1.0'))
+                                    except Exception:
+                                        paste_enter_delay = 1.0
+
+                                    time.sleep(paste_enter_delay)
+                                    pyautogui.press('enter')  # Отправляем
+
+                                    print(f"✅ Промпт вставлен успешно (попытка {attempt + 1})")
+                                    return True
+
+                                except Exception as e:
+                                    print(f"⚠️ Ошибка вставки промпта (попытка {attempt + 1}/{max_attempts}): {e}")
+                                    if attempt < max_attempts - 1:
+                                        print("⏳ Повторная попытка через 1 секунду...")
+                                        time.sleep(1.0)
+                                    continue
+
+                            print("❌ Все попытки вставки промпта неудачны")
+                            return False
+
+                        # Выполняем вставку промпта с retry
+                        try:
+                            paste_retry_attempts = int(os.getenv('CURSOR_PASTE_RETRY_ATTEMPTS', '3'))
+                        except Exception:
+                            paste_retry_attempts = 3
+
+                        paste_success = _paste_prompt_with_retry(paste_retry_attempts)
+
+                        if not paste_success:
+                            return True, "Cursor AI запущен, но вставка промпта неудачна после нескольких попыток"
+                        else:
+                            print("✅ Промпт вставлен успешно через Ctrl+Shift+Y")
                     else:
                         print("⚠️ pyautogui недоступен, автовставка невозможна")
                 except Exception as e:
@@ -1228,7 +1463,133 @@ class CursorManager:
             return False, "Cursor AI не найден. Промпт скопирован в буфер обмена"
 
     # ===== Windows helpers =====
-    def _bring_cursor_window_to_front(self) -> int | bool:
+    def _find_cursor_process_for_project(self, project_path) -> int | bool:
+        """
+        Новый подход: ищет процесс Cursor, запущенный с конкретным проектом
+        через анализ аргументов командной строки процессов
+        """
+        try:
+            if platform.system().lower() != 'windows':
+                return self._bring_cursor_window_to_front_old()
+
+            import psutil
+            
+            project_name = str(project_path).split('/')[-1] if '/' in str(project_path) else str(project_path).split('\\')[-1]
+            project_full_path = str(project_path).replace('/', '\\')
+            
+            print(f"🔍 Поиск процесса Cursor для проекта: '{project_name}' по пути: '{project_full_path}'")
+            
+            cursor_processes = []
+            
+            # Ищем все процессы Cursor
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'cursor' in proc.info['name'].lower():
+                        cmdline = proc.info.get('cmdline', [])
+                        if cmdline:
+                            cmdline_str = ' '.join(cmdline)
+                            cursor_processes.append({
+                                'pid': proc.info['pid'],
+                                'cmdline': cmdline_str,
+                                'match_score': 0
+                            })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            print(f"📊 Найдено {len(cursor_processes)} процессов Cursor")
+            
+            if not cursor_processes:
+                print("❌ Процессы Cursor не найдены")
+                return False
+                
+            # Оцениваем каждый процесс по соответствию проекту
+            best_match = None
+            best_score = 0
+            
+            for proc_info in cursor_processes:
+                cmdline = proc_info['cmdline']
+                score = 0
+                
+                # Проверяем точное совпадение пути
+                if project_full_path.lower() in cmdline.lower():
+                    score += 100
+                    print(f"✅ Точное совпадение пути в процессе PID {proc_info['pid']}")
+                
+                # Проверяем совпадение имени проекта
+                elif project_name.lower() in cmdline.lower():
+                    score += 50
+                    print(f"🎯 Совпадение имени проекта в процессе PID {proc_info['pid']}")
+                
+                # Проверяем части имени проекта
+                else:
+                    parts = project_name.replace('_', ' ').replace('-', ' ').split()
+                    for part in parts:
+                        if len(part) > 3 and part.lower() in cmdline.lower():
+                            score += 10
+                
+                proc_info['match_score'] = score
+                
+                if score > best_score:
+                    best_score = score
+                    best_match = proc_info
+                    
+                print(f"   PID {proc_info['pid']}: score={score}, cmdline={cmdline[:100]}...")
+            
+            if best_match and best_score > 0:
+                print(f"🎯 Лучшее совпадение: PID {best_match['pid']} (score={best_score})")
+                return self._get_window_handle_by_pid(best_match['pid'])
+            else:
+                print("❌ Не найден подходящий процесс Cursor для проекта")
+                return False
+                
+        except ImportError:
+            print("⚠️ psutil не установлен, используем старый метод")
+            return self._bring_cursor_window_to_front_old()
+        except Exception as e:
+            print(f"⚠️ Ошибка поиска процесса: {e}")
+            return self._bring_cursor_window_to_front_old()
+
+    def _get_window_handle_by_pid(self, pid) -> int | bool:
+        """Получает handle окна по PID процесса"""
+        try:
+            if platform.system().lower() != 'windows':
+                return False
+                
+            user32 = ctypes.windll.user32
+            
+            target_hwnd = 0
+            
+            def enum_proc(hwnd, lParam):
+                try:
+                    nonlocal target_hwnd
+                    process_id = ctypes.wintypes.DWORD()
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+                    
+                    if process_id.value == pid and user32.IsWindowVisible(hwnd):
+                        # Проверяем что это главное окно (не дочернее)
+                        if not user32.GetParent(hwnd):
+                            target_hwnd = hwnd
+                            return False  # Останавливаем поиск
+                except:
+                    pass
+                return True
+            
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+            user32.EnumWindows(EnumWindowsProc(enum_proc), 0)
+            
+            if target_hwnd:
+                print(f"✅ Найдено окно для PID {pid}: HWND={target_hwnd}")
+                self._force_window_to_front_and_position(target_hwnd)
+                return target_hwnd
+            else:
+                print(f"❌ Не найдено окно для PID {pid}")
+                return False
+                
+        except Exception as e:
+            print(f"⚠️ Ошибка получения handle окна: {e}")
+            return False
+
+    def _bring_cursor_window_to_front_old(self) -> int | bool:
         """Выводит окно Cursor на передний план (Windows). Возвращает hwnd при успехе или False."""
         try:
             if platform.system().lower() != 'windows':
@@ -1256,6 +1617,7 @@ class CursorManager:
 
             target_hwnd = 0
             fallback_hwnd = 0
+            all_cursor_windows = []
             preferred = (self._preferred_window_hint or "").lower()
 
             def enum_proc(hwnd, lParam):
@@ -1272,32 +1634,95 @@ class CursorManager:
                     if 'cursor' in tl:
                         nonlocal target_hwnd
                         nonlocal fallback_hwnd
+                        
+                        # Добавляем в список всех окон Cursor
+                        all_cursor_windows.append((hwnd, title))
+                        
                         # Сохраняем первое встреченное как запасной вариант
                         if not fallback_hwnd:
                             fallback_hwnd = int(hwnd)
-                        # Если есть подсказка и она содержится в заголовке — это наш кандидат
-                        if preferred and preferred in tl:
-                            target_hwnd = int(hwnd)
-                            return False  # нашли лучший матч
+                            print(f"📱 Найдено окно Cursor (fallback): '{title}'")
+
+                        # Улучшенное соответствие: более гибкий поиск с учетом различных форматов заголовков
+                        if preferred:
+                            # Проверяем точное вхождение имени проекта в заголовок
+                            if preferred in tl:
+                                target_hwnd = int(hwnd)
+                                print(f"🎯 ТОЧНОЕ совпадение окна Cursor: '{title}' для проекта '{preferred}'")
+                                return False  # нашли точный матч
+
+                            # Проверяем части имени проекта (более гибко)
+                            hint_parts = preferred.replace('_', ' ').replace('-', ' ').split()
+                            matching_parts = 0
+                            for part in hint_parts:
+                                if len(part) > 2 and part.lower() in tl.lower():  # Уменьшили минимальную длину с 3 до 2
+                                    matching_parts += 1
+
+                            # Более мягкие критерии: достаточно хотя бы одной совпадающей части
+                            total_parts = len(hint_parts)
+                            if total_parts > 0 and matching_parts >= max(1, total_parts // 2):
+                                if not target_hwnd:  # Берем только если еще не нашли лучший
+                                    target_hwnd = int(hwnd)
+                                    print(f"🎯 Частичное совпадение окна Cursor: '{title}' ({matching_parts}/{total_parts} частей для '{preferred}')")
+                                    
                 except Exception:
                     return True
                 return True
 
             EnumWindows(EnumWindowsProc(enum_proc), 0)
 
-            if not target_hwnd:
-                target_hwnd = fallback_hwnd
-            if not target_hwnd:
-                return False
+            print(f"📊 РЕЗУЛЬТАТЫ ПОИСКА ПО ЗАГОЛОВКАМ:")
+            print(f"   Всего найдено окон Cursor: {len(all_cursor_windows)}")
+            print(f"   Точное совпадение: {'найдено' if target_hwnd else 'не найдено'}")
+            print(f"   Подсказка поиска: '{preferred}'")
 
-            # Восстановить из свернутого состояния, показать и поднять над всеми
+            if all_cursor_windows:
+                print("   Список всех окон Cursor:")
+                for i, (hwnd, title) in enumerate(all_cursor_windows[:5], 1):  # Показываем первые 5
+                    status = "🎯" if hwnd == target_hwnd else "   "
+                    print(f"   {status} {i}. '{title}'")
+                if len(all_cursor_windows) > 5:
+                    print(f"   ... и еще {len(all_cursor_windows) - 5} окон")
+
+            # Если не нашли подходящее окно, но есть подсказка - создаем новое
+            if not target_hwnd and preferred:
+                print(f"⚠️ Не найдено окно Cursor для проекта '{preferred}'")
+                print("❌ Промпт НЕ будет отправлен в случайное окно!")
+                print("💡 СОВЕТ: Убедитесь, что проект открыт в Cursor и заголовок окна содержит имя проекта")
+                return False  # Не используем случайное окно
+
+            if not target_hwnd:
+                print("⚠️ Не найдено ни одного подходящего окна Cursor")
+                if fallback_hwnd:
+                    print(f"📱 Используем fallback окно: {fallback_hwnd}")
+                    target_hwnd = fallback_hwnd
+                else:
+                    print("❌ Нет доступных окон Cursor")
+                    return False
+
+            # Дополнительная валидация выбранного окна
+            if target_hwnd and preferred:
+                window_title = ""
+                try:
+                    length = GetWindowTextLengthW(target_hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        GetWindowTextW(target_hwnd, buf, length + 1)
+                        window_title = buf.value or ""
+                except:
+                    pass
+                    
+                if preferred not in window_title.lower():
+                    print(f"⚠️ ВНИМАНИЕ: Выбранное окно '{window_title}' может не соответствовать проекту '{preferred}'")
+
+            # Восстановить из свернутого состояния, показать и принудительно поднять поверх всех
             if IsIconic(target_hwnd):
                 ShowWindow(target_hwnd, SW_RESTORE)
             else:
                 ShowWindow(target_hwnd, SW_SHOW)
-            SetWindowPos(target_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
-            SetWindowPos(target_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
-            SetForegroundWindow(target_hwnd)
+            
+            # Принудительное позиционирование и активация
+            self._force_window_to_front_and_position(target_hwnd)
             return target_hwnd
         except Exception as e:
             try:
@@ -1309,17 +1734,36 @@ class CursorManager:
     # Убран альтернативный посимвольный метод вставки (ускорение и упрощение)
 
     def _click_on_chat_area(self) -> bool:
-        """Активирует чат: Ctrl+I (приоритет), затем простой клик внизу окна."""
+        """Активирует чат через Ctrl+Shift+Y - 100% способ открытия чата."""
         try:
-            hwnd = self._bring_cursor_window_to_front()
-            if not hwnd:
+            if not PYAUTOGUI_AVAILABLE:
                 return False
-            # 1) Приоритетный способ — гарантированная горячая клавиша
-            if self._try_guaranteed_chat_activation(hwnd):
-                return True
-            # 2) Запасной — клик по нижней части окна
-            return self._click_input_area(hwnd)
-        except Exception:
+
+            print("🎯 Используем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+Shift+Y...")
+
+            # Убеждаемся что окно активно
+            self._bring_cursor_window_to_front()
+            time.sleep(1)
+
+            # Отправляем Ctrl+Shift+Y для открытия чата
+            pyautogui.hotkey('ctrl', 'shift', 'y')
+            time.sleep(2)  # Даем больше времени
+
+            # Проверяем активацию чата
+            print("🔍 Проверяем активацию чата...")
+            pyautogui.write('test')
+            time.sleep(0.3)
+
+            # Очищаем тестовый текст
+            for _ in range(4):  # Удаляем 'test'
+                pyautogui.press('backspace')
+                time.sleep(0.1)
+
+            print("🎉 Чат ГАРАНТИРОВАННО активирован через Ctrl+Shift+Y!")
+            return True
+
+        except Exception as e:
+            print(f"❌ Ошибка активации чата через Ctrl+Shift+Y: {e}")
             return False
 
     def _try_guaranteed_chat_activation(self, hwnd: int) -> bool:
@@ -1342,17 +1786,17 @@ class CursorManager:
                 try:
                     print(f"🔥 Попытка {attempt + 1}: Отправляем Ctrl+I...")
                     pyautogui.hotkey('ctrl', 'i')
-                    time.sleep(2)  # Даем больше времени
-                    
+                    time.sleep(3)  # Увеличено с 2 до 3 секунд
+
                     # Проверяем активацию чата
                     print("🔍 Проверяем активацию чата...")
                     pyautogui.write('test')
-                    time.sleep(0.3)
-                    
+                    time.sleep(0.5)  # Увеличено с 0.3 до 0.5
+
                     # Очищаем тестовый текст
                     for _ in range(4):  # Удаляем 'test'
                         pyautogui.press('backspace')
-                        time.sleep(0.1)
+                        time.sleep(0.15)  # Увеличено с 0.1 до 0.15
                     
                     print("🎉 ГАРАНТИРОВАННАЯ активация чата через Ctrl+I УСПЕШНА!")
                     return True
@@ -1389,14 +1833,14 @@ class CursorManager:
             print("🔥 Пробуем ГАРАНТИРОВАННУЮ горячую клавишу Ctrl+I для чата...")
             try:
                 pyautogui.hotkey('ctrl', 'i')
-                time.sleep(2)  # Даем время на открытие чата
+                time.sleep(3)  # Увеличено с 2 до 3 секунд
                 print("✅ Ctrl+I отправлен")
-                
+
                 # Проверяем что чат активировался (пробуем напечатать и стереть символ)
                 pyautogui.write('.')
-                time.sleep(0.2)
+                time.sleep(0.3)  # Увеличено с 0.2 до 0.3
                 pyautogui.press('backspace')
-                time.sleep(0.2)
+                time.sleep(0.3)  # Увеличено с 0.2 до 0.3
                 print("🎉 Чат ГАРАНТИРОВАННО активирован через Ctrl+I!")
                 return True
             except Exception as e:
@@ -1833,37 +2277,167 @@ class CursorManager:
         except Exception:
             return False
 
-    def _throttle_before_launch(self) -> None:
-        """Обеспечивает паузу между запусками окон Cursor (8 сек для EXE, 3 сек для обычного)."""
+    def _throttle_before_launch(self, project_hint: str = None) -> None:
+        """Обеспечивает паузу между запусками окон Cursor с учётом проектов."""
         try:
             with self._launch_lock:
                 now = time.monotonic()
                 elapsed = now - self._last_launch_monotonic
                 wait_for = self._launch_interval_sec - elapsed
-                
+
+                # Дополнительный троттлинг по проектам
+                if project_hint:
+                    last_project_time = self._project_launch_times.get(project_hint, 0)
+                    project_elapsed = now - last_project_time
+                    project_wait = self._min_project_interval_sec - project_elapsed
+
+                    if project_wait > 0:
+                        print(f"⏳ Ожидание {project_wait:.1f} сек между проектами для '{project_hint}'...")
+                        time.sleep(project_wait)
+                        # Обновляем время после ожидания
+                        now = time.monotonic()
+
                 if wait_for > 0:
-                    if self._is_exe:
-                        print(f"⏳ EXE режим: ожидание {wait_for:.1f} сек до следующего запуска Cursor...")
+                    print(f"⏳ ЖЕСТКИЙ ТРОТТЛИНГ: ожидание {wait_for:.1f} сек до следующего запуска Cursor...")
                     time.sleep(wait_for)
-                
+
                 # фиксируем момент запуска, чтобы следующие ждали интервал
                 self._last_launch_monotonic = time.monotonic()
-                
-                # Дополнительная пауза (умеренная)
+
+                # Сохраняем время запуска для проекта
+                if project_hint:
+                    self._project_launch_times[project_hint] = time.monotonic()
+
+                # Дополнительная жесткая пауза для стабильности
                 try:
-                    if self._is_exe:
-                        extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '2.0'))
-                    else:
-                        extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '1.0'))
+                    extra_gap = float(os.getenv('CURSOR_EXTRA_LAUNCH_GAP_SEC', '2.0'))
                 except Exception:
-                    extra_gap = 2.0 if self._is_exe else 1.0
-                
+                    extra_gap = 2.0
+
                 if extra_gap > 0:
-                    if self._is_exe:
-                        print(f"⏳ EXE режим: дополнительная пауза {extra_gap} сек для стабильности...")
+                    print(f"⏳ Дополнительная пауза {extra_gap} сек для стабильности...")
                     time.sleep(extra_gap)
         except Exception:
             pass
+
+    def _force_window_to_front_and_position(self, hwnd):
+        """
+        Принудительно выводит окно поверх всех остальных и позиционирует его
+        """
+        try:
+            if platform.system().lower() != 'windows' or not hwnd:
+                return False
+
+            user32 = ctypes.windll.user32
+            
+            # Получаем размеры экрана
+            screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+            screen_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+            
+            # Фиксированная позиция - все окна в одном месте
+            new_x = self._base_window_x
+            new_y = self._base_window_y
+            
+            # Размеры окна (80% экрана)
+            window_width = int(screen_width * 0.8)
+            window_height = int(screen_height * 0.8)
+
+            print(f"🪟 Позиционирование окна Cursor: X={new_x}, Y={new_y}, W={window_width}, H={window_height} (фиксированная позиция)")
+
+            # Принудительно устанавливаем позицию и размер
+            user32.MoveWindow(hwnd, new_x, new_y, window_width, window_height, True)
+            
+            # Многоступенчатая активация для гарантированного выведения поверх всех
+            SW_RESTORE = 9
+            SW_SHOW = 5
+            SW_MAXIMIZE = 3
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_SHOWWINDOW = 0x0040
+
+            # Шаг 1: Восстанавливаем если свернуто
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, SW_RESTORE)
+                time.sleep(0.1)
+
+            # Шаг 2: Показываем окно
+            user32.ShowWindow(hwnd, SW_SHOW)
+            time.sleep(0.1)
+
+            # Шаг 3: Ставим поверх всех (topmost)
+            user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+            time.sleep(0.1)
+
+            # Шаг 4: Убираем topmost но оставляем активным
+            user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+            time.sleep(0.1)
+
+            # Шаг 5: Принудительно активируем окно
+            current_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+            target_tid = user32.GetWindowThreadProcessId(hwnd, None)
+            
+            # Привязываем потоки ввода для лучшей активации
+            user32.AttachThreadInput(current_tid, target_tid, True)
+            try:
+                user32.SetForegroundWindow(hwnd)
+                user32.SetActiveWindow(hwnd)
+                user32.SetFocus(hwnd)
+            finally:
+                user32.AttachThreadInput(current_tid, target_tid, False)
+
+            print("✅ Окно Cursor принудительно выведено поверх всех и позиционировано")
+            return True
+
+        except Exception as e:
+            print(f"⚠️ Ошибка принудительного позиционирования окна: {e}")
+            return False
+
+    def _position_new_cursor_window(self):
+        """
+        Ищет последнее открытое окно Cursor и позиционирует его
+        """
+        try:
+            if platform.system().lower() != 'windows':
+                return False
+
+            user32 = ctypes.windll.user32
+            
+            # Ищем новое окно Cursor (последнее по времени)
+            cursor_windows = []
+            
+            def enum_proc(hwnd, lParam):
+                try:
+                    if not user32.IsWindowVisible(hwnd):
+                        return True
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length == 0:
+                        return True
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    title = buf.value or ""
+                    if 'cursor' in title.lower():
+                        cursor_windows.append((hwnd, title))
+                except Exception:
+                    pass
+                return True
+
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+            user32.EnumWindows(EnumWindowsProc(enum_proc), 0)
+
+            if cursor_windows:
+                # Берем последнее найденное окно (предположительно новое)
+                latest_hwnd, latest_title = cursor_windows[-1]
+                print(f"🎯 Позиционирование нового окна Cursor: '{latest_title}'")
+                self._force_window_to_front_and_position(latest_hwnd)
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ Ошибка поиска нового окна Cursor: {e}")
+            return False
 
     # Убран поиск шаблона внутри окна
 

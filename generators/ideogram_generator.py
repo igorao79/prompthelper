@@ -137,7 +137,9 @@ class IdeogramGenerator:
                     if name == "favicon":
                         if img.mode != "RGBA":
                             img = img.convert("RGBA")
-                        img = img.resize((512, 512), Image.Resampling.LANCZOS)
+                        # Стандартный размер favicon для современных браузеров
+                        favicon_size = (64, 64)
+                        img = img.resize(favicon_size, Image.Resampling.LANCZOS)
                         out_file = output_path / f"{name}.png"
                         if self._save_png(img, str(out_file)):
                             remaining.popleft()
@@ -260,7 +262,9 @@ class IdeogramGenerator:
             if image_name == "favicon":
                 if img.mode != "RGBA":
                     img = img.convert("RGBA")
-                img = img.resize((512, 512), Image.Resampling.LANCZOS)
+                # Стандартный размер favicon для современных браузеров
+                favicon_size = (64, 64)
+                img = img.resize(favicon_size, Image.Resampling.LANCZOS)
                 out_file = output_path / f"{image_name}.png"
                 self._save_png(img, str(out_file))
                 self._notify(progress_callback, f"✅ {image_name}: сохранено (PNG)")
@@ -452,7 +456,9 @@ class IdeogramGenerator:
                     if name == "favicon":
                         if img.mode != "RGBA":
                             img = img.convert("RGBA")
-                        img = img.resize((512, 512), Image.Resampling.LANCZOS)
+                        # Стандартный размер favicon для современных браузеров
+                        favicon_size = (64, 64)
+                        img = img.resize(favicon_size, Image.Resampling.LANCZOS)
                         ok = self._save_png(img, str(out_file))
                     else:
                         ok = self._save_jpeg_under_size(img, str(out_file))
@@ -469,7 +475,8 @@ class IdeogramGenerator:
 
     def _save_png(self, image: Image.Image, filepath: str) -> bool:
         try:
-            image.save(filepath, format="PNG", optimize=True)
+            # Оптимизация PNG для favicon: максимальная компрессия
+            image.save(filepath, format="PNG", optimize=True, compress_level=9)
             return True
         except Exception:
             return False
