@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Упрощенный CursorManager, использующий разбитые компоненты (чистая версия)
+Упрощенный CursorManager, использующий разбитые компоненты
 """
 
 import os
@@ -50,7 +50,7 @@ class CursorManager:
             return getattr(sys, 'frozen', False)
         except Exception:
             return False
-    
+
     def set_window_hint(self, hint: str | None):
         """Устанавливает подсказку для выбора окна Cursor"""
         self.window_manager.set_window_hint(hint)
@@ -147,9 +147,9 @@ class CursorManager:
                     return True, "Промпт успешно вставлен"
                 else:
                     return False, "Ошибка вставки промпта"
-            else:
+                    else:
                 return True, "Проект открыт, автовставка отключена"
-                
+
         except Exception as e:
             print(f"❌ Ошибка в open_project_and_paste_prompt: {e}")
             return False, f"Ошибка: {e}"

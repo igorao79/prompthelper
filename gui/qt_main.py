@@ -1012,21 +1012,23 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		if not self._build_queue:
 			return
 
-		# Троттлинг между запусками задач
+		# ЖЕСТКИЙ ТРОТТЛИНГ между запусками задач - НИКОГДА НЕ МЕНЬШЕ 8 СЕКУНД!
 		import time
 		current_time = time.time()
 		time_since_last_build = current_time - self._last_build_start_time
-		min_interval = 5.0  # увеличено до 5 секунд между задачами
+		min_interval = 8.0  # УВЕЛИЧЕНО ДО 8 секунд - Никаких лишних окон!
 
 		if time_since_last_build < min_interval:
 			wait_time = min_interval - time_since_last_build
-			print(f"⏳ Ожидание {wait_time:.1f} сек перед следующей задачей...")
+			print(f"🛡️ ЖЕСТКИЙ ТРОТТЛИНГ GUI: Ожидание {wait_time:.1f} сек перед следующей задачей...")
 			time.sleep(wait_time)
+			print(f"✅ ТРОТТЛИНГ ГУИ ЗАВЕРШЕН - можно продолжать!")
 
 		params = self._build_queue.pop(0)
 		self._active_builds += 1
 		self._active_jobs.append(params)
 		self._last_build_start_time = time.time()
+		print(f"📋 Задача #{params.get('seq', '?')} запущена. Следующая не раньше {self._last_build_start_time + 8:.1f}")
 		self.status_label.setText("🚧 Создание проекта и изображений...")
 
 		def task():
@@ -1127,6 +1129,31 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			self.status_label.setText("⏹️ Очередь помечена на остановку")
 		except Exception:
 			pass
+
+
+	@QtCore.Slot(dict)
+	def _auto_processing_finished(self, result):
+		"""Обработчик завершения автообработки"""
+		try:
+			if result.get("success"):
+				msg = f"""✅ Автообработка завершена!
+
+{result.get('message', '')}"""
+				QtWidgets.QMessageBox.information(self, "Автообработка", msg)
+				self.status_label.setText("✅ Автообработка завершена")
+				
+				# Обновляем историю
+				self._refresh_history_list()
+			else:
+				msg = f"""❌ Автообработка завершена с ошибками:
+
+{result.get('message', 'Неизвестная ошибка')}"""
+				QtWidgets.QMessageBox.warning(self, "Автообработка", msg)
+				self.status_label.setText("❌ Ошибка автообработки")
+				
+		except Exception as e:
+			print(f"❌ Ошибка обработки результата автообработки: {e}")
+			self.status_label.setText("❌ Ошибка обработки результата")
 
 	def _refresh_queue_ui(self):
 		items = []
@@ -1433,6 +1460,56 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		# Обновляем UI состояние
 		self._refresh_history_list()
 		self.status_label.setText("✅ Готов к работе")
+		
+		# Проверяем, завершена ли вся очередь и нужно ли запустить автообработку
+		self._check_and_start_auto_processing()
+
+	def _check_and_start_auto_processing(self):
+		"""Проверяет, завершена ли очередь и запускает автообработку при необходимости"""
+		try:
+			# Проверяем, что очередь пуста (нет активных задач и задач в ожидании)
+			if len(self._active_jobs) == 0 and len(self._build_queue) == 0:
+				print("🎯 Очередь задач завершена, проверяем условия для автообработки...")
+				
+				# Проверяем, готова ли система к автообработке
+				if self.cursor_manager.should_start_auto_processing():
+					print("🚀 ЗАПУСКАЕМ АВТОМАТИЧЕСКУЮ ОБРАБОТКУ ПРОМПТОВ!")
+					
+					# Показываем уведомление
+					self.status_label.setText("🤖 Запуск автообработки промптов...")
+					
+					# Запускаем автообработку в отдельном потоке
+					import threading
+					
+					def auto_process_thread():
+						try:
+							# Небольшая задержка чтобы дать время закрыться всем окнам генерации
+							import time
+							time.sleep(5)
+							
+							result = self.cursor_manager.start_auto_processing()
+							
+							# Обновляем GUI в главном потоке
+							QtCore.QMetaObject.invokeMethod(
+								self, "_auto_processing_finished", QtCore.Qt.QueuedConnection,
+								QtCore.Q_ARG(dict, result)
+							)
+						except Exception as e:
+							error_result = {"success": False, "message": f"Ошибка автообработки: {e}"}
+							QtCore.QMetaObject.invokeMethod(
+								self, "_auto_processing_finished", QtCore.Qt.QueuedConnection,
+								QtCore.Q_ARG(dict, error_result)
+							)
+					
+					thread = threading.Thread(target=auto_process_thread, daemon=True)
+					thread.start()
+				else:
+					print("ℹ️ Условия для автообработки не выполнены")
+			else:
+				print(f"🔄 Очередь не завершена: активных задач: {len(self._active_jobs)}, в ожидании: {len(self._build_queue)}")
+				
+		except Exception as e:
+			print(f"❌ Ошибка проверки автообработки: {e}")
 
 	@QtCore.Slot(str)
 	def _show_create_error(self, message: str):

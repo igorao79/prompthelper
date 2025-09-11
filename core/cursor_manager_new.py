@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Упрощенный CursorManager, использующий разбитые компоненты (чистая версия)
+Упрощенный CursorManager, использующий разбитые компоненты
 """
 
 import os
@@ -14,7 +14,6 @@ from .window_manager import WindowManager
 from .clipboard_manager import ClipboardManager
 from .prompt_inserter import PromptInserter
 from .project_creator import ProjectCreator
-from .auto_prompt_processor import AutoPromptProcessor
 
 
 class CursorManager:
@@ -35,13 +34,12 @@ class CursorManager:
         self.clipboard_manager = ClipboardManager()
         self.prompt_inserter = PromptInserter(self.clipboard_manager, self.window_manager)
         self.project_creator = ProjectCreator()
-        self.auto_processor = AutoPromptProcessor(self.window_manager, self.clipboard_manager, self.prompt_inserter)
         
         # Кэш найденного пути к Cursor
         self.cached_cursor_path = None
         
         print(f"✅ CursorManager инициализирован для {self.os_type}")
-
+    
     def _detect_exe_mode(self) -> bool:
         """Определяет, запущено ли приложение как EXE"""
         try:
@@ -89,70 +87,23 @@ class CursorManager:
     
     def create_project_structure(self, domain: str, desktop_path: Optional[str] = None, 
                                 theme: Optional[str] = None, progress_callback: Optional[Callable] = None,
-                                generate_images: bool = False, cancel_check: Optional[Callable] = None):
-        """Создает структуру проекта лендинга (возвращает tuple как в старом коде)"""
-        result = self.project_creator.create_project_structure(
+                                generate_images: bool = False, cancel_check: Optional[Callable] = None) -> str:
+        """Создает структуру проекта лендинга"""
+        return self.project_creator.create_project_structure(
             domain, desktop_path, theme, progress_callback, generate_images, cancel_check
         )
+    
+    def open_project_and_paste_prompt(self, project_path: str, prompt: str, 
+                                    root_widget, paste_delay: int = 5, max_retries: int = 3) -> bool:
+        """Открывает проект в Cursor и вставляет промпт"""
+        cursor_exe = self.find_cursor_executable()
+        if not cursor_exe:
+            print("❌ Не найден исполняемый файл Cursor")
+            return False
         
-        return result
-    
-    def start_auto_processing(self):
-        """Запускает автоматическую обработку промптов из истории"""
-        return self.auto_processor.start_auto_processing()
-    
-    def get_auto_processing_status(self):
-        """Возвращает статус автообработки"""
-        return self.auto_processor.get_processing_status()
-    
-    def should_start_auto_processing(self) -> bool:
-        """Проверяет, готова ли система к автообработке"""
-        return self.auto_processor.should_start_processing()
-    
-    def open_project_and_paste_prompt(self, project_path, prompt, root_widget, 
-                                    auto_paste=True, paste_delay=5):
-        """
-        Полный цикл: открытие проекта и вставка промпта (совместимость со старым API)
-        
-        Args:
-            project_path: Путь к проекту
-            prompt: Промпт для вставки
-            root_widget: Корневой виджет
-            auto_paste: Автоматически вставлять промпт
-            paste_delay: Задержка перед вставкой
-            
-        Returns:
-            tuple: (success, message)
-        """
-        try:
-            # Копируем в буфер обмена
-            if not self.copy_to_clipboard(prompt, root_widget):
-                return False, "Ошибка копирования в буфер обмена"
-            
-            # Открываем Cursor
-            if not self.open_cursor_with_project(project_path):
-                return False, "Ошибка открытия проекта в Cursor"
-            
-            if auto_paste:
-                # Автоматически вставляем промпт
-                cursor_exe = self.find_cursor_executable()
-                if not cursor_exe:
-                    return False, "Не найден исполняемый файл Cursor"
-                
-                success = self.prompt_inserter.open_project_and_paste_prompt(
-                    project_path, prompt, root_widget, cursor_exe, paste_delay, 3
-                )
-                
-                if success:
-                    return True, "Промпт успешно вставлен"
-                else:
-                    return False, "Ошибка вставки промпта"
-            else:
-                return True, "Проект открыт, автовставка отключена"
-                
-        except Exception as e:
-            print(f"❌ Ошибка в open_project_and_paste_prompt: {e}")
-            return False, f"Ошибка: {e}"
+        return self.prompt_inserter.open_project_and_paste_prompt(
+            project_path, prompt, root_widget, cursor_exe, paste_delay, max_retries
+        )
     
     # Статические методы из проектного компонента
     @staticmethod
@@ -221,3 +172,6 @@ class CursorManager:
         print(f"📋 Методы буфера обмена: {', '.join(status['clipboard_methods'])}")
         
         print("="*50)
+
+
+
