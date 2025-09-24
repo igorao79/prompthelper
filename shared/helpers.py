@@ -287,11 +287,17 @@ def get_country_short_code(country):
     base = (consonants[:2] or letters[:2] or [country[:1]])
     return "".join(base).upper()
 
-def ensure_empty_zip_for_landing(save_dir, country, theme):
+def ensure_empty_zip_for_landing(save_dir, country, theme, model=None):
     """
     Создает ПУСТОЙ ZIP-файл в выбранной папке (или на рабочем столе),
-    именем: <КодСтраны>_<Тематика>_<ДД.ММ.ГГГГ>.zip
+    именем: <КодСтраны>_<Тематика>_<ДД.ММ.ГГГГ>_<Модель>.zip или <КодСтраны>_<Тематика>_<ДД.ММ.ГГГГ>.zip
     Важно: если уже существует ZIP для этой страны и тематики (любая дата), новый не создается.
+
+    Args:
+        save_dir: Путь к папке сохранения
+        country: Название страны
+        theme: Тематика
+        model: Модель (опционально)
 
     Returns:
         Path | None: Путь к созданному ZIP или None, если создание не требовалось/невозможно.
@@ -309,7 +315,12 @@ def ensure_empty_zip_for_landing(save_dir, country, theme):
             return None
 
         today = datetime.datetime.now().strftime("%d.%m.%Y")
-        zip_name = f"{country_code}_{safe_theme}_{today}.zip"
+        # Добавляем модель к имени, если она указана
+        if model and model.strip():
+            safe_model = sanitize_filename(model.strip())
+            zip_name = f"{country_code}_{safe_theme}_{today}_{safe_model}.zip"
+        else:
+            zip_name = f"{country_code}_{safe_theme}_{today}.zip"
         zip_path = base_dir / zip_name
 
         # Создаем пустой ZIP
@@ -357,3 +368,68 @@ def open_text_editor(text, title="Редактирование промпта"):
     """
     # Tkinter редактор удалён. Возвращаем исходный текст без изменений.
     return text
+
+
+def create_special_mode_structure(base_save_path):
+    """
+    Создает структуру папок для особого режима и возвращает следующий номер сайта.
+    Автоматически адаптируется к любому количеству существующих сайтов.
+    
+    Args:
+        base_save_path (str): Базовый путь для сохранения
+    
+    Returns:
+        tuple: (landings_path, next_site_number, site_name)
+    """
+    try:
+        landings_path = Path(base_save_path) / "landings"
+        landings_path.mkdir(parents=True, exist_ok=True)
+        
+        # Находим все существующие сайты (s0001, s0002, s0050, s1000 и т.д.)
+        existing_sites = []
+        if landings_path.exists():
+            for item in landings_path.iterdir():
+                if item.is_dir() and item.name.startswith('s') and len(item.name) == 5:
+                    try:
+                        site_num = int(item.name[1:])  # Убираем 's' и преобразуем в число
+                        existing_sites.append(site_num)
+                    except ValueError:
+                        continue
+        
+        # Определяем следующий номер (автоматически продолжает с любого количества)
+        next_site_number = max(existing_sites) + 1 if existing_sites else 1
+        
+        # Форматируем имя сайта (например, s0001, s0021, s0100 и т.д.)
+        site_name = f"s{next_site_number:04d}"
+        
+        return str(landings_path), next_site_number, site_name
+        
+    except Exception as e:
+        print(f"Ошибка создания структуры особого режима: {e}")
+        # Возвращаем базовое значение в случае ошибки
+        return str(Path(base_save_path) / "landings"), 1, "s0001"
+
+
+def create_special_mode_zip(landings_path, site_name):
+    """
+    Создает ZIP-архив для особого режима
+    
+    Args:
+        landings_path (str): Путь к папке landings
+        site_name (str): Имя сайта (например, s0001)
+    
+    Returns:
+        str: Путь к созданному ZIP-архиву
+    """
+    try:
+        zip_path = Path(landings_path) / f"{site_name}.zip"
+        
+        # Создаем пустой ZIP-архив
+        with zipfile.ZipFile(zip_path, mode='w', compression=zipfile.ZIP_DEFLATED):
+            pass
+        
+        return str(zip_path)
+        
+    except Exception as e:
+        print(f"Ошибка создания ZIP-архива для особого режима: {e}")
+        return None

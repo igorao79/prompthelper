@@ -318,3 +318,10 @@ class ClipboardManager:
 
 
 
+
+
+
+
+
+
+

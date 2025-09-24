@@ -6,10 +6,11 @@ from pathlib import Path
 
 from shared.settings_manager import SettingsManager, get_desktop_path
 from core.version import VERSION
-from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing, sanitize_filename, get_country_short_code
+from shared.helpers import validate_domain, get_language_by_country, get_language_display_name, check_directory_exists, ensure_empty_zip_for_landing, sanitize_filename, get_country_short_code, create_special_mode_structure, create_special_mode_zip
 from shared.city_generator import CityGenerator
 from shared.data import COUNTRIES_DATA
 from core.cursor_manager import CursorManager
+from cursor_ultimate_fix import CursorUltimateFix
 from generators.prompt_generator import create_landing_prompt
 from core.update_checker import UpdateChecker
 
@@ -23,6 +24,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 
 		self.settings = SettingsManager()
 		self.cursor_manager = CursorManager()
+		self.cursor_ultimate = CursorUltimateFix()  # СУПЕР-НАДЕЖНАЯ СИСТЕМА!
 		self.city_generator = CityGenerator()
 
 		self.country = ""
@@ -204,6 +206,16 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.no_images_checkbox = QtWidgets.QCheckBox("Без изображений")
 		self.no_images_checkbox.setToolTip("Создать только папки и открыть Cursor с промптом")
 		form.addWidget(self.no_images_checkbox, row, 2)
+		row += 1
+
+		# AI Model selection
+		self.ai_model_combo = QtWidgets.QComboBox()
+		self.ai_model_combo.setEditable(True)
+		self.ai_model_combo.addItems(["", "claude4", "gpt5", "gpt5high", "gpt5low"])
+		self.ai_model_combo.setPlaceholderText("Выберите или введите модель")
+		self.ai_model_combo.setCurrentText("")  # По умолчанию пустое
+		form.addWidget(QtWidgets.QLabel("Модель AI"), row, 0)
+		form.addWidget(self.ai_model_combo, row, 1, 1, 2)
 		row += 1
 
 		# Правая колонка (форма + статус + инструменты)
@@ -913,7 +925,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		domain = self.domain_edit.text().strip()
 		city = self.city or ""
 		language = self._get_effective_language_code(country) if country else "en"
-		prompt = create_landing_prompt(country or "", city, language, domain or "", theme or "")
+		prompt = create_landing_prompt(country or "", city, language, domain or "", theme or "", False)
 		text, ok = QtWidgets.QInputDialog.getMultiLineText(self, "Редактирование промпта", "Промпт:", prompt)
 		if ok:
 			self._custom_prompt = text
@@ -982,6 +994,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			"id": self._job_seq,
 			"auto_paste": bool(self.settings.get_auto_paste_prompt()),
 			"cancel_event": cancel_event,
+			"model": self.ai_model_combo.currentText().strip(),  # Добавляем выбранную модель
 		}
 		self._job_seq += 1
 		self._build_queue.append(params)
@@ -1034,9 +1047,13 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		def task():
 			try:
 				cancel = params.get("cancel_event")
-				zip_path = ensure_empty_zip_for_landing(params["save_path"], params["country"], params["theme"])
-				if zip_path:
-					print(f"ZIP создан: {zip_path}")
+				# Создаем ZIP только если это не группировка по тематикам (где ZIP уже созданы)
+				if not params.get("is_grouped_by_theme", False):
+					zip_path = ensure_empty_zip_for_landing(params["save_path"], params["country"], params["theme"], params.get("model"))
+					if zip_path:
+						print(f"ZIP создан: {zip_path}")
+				else:
+					print(f"ZIP уже создан в папке тематики для: {params['theme']}")
 				def progress_cb(text: str):
 					QtCore.QMetaObject.invokeMethod(
 						self.status_label, "setText", QtCore.Qt.QueuedConnection, QtCore.Q_ARG(str, text)
@@ -1064,7 +1081,8 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					return
 				# Виджет пути перегенерации был удалён; больше не обновляем
 				language = params.get("language") or get_language_by_country(params["country"]) 
-				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"])
+				special_mode = params.get("is_special_mode", False)
+				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"], special_mode)
 				# Мгновенно добавляем домен в историю (GUI-поток), чтобы список обновлялся и в грид-режиме
 				try:
 					QtCore.QMetaObject.invokeMethod(
@@ -1083,9 +1101,16 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						QtWidgets.QApplication.clipboard().setText(prompt)
 					except Exception:
 						pass
-				success, message = self.cursor_manager.open_project_and_paste_prompt(
-					project_path, prompt, None, auto_paste=do_auto_paste
-				)
+				# СУПЕР-НАДЕЖНАЯ СИСТЕМА ВСТАВКИ ПРОМПТОВ!
+				if do_auto_paste:
+					print("🚀 ИСПОЛЬЗУЕМ СУПЕР-НАДЕЖНУЮ СИСТЕМУ ВСТАВКИ ПРОМПТОВ!")
+					project_hint = project_folder if project_folder else None
+					success, message = self.cursor_ultimate.generate_and_paste_prompt_ultimate(prompt, project_hint)
+				else:
+					# Если автовставка отключена, используем старый метод
+					success, message = self.cursor_manager.open_project_and_paste_prompt(
+						project_path, prompt, None, auto_paste=do_auto_paste
+					)
 				QtCore.QMetaObject.invokeMethod(
 					self, "_show_create_done", QtCore.Qt.QueuedConnection,
 					QtCore.Q_ARG(str, f"Проект: {project_path}\nMedia: {media_path}\n{message}"),
@@ -1225,6 +1250,20 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			inputs.addWidget(left_box, 1)
 			inputs.addWidget(right_box, 1)
 			v.addLayout(inputs)
+			# Модель AI для архивов
+			model_row = QtWidgets.QHBoxLayout()
+			model_label = QtWidgets.QLabel("Модель:")
+			model_label.setStyleSheet("color:#e2e8f0;font-weight:600;")
+			model_combo = QtWidgets.QComboBox()
+			model_combo.setEditable(True)
+			model_combo.addItems(["", "claude4", "gpt5", "gpt5high", "gpt5low"])
+			model_combo.setPlaceholderText("Выберите или введите модель")
+			model_combo.setCurrentText("")  # По умолчанию пустое
+			model_row.addWidget(model_label)
+			model_row.addWidget(model_combo, 1)
+			model_row.addStretch(2)
+			v.addLayout(model_row)
+
 			# Низ: опции
 			bottom = QtWidgets.QHBoxLayout()
 			custom_lang_cb = QtWidgets.QCheckBox("Нестандартный язык")
@@ -1238,8 +1277,14 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			no_images_cb.setChecked(not has_key)
 			if not has_key:
 				no_images_cb.setEnabled(False)
+			
+			# Особый режим
+			special_mode_cb = QtWidgets.QCheckBox("Особый режим")
+			special_mode_cb.setToolTip("Создавать сайты в папке landings с автоматической нумерацией s0001, s0002... и основным файлом content.html. Автоматически адаптируется к любому количеству существующих сайтов.")
+			
 			bottom.addWidget(custom_lang_cb)
 			bottom.addWidget(lang_combo)
+			bottom.addWidget(special_mode_cb)
 			bottom.addStretch(1)
 			bottom.addWidget(no_images_cb)
 			v.addLayout(bottom)
@@ -1275,6 +1320,86 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				if not raw_pairs:
 					QtWidgets.QMessageBox.warning(self, "Режим сетки", "Заполните тематики и домены")
 					return
+				# Получаем выбранную модель
+				selected_model = model_combo.currentText().strip()
+				
+				# Проверяем особый режим
+				is_special_mode = special_mode_cb.isChecked()
+				
+				if is_special_mode:
+					# Логика для особого режима
+					try:
+						landings_path, next_site_number, site_name = create_special_mode_structure(outer_save_path)
+						current_site_number = next_site_number
+						
+						# Создаем задачу для каждой пары (тема, домен)
+						for theme, domain in raw_pairs:
+							# Валидируем домен
+							ok, err, fixed_domain = validate_domain(domain)
+							if not ok:
+								self.status_label.setText(f"⚠️ Пропуск '{domain}': {err}")
+								continue
+							
+							# Получаем текущий номер сайта и имя (автоматически адаптируется к любому количеству)
+							current_site_name = f"s{current_site_number:04d}"
+							current_site_number += 1
+							
+							# Создаем ZIP-архив
+							zip_path = create_special_mode_zip(landings_path, current_site_name)
+							if not zip_path:
+								QtWidgets.QMessageBox.warning(self, "Ошибка", f"Не удалось создать ZIP для {current_site_name}")
+								continue
+							
+							# Создаем папку для сайта
+							site_folder_path = Path(landings_path) / current_site_name
+							site_folder_path.mkdir(parents=True, exist_ok=True)
+							
+							clean_country = country.replace('★', '').strip()
+							params = {
+								"save_path": str(site_folder_path),
+								"country": clean_country,
+								"theme": theme,
+								"domain": fixed_domain,
+								"folder_name": current_site_name,
+								"city": self._pick_next_city(clean_country),
+								"custom_prompt": getattr(self, "_custom_prompt", None),
+								"no_images": bool(no_images_cb.isChecked()),
+								"language": (lang_combo.currentText().strip() if custom_lang_cb.isChecked() else self._get_effective_language_code(clean_country)),
+								"id": self._job_seq,
+								"auto_paste": False,
+								"origin": "special_grid",
+								"needs_index": False,
+								"model": selected_model,
+								"is_special_mode": True,
+								"special_site_name": current_site_name
+							}
+							self._job_seq += 1
+							self._build_queue.append(params)
+						
+						# Открываем папку landings и вставляем промпт
+						import subprocess, platform
+						try:
+							if platform.system() == "Windows":
+								subprocess.run(["explorer", landings_path])
+							elif platform.system() == "Darwin":  # macOS
+								subprocess.run(["open", landings_path])
+							else:  # Linux
+								subprocess.run(["xdg-open", landings_path])
+						except Exception:
+							pass
+						
+						self._refresh_queue_ui()
+						self._start_build_task()
+						self._update_queue_label()
+						dlg.accept()
+						return
+						
+					except Exception as e:
+						QtWidgets.QMessageBox.critical(self, "Ошибка особого режима", f"Не удалось создать структуру особого режима: {e}")
+						return
+				
+				# Обычная логика (не особый режим)
+				
 				# Создаём родительскую папку партии, чтобы не засорять корень сохранения
 				try:
 					from datetime import datetime
@@ -1282,7 +1407,11 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					country_abbr = get_country_short_code(clean_country)
 					unique_themes = list({t for t, _ in raw_pairs})
 					folder_theme = unique_themes[0] if len(unique_themes) == 1 else "grid"
-					parent_name = f"{sanitize_filename(country_abbr)}_{sanitize_filename(folder_theme)}_{datetime.now().strftime('%d.%m.%Y')}"
+					# Добавляем модель к имени архива, если она выбрана
+					if selected_model:
+						parent_name = f"{sanitize_filename(country_abbr)}_{sanitize_filename(folder_theme)}_{datetime.now().strftime('%d.%m.%Y')}_{sanitize_filename(selected_model)}"
+					else:
+						parent_name = f"{sanitize_filename(country_abbr)}_{sanitize_filename(folder_theme)}_{datetime.now().strftime('%d.%m.%Y')}"
 					batch_dir = Path(outer_save_path) / parent_name
 					batch_dir.mkdir(parents=True, exist_ok=True)
 					# Пустая .zip с тем же именем внутри партии (только одна, без дублей)
@@ -1313,6 +1442,33 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				# Создаём задачи: добавляем тематику к имени папки только если домен повторяется
 				# и включаем индексацию только если есть потенциальные коллизии имён
 				needs_index_global = any(cnt >= 2 for cnt in domain_counts.values())
+				
+				# Определяем, нужна ли группировка по тематикам
+				multiple_themes = len(unique_themes) > 1
+				
+				# Создаем папки для каждой тематики, если их несколько
+				theme_dirs = {}
+				if multiple_themes:
+					for theme in unique_themes:
+						safe_theme = sanitize_filename(theme)
+						theme_dir = batch_dir / safe_theme
+						theme_dir.mkdir(parents=True, exist_ok=True)
+						theme_dirs[theme] = theme_dir
+						
+						# Создаем ZIP архив для каждой тематики
+						try:
+							import zipfile
+							if selected_model:
+								zip_name = f"{country_abbr}_{safe_theme}_{datetime.now().strftime('%d.%m.%Y')}_{sanitize_filename(selected_model)}.zip"
+							else:
+								zip_name = f"{country_abbr}_{safe_theme}_{datetime.now().strftime('%d.%m.%Y')}.zip"
+							zip_path = theme_dir / zip_name
+							if not zip_path.exists():
+								with zipfile.ZipFile(zip_path, mode='w', compression=zipfile.ZIP_DEFLATED):
+									pass
+						except Exception:
+							pass
+				
 				for theme, fixed_domain in validated:
 					# Убираем звёздочку из названия страны (визуальный маркер избранного)
 					clean_country = country.replace('★', '').strip()
@@ -1322,8 +1478,15 @@ class QtMainWindow(QtWidgets.QMainWindow):
 					else:
 						folder_name = fixed_domain
 						needs_index = False  # уникальный домен → индекс не нужен
+					
+					# Определяем путь сохранения: если несколько тематик - в папку тематики, иначе в основную
+					if multiple_themes:
+						project_save_path = str(theme_dirs[theme])
+					else:
+						project_save_path = str(batch_dir)
+					
 					params = {
-						"save_path": str(batch_dir),
+						"save_path": project_save_path,
 						"country": clean_country,
 						"theme": theme,
 						"domain": fixed_domain,
@@ -1335,7 +1498,9 @@ class QtMainWindow(QtWidgets.QMainWindow):
 						"id": self._job_seq,
 						"auto_paste": False,
 						"origin": "grid",
-						"needs_index": needs_index
+						"needs_index": needs_index,
+						"model": selected_model,  # Добавляем выбранную модель
+						"is_grouped_by_theme": multiple_themes  # Флаг для понимания структуры
 					}
 					self._job_seq += 1
 					self._build_queue.append(params)
