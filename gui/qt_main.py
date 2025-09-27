@@ -60,6 +60,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			"ko": "корейский",
 			"hi": "хинди",
 			"pt": "португальский",
+			"fil": "филиппинский",
 		}
 		self._build_ui()
 		self._apply_modern_style()
@@ -191,7 +192,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		# Language override (checkbox + combobox)
 		self.custom_lang_cb = QtWidgets.QCheckBox("Нестандартный язык")
 		self.custom_lang_combo = QtWidgets.QComboBox()
-		self.custom_lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt"])
+		self.custom_lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt","fil"])
 		self.custom_lang_combo.setEnabled(False)
 		self.custom_lang_cb.toggled.connect(self._on_custom_lang_toggle)
 		self.custom_lang_combo.currentTextChanged.connect(self._on_custom_lang_changed)
@@ -1324,7 +1325,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			custom_lang_cb = QtWidgets.QCheckBox("Нестандартный язык")
 			custom_lang_cb.setChecked(self.custom_lang_cb.isChecked())
 			lang_combo = QtWidgets.QComboBox()
-			lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt"])
+			lang_combo.addItems(["en","ru","uk","be","kk","de","fr","it","es","pl","cs","tr","zh","ja","ko","hi","pt","fil"])
 			lang_combo.setCurrentText(self.custom_lang_combo.currentText())
 			no_images_cb = QtWidgets.QCheckBox("Без изображений")
 			# По умолчанию в режиме сетки генерируем изображения, если есть API ключ

@@ -95,6 +95,7 @@ class SettingsManager:
             "custom_prompt": "",
             "last_selected_country": "",
             "landing_history": [],  # [{"domain": str, "prompt": str, "ts": int}]
+            "special_landing_history": [],  # [{"domain": str, "prompt": str, "ts": int}] для особого режима
             "auto_check_updates": True,
             "last_update_sha": "",
             # Настройки Ideogram
