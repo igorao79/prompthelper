@@ -180,6 +180,32 @@ IMPORTANT – FILESYSTEM RULES (STRICT):
   - Flexbox, CSS Grid, Bootstrap, Tailwind, native CSS, etc.
 - Do not reuse block structures, section orders, or styling patterns
 
+### 8a. Responsive Tables (CRITICAL):
+- ALL tables MUST be 100% responsive and NEVER overflow the screen width:
+  - Always wrap tables in a responsive container: `<div style="overflow-x: auto; max-width: 100vw;"><table>...</table></div>`
+  - For Bootstrap projects: use `<div class="table-responsive"><table class="table">...</table></div>`
+  - Add CSS breakpoints for mobile optimization:
+    ```css
+    @media (max-width: 768px) {{
+      .table-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; }}
+      table {{ min-width: 600px; }}
+    }}
+    ```
+  - For complex tables on mobile, consider card-style layout:
+    ```css
+    @media (max-width: 600px) {{
+      table thead {{ display: none; }}
+      table, tbody, tr, td {{ display: block; width: 100%; }}
+      tr {{ margin-bottom: 15px; border: 1px solid #ddd; }}
+      td {{ text-align: right; padding-left: 50%; position: relative; }}
+      td::before {{ content: attr(data-label); position: absolute; left: 0; width: 50%; 
+                   padding-left: 15px; font-weight: bold; text-align: left; }}
+    }}
+    ```
+  - Add `data-label` attributes to td elements for mobile labels
+- Test table responsiveness at 320px, 768px, 1024px, and 1440px widths
+- NEVER let tables break the page layout or cause horizontal scrolling issues
+
 ### 9. Realism:
 - All links, buttons, and sections must function correctly
 - Populate contact details, social media links, and addresses with plausible but random data — never leave them empty

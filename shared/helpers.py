@@ -137,7 +137,8 @@ def get_language_by_country(country):
         "Индия": "hi",
         "Бразилия": "pt",
         "Мексика": "es",
-        "Канада": "en"
+        "Канада": "en",
+        "Филиппины": "fil"
     }
     
     return language_map.get(country, "en")
@@ -178,7 +179,8 @@ def get_language_display_name(country):
         "Индия": "хинди (Индия)",
         "Бразилия": "португальский (Бразилия)",
         "Мексика": "испанский (Мексика)",
-        "Канада": "английский (Канада)"
+        "Канада": "английский (Канада)",
+        "Филиппины": "филиппинский (Филиппины)"
     }
     
     return language_display_map.get(country, f"английский ({country})")
@@ -207,6 +209,7 @@ def get_language_name_by_code(code: str) -> str:
             "ko": "корейский",
             "hi": "хинди",
             "pt": "португальский",
+            "fil": "филиппинский",
             # Региональные варианты (если придут)
             "en-US": "английский",
             "en-GB": "английский",
@@ -382,7 +385,7 @@ def create_special_mode_structure(base_save_path):
         tuple: (landings_path, next_site_number, site_name)
     """
     try:
-        landings_path = Path(base_save_path) / "landings"
+        landings_path = Path(base_save_path) / "landings_special"
         landings_path.mkdir(parents=True, exist_ok=True)
         
         # Находим все существующие сайты (s0001, s0002, s0050, s1000 и т.д.)
@@ -407,7 +410,7 @@ def create_special_mode_structure(base_save_path):
     except Exception as e:
         print(f"Ошибка создания структуры особого режима: {e}")
         # Возвращаем базовое значение в случае ошибки
-        return str(Path(base_save_path) / "landings"), 1, "s0001"
+        return str(Path(base_save_path) / "landings_special"), 1, "s0001"
 
 
 def create_special_mode_zip(landings_path, site_name):

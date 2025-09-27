@@ -266,10 +266,26 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		self.fav_list.itemClicked.connect(self._on_favorite_clicked)
 		self.fav_list.itemDoubleClicked.connect(self._on_favorite_double_clicked)
 		left_layout.addWidget(self.fav_list)
-		# История последних лендингов
+		# История последних лендингов с переключателем
+		hist_header = QtWidgets.QHBoxLayout()
 		hist_title = QtWidgets.QLabel("Последние 10 лендингов")
 		hist_title.setStyleSheet("color:#cbd5e1; font-size:12px; margin-top:6px;")
-		left_layout.addWidget(hist_title)
+		
+		# Переключатель режимов истории
+		self.history_mode_toggle = QtWidgets.QPushButton("Обычные")
+		self.history_mode_toggle.setFixedSize(70, 25)
+		self.history_mode_toggle.setStyleSheet("font-size:10px; padding:2px;")
+		self.history_mode_toggle.setToolTip("Переключить между обычными и особыми лендингами")
+		self.history_mode_toggle.clicked.connect(self._toggle_history_mode)
+		self._history_mode = "normal"  # "normal" или "special"
+		
+		hist_header.addWidget(hist_title)
+		hist_header.addStretch(1)
+		hist_header.addWidget(self.history_mode_toggle)
+		hist_header_widget = QtWidgets.QWidget()
+		hist_header_widget.setLayout(hist_header)
+		left_layout.addWidget(hist_header_widget)
+		
 		self.hist_list = QtWidgets.QListWidget()
 		self.hist_list.setToolTip("Клик — скопировать промпт в буфер обмена")
 		self.hist_list.itemClicked.connect(self._on_history_clicked)
@@ -716,11 +732,22 @@ class QtMainWindow(QtWidgets.QMainWindow):
 	def _refresh_history_list(self):
 		try:
 			self.hist_list.clear()
-			for e in self.settings.get_landing_history():
-				text = e.get("domain", "")
-				item = QtWidgets.QListWidgetItem(text)
-				item.setData(QtCore.Qt.UserRole, e)
-				self.hist_list.addItem(item)
+			history_type = getattr(self, '_history_mode', 'normal')
+			
+			if history_type == "special":
+				# Показать особые лендинги
+				for e in self.settings.get_special_landing_history():
+					text = e.get("domain", "")
+					item = QtWidgets.QListWidgetItem(f"[S] {text}")
+					item.setData(QtCore.Qt.UserRole, e)
+					self.hist_list.addItem(item)
+			else:
+				# Показать обычные лендинги
+				for e in self.settings.get_landing_history():
+					text = e.get("domain", "")
+					item = QtWidgets.QListWidgetItem(text)
+					item.setData(QtCore.Qt.UserRole, e)
+					self.hist_list.addItem(item)
 		except Exception:
 			pass
 
@@ -729,6 +756,27 @@ class QtMainWindow(QtWidgets.QMainWindow):
 		try:
 			# Важно: используем тот же экземпляр настроек, чтобы список обновился без перезапуска
 			self.settings.add_landing_to_history(domain, prompt)
+			self._refresh_history_list()
+		except Exception:
+			pass
+
+	@QtCore.Slot(str, str)
+	def _push_special_landing_history(self, domain: str, prompt: str):
+		try:
+			# Добавляем в историю особых лендингов
+			self.settings.add_special_landing_to_history(domain, prompt)
+			self._refresh_history_list()
+		except Exception:
+			pass
+
+	def _toggle_history_mode(self):
+		try:
+			if self._history_mode == "normal":
+				self._history_mode = "special"
+				self.history_mode_toggle.setText("Особые")
+			else:
+				self._history_mode = "normal"
+				self.history_mode_toggle.setText("Обычные")
 			self._refresh_history_list()
 		except Exception:
 			pass
@@ -1085,11 +1133,18 @@ class QtMainWindow(QtWidgets.QMainWindow):
 				prompt = params.get("custom_prompt") or create_landing_prompt(params["country"], params["city"], language, params["domain"], params["theme"], special_mode)
 				# Мгновенно добавляем домен в историю (GUI-поток), чтобы список обновлялся и в грид-режиме
 				try:
-					QtCore.QMetaObject.invokeMethod(
-						self, "_push_landing_history", QtCore.Qt.QueuedConnection,
-						QtCore.Q_ARG(str, params["domain"]),
-						QtCore.Q_ARG(str, prompt)
-					)
+					if params.get("is_special_mode", False):
+						QtCore.QMetaObject.invokeMethod(
+							self, "_push_special_landing_history", QtCore.Qt.QueuedConnection,
+							QtCore.Q_ARG(str, params["domain"]),
+							QtCore.Q_ARG(str, prompt)
+						)
+					else:
+						QtCore.QMetaObject.invokeMethod(
+							self, "_push_landing_history", QtCore.Qt.QueuedConnection,
+							QtCore.Q_ARG(str, params["domain"]),
+							QtCore.Q_ARG(str, prompt)
+						)
 				except Exception:
 					pass
 				# Включаем автовставку и для грид-режима для корректной работы в EXE
@@ -1280,7 +1335,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 			
 			# Особый режим
 			special_mode_cb = QtWidgets.QCheckBox("Особый режим")
-			special_mode_cb.setToolTip("Создавать сайты в папке landings с автоматической нумерацией s0001, s0002... и основным файлом content.html. Автоматически адаптируется к любому количеству существующих сайтов.")
+			special_mode_cb.setToolTip("Создавать сайты в папке landings_special с автоматической нумерацией s0001, s0002... и основным файлом content.html. Автоматически адаптируется к любому количеству существующих сайтов.")
 			
 			bottom.addWidget(custom_lang_cb)
 			bottom.addWidget(lang_combo)
@@ -1376,7 +1431,7 @@ class QtMainWindow(QtWidgets.QMainWindow):
 							self._job_seq += 1
 							self._build_queue.append(params)
 						
-						# Открываем папку landings и вставляем промпт
+						# Открываем папку landings_special и вставляем промпт
 						import subprocess, platform
 						try:
 							if platform.system() == "Windows":

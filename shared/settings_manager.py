@@ -213,6 +213,22 @@ class SettingsManager:
 
     def get_landing_history(self):
         return self.settings.get("landing_history", [])
+    
+    # --- История особых лендингов ---
+    def add_special_landing_to_history(self, domain: str, prompt: str):
+        try:
+            from time import time
+            entry = {"domain": domain.strip(), "prompt": prompt or "", "ts": int(time())}
+            hist = self.settings.get("special_landing_history", [])
+            # сохраняем все записи, даже с одинаковым доменом (не теряем промпты)
+            hist.insert(0, entry)
+            self.settings["special_landing_history"] = hist[:10]
+            self.save_settings()
+        except Exception as e:
+            print(f"❌ Ошибка обновления истории особых лендингов: {e}")
+
+    def get_special_landing_history(self):
+        return self.settings.get("special_landing_history", [])
 
     # --- Обновления ---
     def get_auto_check_updates(self) -> bool:
