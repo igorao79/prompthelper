@@ -182,29 +182,132 @@ IMPORTANT – FILESYSTEM RULES (STRICT):
 
 ### 8a. Responsive Tables (CRITICAL):
 - ALL tables MUST be 100% responsive and NEVER overflow the screen width:
-  - Always wrap tables in a responsive container: `<div style="overflow-x: auto; max-width: 100vw;"><table>...</table></div>`
+  - ALWAYS wrap tables in responsive container with smooth scrolling:
+    ```html
+    <div class="table-responsive">
+      <table>...</table>
+    </div>
+    ```
+  - Base responsive styles (MANDATORY):
+    ```css
+    .table-responsive {{
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100vw;
+      box-sizing: border-box;
+      scrollbar-width: thin;
+      scrollbar-color: #ccc transparent;
+    }}
+    .table-responsive::-webkit-scrollbar {{
+      height: 8px;
+    }}
+    .table-responsive::-webkit-scrollbar-thumb {{
+      background: #ccc;
+      border-radius: 4px;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0;
+    }}
+    ```
+  
   - For Bootstrap projects: use `<div class="table-responsive"><table class="table">...</table></div>`
-  - Add CSS breakpoints for mobile optimization:
+  
+  - CSS Grid alternative for modern browsers (RECOMMENDED):
     ```css
+    .table-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      max-width: 100%;
+    }}
+    .table-grid-item {{
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }}
+    ```
+  
+  - Mobile card layout WITHOUT aggressive paddings:
+    ```css
+    @media (max-width: 640px) {{
+      .table-mobile-cards table,
+      .table-mobile-cards thead,
+      .table-mobile-cards tbody,
+      .table-mobile-cards th,
+      .table-mobile-cards td,
+      .table-mobile-cards tr {{
+        display: block;
+      }}
+      .table-mobile-cards thead {{
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+      }}
+      .table-mobile-cards tr {{
+        border: 1px solid #ddd;
+        margin-bottom: 10px;
+        padding: 15px;
+        border-radius: 8px;
+        background: #fff;
+      }}
+      .table-mobile-cards td {{
+        border: none;
+        position: relative;
+        padding: 8px 0 8px 120px !important;
+        text-align: left !important;
+        min-height: 30px;
+        display: flex;
+        align-items: center;
+      }}
+      .table-mobile-cards td:before {{
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        width: 110px;
+        padding-right: 10px;
+        white-space: nowrap;
+        font-weight: 600;
+        font-size: 0.9em;
+        color: #555;
+      }}
+    }}
+    ```
+  
+  - Flexible breakpoints for different table complexities:
+    ```css
+    /* Small tables - stack at 480px */
+    @media (max-width: 480px) {{
+      .table-simple table {{ min-width: auto !important; }}
+    }}
+    
+    /* Medium tables - horizontal scroll until 640px */
+    @media (max-width: 640px) {{
+      .table-medium table {{ min-width: 500px; }}
+    }}
+    
+    /* Large tables - horizontal scroll until 768px */
     @media (max-width: 768px) {{
-      .table-container {{ overflow-x: auto; -webkit-overflow-scrolling: touch; }}
-      table {{ min-width: 600px; }}
+      .table-large table {{ min-width: 700px; }}
     }}
     ```
-  - For complex tables on mobile, consider card-style layout:
+  
+  - Touch-friendly scrollbars and smoother experience:
     ```css
-    @media (max-width: 600px) {{
-      table thead {{ display: none; }}
-      table, tbody, tr, td {{ display: block; width: 100%; }}
-      tr {{ margin-bottom: 15px; border: 1px solid #ddd; }}
-      td {{ text-align: right; padding-left: 50%; position: relative; }}
-      td::before {{ content: attr(data-label); position: absolute; left: 0; width: 50%; 
-                   padding-left: 15px; font-weight: bold; text-align: left; }}
+    @media (hover: none) and (pointer: coarse) {{
+      .table-responsive {{
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+      }}
     }}
     ```
-  - Add `data-label` attributes to td elements for mobile labels
-- Test table responsiveness at 320px, 768px, 1024px, and 1440px widths
-- NEVER let tables break the page layout or cause horizontal scrolling issues
+  
+  - MANDATORY: Add `data-label` attributes to ALL td elements for mobile
+  - Use appropriate container class: `.table-simple`, `.table-medium`, `.table-large`, or `.table-mobile-cards`
+  - Test responsiveness at 320px, 480px, 640px, 768px, 1024px, and 1440px
+  - NEVER use fixed paddings that break on narrow screens
+  - ALWAYS prioritize content readability over rigid layouts
 
 ### 9. Realism:
 - All links, buttons, and sections must function correctly
