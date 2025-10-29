@@ -16,6 +16,13 @@ import requests
 from PIL import Image
 import random
 
+# Импорт менеджера шаблонов
+try:
+    from .template_manager import TemplateManager
+    TEMPLATE_MANAGER_AVAILABLE = True
+except ImportError:
+    TEMPLATE_MANAGER_AVAILABLE = False
+
 
 class IdeogramGenerator:
     """Генератор изображений на базе Ideogram 2.0 Turbo."""
@@ -80,6 +87,17 @@ class IdeogramGenerator:
         if rs in ("FAST", "DEFAULT"):
             rs = "TURBO" if rs == "FAST" else "QUALITY"
         self.rendering_speed = rs if rs in ("TURBO", "QUALITY") else "TURBO"
+        
+        # Инициализация менеджера шаблонов
+        if TEMPLATE_MANAGER_AVAILABLE:
+            try:
+                self.template_manager = TemplateManager()
+            except Exception as e:
+                if not self.silent_mode:
+                    print(f"⚠️ Ошибка инициализации менеджера шаблонов: {e}")
+                self.template_manager = None
+        else:
+            self.template_manager = None
 
     def generate_eight_images(
         self,
@@ -88,7 +106,8 @@ class IdeogramGenerator:
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> int:
         """
-        Генерирует гарантированно 8 изображений, повторяя запросы, пока все не будут сохранены.
+        Генерирует гарантированно 8 изображений с использованием случайных наборов названий, 
+        повторяя запросы, пока все не будут сохранены.
 
         Returns:
             int: количество успешно сохраненных изображений (целится в 8)
@@ -96,11 +115,21 @@ class IdeogramGenerator:
         output_path = Path(media_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        # Ожидаемые имена файлов проекта (по порядку сохранения)
-        image_names = [
-            "main", "about1", "about2", "about3",
-            "gallery1", "gallery2", "gallery3", "favicon",
-        ]
+        # Получаем случайный набор шаблонов от менеджера
+        if self.template_manager:
+            try:
+                set_name, image_names = self.template_manager.get_random_template_set()
+                self.template_manager.mark_set_used(set_name)
+                self._notify(progress_callback, f"🎨 Используется набор шаблонов: {set_name}")
+            except Exception as e:
+                if not self.silent_mode:
+                    print(f"⚠️ Ошибка получения набора шаблонов: {e}")
+                # Fallback к стандартным именам
+                image_names = ["main", "about1", "about2", "about3", "gallery1", "gallery2", "gallery3", "favicon"]
+        else:
+            # Fallback к стандартным именам, если менеджер недоступен
+            image_names = ["main", "about1", "about2", "about3", "gallery1", "gallery2", "gallery3", "favicon"]
+        
         from collections import deque
         remaining = deque(image_names)
         saved = 0

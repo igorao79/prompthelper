@@ -1,0 +1,1416 @@
+{
+  "last_used_set": "agency",
+  "set_usage_count": {
+    "personal": 42,
+    "classic": 36,
+    "modern": 38,
+    "corporate": 31,
+    "business": 41,
+    "agency": 20,
+    "ecommerce": 41,
+    "startup": 44,
+    "creative": 23
+  },
+  "generation_history": [
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:20:13.005807"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:20:49.365889"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:21:16.734172"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:21:44.585177"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:22:13.895787"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:22:40.694022"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:23:11.879273"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:23:41.243124"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:24:09.968556"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:24:37.948741"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:46:22.346353"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:46:51.272241"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:47:21.316025"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:47:50.080149"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:48:18.387620"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:48:47.388950"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:49:17.020489"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:49:47.117178"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:50:17.096366"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T18:50:47.749739"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:21:57.613026"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:22:25.381550"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:22:51.875782"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:23:20.918154"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:23:49.823465"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:24:21.487702"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:24:52.296251"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:25:21.130790"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:25:48.755447"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-10T19:26:18.535030"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:44:49.661960"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:45:27.248744"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:45:58.257889"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:46:28.411005"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:46:59.058916"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:47:27.369888"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:47:55.105621"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:48:24.492786"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:48:52.878087"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-14T01:49:20.408332"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:03:42.240455"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:04:18.496183"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:04:48.192154"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:05:15.976889"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:05:44.756493"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:06:12.795869"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:06:42.745134"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:07:12.164237"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:07:40.661420"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T21:08:12.046872"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:06:47.294762"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:07:20.031514"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:07:49.339511"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:08:18.438137"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:08:46.462591"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:09:14.144898"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:09:42.706487"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:10:12.417776"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:10:41.890294"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:11:11.721278"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:55:02.198899"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:55:37.371700"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:56:05.670725"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:56:34.085374"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:57:00.688951"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:57:28.763595"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:57:56.248899"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:58:25.999875"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:58:55.758936"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-28T22:59:24.656486"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:41:07.483810"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:41:42.949887"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:42:11.717012"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:42:38.912192"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:43:06.758779"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:43:34.508481"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:44:03.395711"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:44:33.579709"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:45:00.667321"
+    },
+    {
+      "set_name": "classic",
+      "templates": [
+        "main",
+        "about1",
+        "about2",
+        "about3",
+        "gallery1",
+        "gallery2",
+        "gallery3",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T00:45:30.376217"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:27:58.896789"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:28:35.264560"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:29:02.703241"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:29:34.051871"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:30:03.204201"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:30:32.646390"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:31:04.332432"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:31:35.423683"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:32:06.618082"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T17:32:39.580883"
+    },
+    {
+      "set_name": "corporate",
+      "templates": [
+        "intro",
+        "company",
+        "solutions",
+        "experience",
+        "success",
+        "support",
+        "careers",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:00:08.162810"
+    },
+    {
+      "set_name": "ecommerce",
+      "templates": [
+        "store",
+        "products",
+        "categories",
+        "deals",
+        "reviews",
+        "shipping",
+        "support",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:01:03.225895"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:01:46.285495"
+    },
+    {
+      "set_name": "creative",
+      "templates": [
+        "header",
+        "vision",
+        "projects",
+        "skills",
+        "awards",
+        "partners",
+        "news",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:02:22.280424"
+    },
+    {
+      "set_name": "business",
+      "templates": [
+        "hero",
+        "team",
+        "services",
+        "portfolio",
+        "reviews",
+        "contact",
+        "office",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:03:05.319739"
+    },
+    {
+      "set_name": "personal",
+      "templates": [
+        "profile",
+        "story",
+        "work",
+        "achievements",
+        "interests",
+        "contact",
+        "social",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:03:59.364008"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:04:35.447060"
+    },
+    {
+      "set_name": "modern",
+      "templates": [
+        "banner",
+        "features",
+        "testimonials",
+        "process",
+        "showcase",
+        "clients",
+        "blog",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:05:26.125936"
+    },
+    {
+      "set_name": "startup",
+      "templates": [
+        "pitch",
+        "founders",
+        "product",
+        "roadmap",
+        "investors",
+        "community",
+        "updates",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:06:13.485078"
+    },
+    {
+      "set_name": "agency",
+      "templates": [
+        "brand",
+        "expertise",
+        "cases",
+        "methods",
+        "results",
+        "culture",
+        "insights",
+        "favicon"
+      ],
+      "timestamp": "2025-10-29T22:06:48.690753"
+    }
+  ]
+}
